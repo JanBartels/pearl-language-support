@@ -1,0 +1,73 @@
+MODULE huhu;
+
+SYSTEM;
+
+PROBLEM;
+
+SPC somethingSPC ENTRY;
+DCL A DURATION;
+DCL (B,B1) REF CLOCK;
+DCL X FLOAT;
+SPC demo TASK;
+
+something: PROC( A FIXED, B FLOAT);
+DCL X FIXED;
+A = 56;
+B = A * 1.0;
+X = A;
+ACTIVATE demo;
+END;
+
+demo: TASK PRIO 8;
+DCL x FIXED INIT(8);
+DCL y FLOAT INIT(8.15);
+DCL somethingREF REF PROC;
+x = -7;
+y := 47.11E+10;
+IF x = 0 THEN
+   ! Kommentar
+   CALL something( 5,12.3 );
+   CALL somethingSPC;
+   CALL somethingREF;
+   GOTO MyLabel;
+   /* noch
+   ein
+   Kommentar */
+FIN;   
+BEGIN ! hier kommentar mit 'String'
+DCL I FIXED, X FLOAT, T CLOCK, D DURATION;
+
+DCL MyBolt REF BOLT;
+DCL MyArr FLOAT(4,5);
+DCL something FIXED;
+
+something = 2;
+
+LEAVE MyBolt;
+
+Ch = '!Huhu';
+
+I := 123(31); ! Noch einer
+I := 110B;
+
+X := .123E2;
+X := 3.14E-10(23);
+
+T := 15:45:3.5;
+
+D := 5 MIN 30 SEC;
+D := .05 SEC;
+D := 5 HRS 10 SEC;
+
+A := '110010100111'B1;
+B := '302213'B2;
+C := '6247'B3;
+H := 'CA7'B4;
+B1 := '1'B;
+END;
+MyLabel:
+CALL something;
+   
+END;
+
+MODEND;

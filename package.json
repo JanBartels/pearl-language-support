@@ -1,0 +1,49 @@
+{
+  "name": "pearl-language-support",
+  "displayName": "PEARL Language Support",
+  "description": "VS Code Extension mit Language Server für die Sprache PEARL",
+  "version": "0.0.1",
+  "publisher": "none",
+  "author": {
+    "name": "Jan Bartels"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jan.bartels/pearl-language-support.git"
+  },
+  "license": "GPL-3.0-or-later",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": ["Programming Languages"],
+  "main": "./client/extension.js",
+  "activationEvents": [
+    "onLanguage:pearl"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "pearl",
+        "aliases": ["PEARL", "pearl"],
+        "extensions": [".p", ".P"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "pearl",
+        "scopeName": "source.pearl",
+        "path": "./syntaxes/pearl.tmLanguage.json"
+      }      
+    ]
+  },
+  "scripts": {
+    "compile": "echo \"no build step\"",
+    "test": "echo \"no tests\""
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1",
+    "vscode-languageserver": "^9.0.1",
+    "vscode-languageserver-textdocument": "^1.0.11"
+  }
+}
