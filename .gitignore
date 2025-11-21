@@ -1,0 +1,21 @@
+# Node.js dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Language Server output (falls du out/build nutzt)
+out/
+dist/
+build/
+
+# TypeScript (falls später hinzugefügt)
+*.tsbuildinfo
+
+# VS Code workspace settings
+.vscode/
+.vscode-test/
+
+# Backup files
+*~
+*.bak
