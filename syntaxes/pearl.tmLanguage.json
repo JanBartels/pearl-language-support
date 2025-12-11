@@ -19,6 +19,7 @@
     { "include": "#operators" },
     { "include": "#keywords" },
     { "include": "#types" },
+    { "include": "#identifiers" },
     { "include": "#constants" }
   ],
   "repository": {
@@ -258,6 +259,15 @@
         {
           "name": "storage.type.pearl",
           "match": "\\b(FIXED|FLOAT|BIT|CHAR|CHARACTER|CLOCK|DURATION|STRUCT|SEMA|SEMAPHORE|BOLT|REF|TYPE|VOID)\\b"
+        }
+      ]
+    },
+
+    "identifiers": {
+      "patterns": [
+        {
+          "name": "variable.other.pearl",
+          "match": "\\b([A-Za-z][A-Za-z0-9_]*)\\b"
         }
       ]
     },

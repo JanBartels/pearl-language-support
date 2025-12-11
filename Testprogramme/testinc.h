@@ -1,0 +1,1 @@
+SPC GlobProc PROC GLOBAL;

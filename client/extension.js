@@ -42,7 +42,8 @@ function activate(context) {
     documentSelector: [{ scheme: 'file', language: 'pearl' }],
     synchronize: {
       fileEvents: vscode.workspace.createFileSystemWatcher('**/*.{p,P}')
-    }
+    },
+    outputChannelName: 'PEARL LSP Debug'
   };
 
   client = new LanguageClient(

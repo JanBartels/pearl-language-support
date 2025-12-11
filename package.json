@@ -2,7 +2,7 @@
   "name": "pearl-language-support",
   "displayName": "PEARL Language Support",
   "description": "VS Code Extension mit Language Server für die Sprache PEARL",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "publisher": "none",
   "author": {
     "name": "Jan Bartels"
@@ -35,11 +35,65 @@
         "scopeName": "source.pearl",
         "path": "./syntaxes/pearl.tmLanguage.json"
       }      
-    ]
+    ],
+    "semanticTokenTypes": [
+      {
+        "id": "testToken", 
+        "description": "A test token"
+      }
+    ],
+    "semanticTokenModifiers": [
+      {
+        "id": "inactive", 
+        "description": "Inaktiv (Präprozessor)"
+      }
+    ],
+    "semanticTokenStyleDefaults": [
+      {
+        "selector": "testToken",
+        "scope": [ "entity.name.variable.special" ]
+      },
+      {
+        "selector": "comment.inactive",
+        "scope": [ "entity.name.variable.special.extra" ]
+      }
+    ],
+    "configurationDefaults": {
+      "editor.semanticTokenColorCustomizations": {
+        "rules": {
+          "*.inactive": {
+            "foreground": "#888888",
+            "fontStyle": "italic"
+          },
+          "operator": {
+            "foreground": "#fafac2"
+          },
+          "type": {
+            "foreground": "#847fad"
+          },
+          "number": {
+            "foreground": "#98d6b6"
+          },
+          "string": {
+            "foreground": "#d68389"
+          },
+          "variable": {
+            "foreground": "#65bcd9"
+          },
+          "parameter": {
+            "foreground": "#219cc4"
+          },
+          "*": { 
+            "foreground": "#ff00ff" 
+          }
+        }
+      }
+    }
   },
   "scripts": {
     "compile": "echo \"no build step\"",
-    "test": "echo \"no tests\""
+    "test": "echo \"no tests\"",
+    "package": "vsce package"
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1",

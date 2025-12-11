@@ -1,3 +1,5 @@
+// https://github.com/microsoft/vscode/wiki/Semantic-Highlighting-Overview/887dec50de3282c23983130f72e2f94a8e7e5368
+
 /*
  * Copyright (C) 2025 Jan Bartels
  *
@@ -21,7 +23,8 @@ const {
   ProposedFeatures,
   TextDocumentSyncKind,
   CompletionItemKind,
-  DiagnosticSeverity
+  DiagnosticSeverity,
+  DiagnosticTag
 } = require('vscode-languageserver');
 
 const { TextDocument } = require('vscode-languageserver-textdocument');
@@ -29,172 +32,1736 @@ const { TextDocument } = require('vscode-languageserver-textdocument');
 const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments(TextDocument);
 
+/*
+namespace – Namespaces, Module, Packages
+type – generische oder sonstige Typen, die nicht besser zuordenbar sind (Fallback)
+class – Klassen
+enum – Enums
+interface – Interfaces
+struct – Structs
+typeParameter – Typparameter (z. B. T in List<T>)
+parameter – Funktions-/Methodenparameter
+variable – lokale Variablen, ggf. auch globale, je nach Sprache
+property – Eigenschaften / Felder eines Typs
+enumMember – einzelne Enum-Werte
+event – Events
+function – Funktionen (nicht-methodisch, z. B. freie Funktionen)
+method – Methoden an Klassen/Interfaces/Structs
+macro – Makros (z. B. C- oder Rust-Makros)
+keyword – Sprach-Schlüsselwörter
+modifier – Sprach-Modifier wie public, private, static etc. (als Token-Typ, nicht zu verwechseln mit Token-Modifiers)
+comment – Kommentare
+string – String-Literale
+number – numerische Literale
+regexp – Regex-Literale
+operator – Operatoren (z. B. +, ==)
+decorator – Dekoratoren / Attribute (z. B. Component)
+label – Sprunglabels
+*/
+
+const semanticTokenTypes = [
+  'type',       // generische oder sonstige Typen, die nicht besser zuordenbar sind (Fallback)
+  'variable',   // DCL-Variablen, SPC-Variablen
+  'parameter',  // PROC-Parameter
+  'function',   // PROC / ENTRY
+  'class',      // TASK (oder "class"-ähnlich)
+  'property',   // SEMA, BOLT (kannst du auch anders wählen)
+  'label',      // Sprungmarken MyLabel:
+  'operator',   // Operatoren (z. B. +, ==)  
+  'string',     // String-Literale
+  'number'      // numerische Literale
+];
+
+/*
+declaration – die Stelle, an der etwas deklariert wird
+definition – die Stelle, an der etwas definiert/implementiert wird (falls getrennt von der Deklaration)
+readonly – schreibgeschütztes Symbol (z. B. const)
+static – statisches Element
+deprecated – veraltetes Symbol
+abstract – abstraktes Symbol
+async – asynchrones Symbol (z. B. async function)
+modification – Stelle, an der ein Wert verändert wird (Assignment, ++ usw.)
+documentation – Dokumentationskommentar o. Ä.
+defaultLibrary – Symbol stammt aus der Standardbibliothek / Runtime
+*/
+
+const semanticTokenModifiers = [
+  'declaration', // an der Deklarationsstelle
+  'readonly'
+];
+
 connection.onInitialize(() => {
   return {
     capabilities: {
       textDocumentSync: TextDocumentSyncKind.Incremental,
       completionProvider: { resolveProvider: true },
       hoverProvider: true,
-      definitionProvider: true
+      definitionProvider: true,
+      foldingRangeProvider: true,
+      semanticTokensProvider: {
+        legend: {
+            // set your tokens here
+            tokenTypes: semanticTokenTypes, 
+            tokenModifiers: semanticTokenModifiers
+        },        
+        full: true,     // wir liefern das ganze Dokument
+        range: false    // Range-Unterstützung erstmal nicht
+      }      
     }
   };
 });
 
-// --- PEARL-spezifische Daten ---
+// ------------------------------
+// Präprozessor-spezifische Daten
+// ------------------------------
+
+const fs = require('fs');
+const path = require('path');
+const { fileURLToPath, pathToFileURL } = require('url');
+
+// key: absoluter Pfad
+// value: { mtimeMs, text }
+const includeFileCache = new Map();
+
+function filePathFromUri(uri) {
+  if (!uri.startsWith('file://')) return null;
+  return fileURLToPath(uri);
+}
+
+function uriFromFilePath(absPath) {
+  return pathToFileURL(absPath).toString();
+}
+
+function loadFileTextCached(absPath) {
+  try {
+    const stat = fs.statSync(absPath);
+    const mtimeMs = stat.mtimeMs;
+
+    const entry = includeFileCache.get(absPath);
+    if (entry && entry.mtimeMs === mtimeMs) {
+      // Cache liefern
+      return {
+        text: entry.text,
+        error: undefined
+      };
+    }
+
+    // Datei liefern
+    const text = fs.readFileSync(absPath, 'utf8');
+    includeFileCache.set(absPath, { mtimeMs, text, error: undefined });
+    return {
+      text,
+      error: undefined
+    };
+  } catch (e) {
+    // Fehler liefern
+    includeFileCache.delete(absPath);
+    return {
+      text: '',
+      error: e.message
+    };
+  }
+}
+
+// ------------------------------
+// PEARL-spezifische Daten
+// ------------------------------
 
 const PEARL_KEYWORDS = [
+  'ACTIVATE',
+  'AFTER',
+  'ALL',
+  'ALPHIC',
+  'ALT',
+  'AT',
+  'BASIC',
+  'BEGIN',
+  'BY',
+  'CALL',
+  'CASE',
+  'CLOSE',
+  'CONT',
+  'CONTINUE',
+  'CONTROL',
+  'CONVERT',
+  'CREATE',
+  'CREATED',
+  'CYCLIC',
+  'DECLARE',
+  'DCL',
+  'DELETE',
+  'DIM',
+  'DIRECT',
+  'DISABLE',
+  'ELSE',
+  'ENABLE',
+  'END',
+  'ENTER',
+  'ENTRY',
+  'EVERY',
+  'EXIT',
+  'FIN',
+  'FOR',
+  'FORBACK',
+  'FORMAT',
+  'FORWARD',
+  'FREE',
+  'FROM',
+  'GET',
+  'GLOBAL',
+  'GOTO',
+  'HRS',
+  'IDENTICAL',
+  'IDENT',
+  'IDF',
+  'IF',
+  'IN',
+  'INDUCE',
+  'INITIAL',
+  'INLINE',
+  'INOUT',
+  'INTFAC',
+  'INV',
+  'LEAVE',
+  'LENGTH',
+  'MATCH',
+  'MAX',
+  'MIN',
+  'MODEND',
+  'MODULE',
+  'NIL',
+  'NOCYCL',
+  'NOMATCH',
+  'NOSTREAM',
+  'ON',
+  'ONEOF',
+  'OPEN',
+  'OPERATOR',
+  'OUT',
+  'PRECEDENCE',
+  'PRESET',
+  'PREVENT',
+  'PRIORITY',
+  'PRIO',
   'PROBLEM',
+  'PROCEDURE',
+  'PROC',
+  'PUT',
+  'READ',
+  'REENT',
+  'REF',
+  'RELEASE',
+  'REPEAT',
+  'REQUEST',
+  'RESERVE',
+  'RESIDENT',
+  'RESUME',
+  'RETURN',
+  'RETURNS',
+  'SEC',
+  'SEND',
+  'SIGNAL',
+  'SPECIFY',
+  'SPC',
+  'STREAM',
+  'STRUCT',
+  'SUSPEND',
+  'SYS',
+  'SYSTEM',
+  'TAKE',
+  'TASK',
+  'TERMINATE',
+  'TFU',
+  'THEN',
+  'TO',
+  'TRIGGER',
+  'TRY',
+  'TYPE',
+  'UNTIL',
+  'UPON',
+  'USING',
+  'WHEN',
+  'WHILE',
+  'WRITE'
+];
+
+const TYPE_KEYWORDS = [
+  'BIT',
+  'BOLT',
+  'CHAR',
+  'CHARACTER',
+  'CLOCK',
+  'DATION',
+  'DURATION',
+  'FIXED',
+  'FLOAT',
+  'INTERRUPT',
+  'INTRPT',
+  'SEMA'
+];
+
+const OPERATOR_KEYWORDS = [
+  'ABS',
+  'AND',
+  'CAT',
+  'COS',
+  'CSHIFT',
+  'DATE',
+  'ENTIER',
+  'EQ',
+  'EXOR',
+  'EXP',
+  'FIT',
+  'GE',
+  'GT',
+  'IS',
+  'ISNT',
+  'LE',
+  'LN',
+  'LT',
+  'LWB',
+  'NE',
+  'NOT',
+  'OR',
+  'REM',
+  'ROUND',
+  'SIGN',
+  'SIN',
+  'SQRT',
+  'TAN',
+  'TANH',
+  'TOBIT',
+  'TOCHAR',
+  'TOFIXED',
+  'TOFLOAT',
+  'UPB'
+];
+
+const PREPOCESSOR_KEYWORDS = [
+  // RTOS-UH-Compiler-Einbaubefehle
+  '#DEFINE',  // #DEFINE identifier = xcompconstexpression; Wirkt global und lokal
+  '#INCLUDE', // #INCLUDE filepathlist;
+  '#IF',      // #IF xcompconstexpression;
+  '#IFDEF',   // #IFDEF identifier;
+  '#IFUDEF',  // #IFUDEF identifier;
+  '#ELSE',
+  '#FIN',
+  // RT-PREPROZ
+  '#define',  // #define identifier ["value"]
+  '#undef',   // #undef identifier
+  '#include', // #include filepath
+  '#path',    // #path path
+  '#ifdef',   // #ifdef identifier
+  '#ifndef',  // #ifndef identifier
+  '#else',
+  '#endif'
+];
+
+const BLOCK_START_KEYWORDS = new Set([
   'MODULE',
   'SHELLMODULE',
   'TASK',
   'PROC',
-  'REPEAT',
   'BEGIN',
+  'REPEAT',
   'IF',
-  'THEN',
-  'ELSE',
-  'FIN',
-  'CASE',
-  'END',
-  'MODEND',
-  'DCL',
-  'SPC',
-  'SPECIFY',
-  'ACTIVATE',
-  'PREVENT',
-  'TERMINATE',
-  'SUSPEND',
-  'RESUME',
-  'REQUEST',
-  'RELEASE',
-  'ENTER',
-  'LEAVE',
-  'RESERVE',
-  'FREE',
-  'CALL',
-  'GOTO'
-];
+  'CASE'
+]);
 
-// Block-Ende
+// Block-Ende-Mapping
 const BLOCK_END_MAP = {
   MODULE: 'MODEND',
   SHELLMODULE: 'MODEND',
   TASK: 'END',
   PROC: 'END',
+  PROCEDURE: 'END',
   REPEAT: 'END',
   BEGIN: 'END',
   IF: 'FIN',
   CASE: 'FIN'
 };
 
-const BLOCK_START_KEYWORDS = Object.keys(BLOCK_END_MAP);
-const END_FOR_STRUCTURE    = ['TASK', 'PROC', 'REPEAT', 'BEGIN'];
-const FIN_FOR_STRUCTURE    = ['IF', 'CASE'];
-const MODEND_FOR_STRUCTURE = ['MODULE', 'SHELLMODULE'];
+const END_KEYWORD_MAP = {
+  END: ['TASK', 'PROC', 'REPEAT', 'BEGIN'],
+  FIN: ['IF', 'CASE'],
+  MODEND: ['MODULE', 'SHELLMODULE']
+};
 
-// Operationen
 const TASK_CTRL_KEYWORDS = ['ACTIVATE', 'PREVENT', 'TERMINATE', 'SUSPEND', 'RESUME'];
-const SEMA_OP_KEYWORDS   = ['REQUEST', 'RELEASE'];
-const BOLT_OP_KEYWORDS   = ['ENTER', 'LEAVE', 'RESERVE', 'FREE'];
+const SEMA_OP_KEYWORDS = ['REQUEST', 'RELEASE'];
+const BOLT_OP_KEYWORDS = ['ENTER', 'LEAVE', 'RESERVE', 'FREE'];
 
-// --- Scope-Hilfsfunktionen ---
+// ------------------------------
+// Tokenizer
+// ------------------------------
 
-function createEmptyScope() {
-  return {
-    procs: {},   // name -> { kind, line, character }
-    tasks: {},
-    semas: {},
-    bolts: {},
-    vars: {}
-  };
-}
-
-function lookupSymbol(scopeStack, kind, name) {
-  for (let i = scopeStack.length - 1; i >= 0; i--) {
-    const table = scopeStack[i][kind];
-    if (table && table[name]) {
-      return table[name];
-    }
-  }
-  return undefined;
-}
+const documentTokenCache = new Map();
 
 /**
- * Liefert für jede Identifier-Occurrence in der Zeile die erste Spalte.
- * Beispiel: "DCL I FIXED, X FLOAT, D DURATION;"
- * result = { I: posOfI, X: posOfX, D: posOfDIn"D DURATION" }
+ * Token an Position (line, character) suchen.
  */
-function computeIdentifierPositions(line) {
-  const result = {};
-  const re = /[A-Za-z_][A-Za-z0-9_]*/g;
-  let m;
-  while ((m = re.exec(line)) !== null) {
-    const id = m[0];
-    if (result[id] === undefined) {
-      result[id] = m.index;
-    }
-  }
-  return result;
-}
-
-/**
- * PROC-Parameter aus einer Zeile extrahieren.
- * Unterstützt z.B.:
- *   something: PROC( A FIXED, B FLOAT);
- *   (bewusst nur Label-Form)
- */
-function parseProcParamsFromLine(codePart) {
-  const m = /\bPROC\s*\(([^)]*)\)/.exec(codePart);
-  if (!m) return [];
-  const inside = m[1];
-  const parts = inside.split(',');
-  const names = [];
-  for (const p of parts) {
-    const mm = /[A-Za-z_][A-Za-z0-9_]*/.exec(p.trim());
-    if (mm) names.push(mm[0]);
-  }
-  return names;
-}
-
-/**
- * Sucht eine Label-Definition "Name:" im ganzen Dokument.
- * Rückgabe: { line, character } oder null
- */
-function findLabelDefinition(lines, name) {
-  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-    const raw = lines[lineIndex];
-    const commentPos = raw.indexOf('!');
-    const codePart   = commentPos === -1 ? raw : raw.slice(0, commentPos);
-
-    const m = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:/.exec(codePart);
-    if (m && m[1] === name) {
-      const col = raw.indexOf(m[1]);
-      return { line: lineIndex, character: col === -1 ? 0 : col };
+function findTokenAt(tokens, uri, line, character) {
+  for (const t of tokens) {
+    if (t.line !== line) continue;
+    if (t.uri !== uri) continue;
+    if (character >= t.column && character <= t.column + t.length) {
+      return t;
     }
   }
   return null;
 }
 
+// ------------------------------
+// Analyse für Diagnostics & Definitionen
+// ------------------------------
+
 /**
- * Prüft, ob eine Position innerhalb eines String-/Bit-Literals liegt:
- *   'text'
- *   'bits'B
- *   'bits'B1 .. 'bits'B4
+ * Gemeinsame Analyse:
+ * - baut Blockstack und Scope-Stack
+ * - trägt DCL/SPC/PROC/TASK/SEMA/BOLT in Scopes ein
+ * - erzeugt bei Bedarf Diagnostics
+ *
+ * options:
+ *  - stopOffset: nur Token bis zu diesem Offset auswerten (für GoTo Definition)
+ *  - collectDiagnostics: boolean
  */
-function isInsideStringOrBitLiteral(lineText, charIndex) {
-  const re = /'[^']*'(?:B(?:[1-4])?)?/g;
-  let m;
-  while ((m = re.exec(lineText)) !== null) {
-    const start = m.index;
-    const end   = start + m[0].length;
-    if (charIndex >= start && charIndex <= end) {
-      return true;
+function analyze(uri, text, options) {
+  const diagnostics = [];
+
+  const stopOffset = options && typeof options.stopOffset === 'number'
+    ? options.stopOffset
+    : Number.POSITIVE_INFINITY;
+  const collectDiagnostics = options && options.collectDiagnostics;
+
+//https://www.vscodeapi.com/classes/vscode.diagnostic#tags
+
+  function addDiagnostic(severity, message, line, column, length, tags = null ) {
+    if ( !Number.isInteger(line)   || line < 0   ||
+         !Number.isInteger(column) || column < 0 ||
+         !Number.isInteger(length) || length < 0
+       ) {
+      connection.console.log(`addDiagnostic ${line}:${column}L${length}: ${message}`);
+      return;
+    }
+    if (!collectDiagnostics) return;
+    diagnostics.push({
+      severity,
+      message,
+      range: {
+        start: { line, character: column },
+        end: { line, character: column + length }
+      },
+      source: 'pearl-lsp',
+      tags
+    });
+  }
+
+  function addDiagnosticErrorPos(message, line, column, length) {
+    addDiagnostic(DiagnosticSeverity.Error, message, line, column, length);
+  }
+
+  function addDiagnosticError(message, token) {
+    addDiagnostic(DiagnosticSeverity.Error, message, token.line, token.column, token.length);
+  }
+
+  function addDiagnosticWarningPos(message, line, column, length) {
+    addDiagnostic(DiagnosticSeverity.Warning, message, line, column, length);
+  }
+
+  function addDiagnosticWarning(message, token) {
+    addDiagnostic(DiagnosticSeverity.Warning, message, token.line, token.column, token.length);
+  }
+
+  function addDiagnosticHintPos(message, line, column, length, tags) {
+    addDiagnostic(DiagnosticSeverity.Hint, message, line, column, length, tags);
+  }
+
+  function addDiagnosticHint(message, token, tags) {
+    addDiagnostic(DiagnosticSeverity.Hint, message, token.line, token.column, token.length, tags);
+  }
+
+  const blockStack = [];
+  const scopeStack = [{}];
+  const includeStack = [];
+  const defines = new Map();
+  const defineStack = [ true ];
+  let section = 'problem';
+  const foldingRanges = [];
+
+  /**
+   * Tokenstruktur:
+   * {
+   *   type: 'keyword' | 'identifier' | 'number' | 'string' | 'bitstring' | 'operator' |
+   *         'symbol' | 'comment' | 'inactive' | 'error' | 'preproc',
+   *   value: string,
+   *   uri: string,
+   *   line: number,
+   *   column: number,
+   *   offset: number,
+   *   length: number
+   *   definition: identifier (optional)
+   * }
+   */
+
+  /**
+   * Vorherigen "signifikanten" Token suchen (ohne Kommentare),
+   * optional nur in derselben Zeile.
+   */
+  function findPreviousCodeToken(tokens, index, sameLine) {
+    const line = sameLine ? tokens[index].line : null;
+    for (let i = index - 1; i >= 0; i--) {
+      const t = tokens[i];
+      if (sameLine && t.line !== line) break;
+      if (t.type === 'comment' || t.type === 'inactive') continue;
+      return { token: t, index: i };
+    }
+    return null;
+  }
+
+  /**
+   * Nächsten "signifikanten" Token suchen (ohne Kommentare).
+   */
+  function findNextCodeToken(tokens, index) {
+    for (let i = index + 1; i < tokens.length; i++) {
+      const t = tokens[i];
+      if (t.type === 'comment' || t.type === 'inactive') continue;
+      return { token: t, index: i };
+    }
+    return null;
+  }
+
+  function skipComments(tokens, index) {
+    for (let i = index; i < tokens.length; i++) {
+      const t = tokens[i];
+      if (t.type === 'comment' || t.type === 'inactive') continue;
+      return { token: t, index: i };
+    }
+    return null;
+  }
+
+  function findNextSemicolonToken(tokens, index) {
+    for (let i = index + 1; i < tokens.length; i++) {
+      const t = tokens[i];
+      if (t.type === 'symbol' && t.value === ';') {
+        return { token: t, index: i };
+      }
+    }
+    return null;
+  }
+
+  function findMatchingParenToken(tokens, index) {
+    const openToken = tokens[index];
+    let stack = [];
+    stack.push( openToken );
+    for (let i = index + 1; i < tokens.length; i++) {
+      const t = tokens[i];
+      if (t.type === 'comment' || t.type === 'inactive') continue;
+      if (t.type === 'symbol') {
+        if (t.value === '(' || t.value === '[') {
+          stack.push(t);
+        }
+        else if (t.value === ')' || t.value === ']') {
+          const endToken = stack.pop();
+          if (  t.value === ')' && endToken.value === ']'
+            || t.value === ']' && endToken.value === ')'
+            ) {
+            return null;
+          }
+          if (stack.length === 0) {
+            return { token: t, index: i };
+          }
+        } else if (t.value === ';') {
+          // Abbruch
+          return null;
+        }
+      }
+    }
+    return null;
+  }
+
+  function lookupSymbol(scopeStack, name, kind = '') {
+    for (let i = scopeStack.length - 1; i >= 0; i--) {
+      const table = scopeStack[i];
+      if (table && table[name] && (kind === '' || table[name].typeDescription.typename === kind) ) {
+        return table[name];
+      }
+    }
+    return undefined;
+  }
+  
+  function tokenize(uri, text, preprocess = true) {
+    const tokens = [];
+    let offset = 0;
+    let line = 0;
+    let column = 0;
+    const len = text.length;
+
+  //  connection.console.log(`\n--- tokenize() START ---`);
+  //  connection.console.log(`URI: ${uri}`);
+  //  connection.console.log(`Initial section: ${section}`);
+
+    function addToken(type, startOffset, startLine, startColumn, endOffset) {
+      if ( !Number.isInteger(startOffset) || startOffset < 0   ||
+          !Number.isInteger(startLine) || startLine < 0 ||
+          !Number.isInteger(startColumn) || startColumn < 0 ||
+          !Number.isInteger(endOffset) || endOffset < 0 ||
+          endOffset < startOffset
+        ) {
+        connection.console.log(`addToken ${startOffset}/${endOffset} ${startLine}:${startColumn}: ${type}`);
+        return null;
+      }
+      const token = {
+        type,
+        value: text.slice(startOffset, endOffset),
+        uri,
+        line: startLine,
+        column: startColumn,
+        offset: startOffset,
+        length: endOffset - startOffset
+      };
+      tokens.push( token );
+      return token;
+    }
+
+    // Zeilenanfang bestimmen (für Präprozessor)
+    let isLineStart = true;
+
+    function advanceChar() {
+      const ch = text[offset];
+      offset++;
+      if (ch === '\n') {
+        line++;
+        column = 0;
+        isLineStart = true;
+      } else if (ch === '\r') {
+        if (text[offset] === '\n') {
+          offset++;
+        }
+        line++;
+        column = 0;
+        isLineStart = true;
+      } else {
+        column++;
+      }
+    }
+
+    while (offset < len) {
+      const ch = text[offset];
+
+      // Whitespace
+      if (ch === ' ' || ch === '\t' || ch === '\f' || ch === '\v') {
+        advanceChar();
+        continue;
+      }
+
+      // Zeilenumbrüche
+      if (ch === '\n' || ch === '\r') {
+        advanceChar();
+        continue;
+      }
+
+      // Einzeiliger Kommentar: !
+      if (ch === '!') {
+        const startOffset = offset;
+        const startLine = line;
+        const startColumn = column;
+        while (offset < len && text[offset] !== '\n' && text[offset] !== '\r') {
+          offset++;
+          column++;
+        }
+        addToken('comment', startOffset, startLine, startColumn, offset);
+        continue;
+      }
+
+      // Mehrzeiliger Kommentar: /* ... */
+      if (ch === '/' && offset + 1 < len && text[offset + 1] === '*') {
+        const startOffset = offset;
+        const startLine = line;
+        const startColumn = column;
+        offset += 2;
+        column += 2;
+        while (offset < len) {
+          if (text[offset] === '*' && offset + 1 < len && text[offset + 1] === '/') {
+            offset += 2;
+            column += 2;
+            break;
+          }
+          advanceChar();
+        }
+        const token = addToken('comment', startOffset, startLine, startColumn, offset);
+        if ( startLine != line ) {
+          foldingRanges.push({
+            startToken: token,
+            endToken: {
+              type: 'comment',
+              value: '',
+              uri,
+              line,
+              column: column - 2,
+              offset: offset - 2,
+              length: 0
+            },
+            kind: 'comment',
+            collapsedText: '/* ... */'
+          });
+        }
+
+        continue;
+      }
+
+      // Präprozessor
+      if (ch === '#' && preprocess && isLineStart) {    
+        // Prüfen, ob wir am (logischen) Zeilenanfang sind
+        // (bisherige Whitespace vor '#' haben wir oben schon abgearbeitet,
+        // d.h. column==0 ist ein guter Indikator)
+        const lineStartOffset = offset;
+        const lineStartLine = line;
+        const lineStartColumn = column;
+
+        // ganze Zeile einlesen
+        let lineBuf = '';
+        let tmpOffset = offset;
+        while (tmpOffset < len && text[tmpOffset] !== '\n' && text[tmpOffset] !== '\r') {
+          lineBuf += text[tmpOffset];
+          tmpOffset++;
+        }
+
+        const ifdefPattern = /^(\s*)((#ifn?def)\s+([A-Za-z][A-Za-z0-9_]*))/.exec(lineBuf);
+        if (ifdefPattern) {
+          const ifdefStart = ifdefPattern[1];
+          const ifdefStmt = ifdefPattern[2];
+          const ifdefCmd = ifdefPattern[3];
+          const ifdefName = ifdefPattern[4];
+
+          const token = addToken('preproc', lineStartOffset + ifdefStart.length, lineStartLine, lineStartColumn + ifdefStart.length, lineStartOffset + ifdefStart.length + ifdefStmt.length);
+          if (!defineStack[defineStack.length - 1])
+            addDiagnosticHint( 'inaktiv', token, [DiagnosticTag.Unnecessary]);
+
+          const value = defines.has(ifdefName);
+          const process = ifdefCmd === '#ifdef' ? value : !value;
+          const stackProcess = defineStack.reduce(( prev, current ) => {
+             return prev && current;
+          }, process );
+
+          defineStack.push( stackProcess );
+
+          // Die gesamte #ifdef-Zeile überspringen
+          while (offset < len && text[offset] !== '\n' && text[offset] !== '\r') {
+            advanceChar();
+          }
+          // Zeilenende noch normal verarbeiten:
+          if (offset < len) {
+            advanceChar();
+          }
+//          addToken('preproc', lineStartOffset, lineStartLine, lineStartColumn, lineEndOffset);
+
+          continue;
+        }
+
+        const elsePattern = /^(\s*)(#else)/.exec(lineBuf);
+        if (elsePattern) {
+          const elseStart = elsePattern[1];
+          const elseStmt = elsePattern[2];
+
+          const token = addToken('preproc', lineStartOffset + elseStart.length, lineStartLine, lineStartColumn + elseStart.length, lineStartOffset + elseStart.length + elseStmt.length);
+
+          const elseValue = !defineStack.pop();
+          const stackProcess = defineStack.reduce(( prev, current ) => {
+             return prev && current;
+          }, elseValue );
+          defineStack.push( stackProcess );
+
+          if (!defineStack[defineStack.length - 1])
+            addDiagnosticHint( 'inaktiv', token, [DiagnosticTag.Unnecessary]);
+
+          // Die gesamte #undef-Zeile überspringen
+          while (offset < len && text[offset] !== '\n' && text[offset] !== '\r') {
+            advanceChar();
+          }
+          // Zeilenende noch normal verarbeiten:
+          if (offset < len) {
+            advanceChar();
+          }
+//          addToken('preproc', lineStartOffset + elsePattern[1].length, lineStartLine, lineStartColumn + elsePattern[1].length, elsePattern[2].length);
+
+          continue;
+        }
+
+        const endifPattern = /^(\s*)(#endif)/.exec(lineBuf);
+        if (endifPattern) {
+          const endifStart = endifPattern[1];
+          const endifStmt = endifPattern[2];
+
+          const token = addToken('preproc', lineStartOffset + endifStart.length, lineStartLine, lineStartColumn + endifStart.length, lineStartOffset + endifStart.length + endifStmt.length);
+
+          defineStack.pop();
+          if (!defineStack[defineStack.length - 1])
+            addDiagnosticHint( 'inaktiv', token, [DiagnosticTag.Unnecessary]);
+
+          // Die gesamte #undef-Zeile überspringen
+          while (offset < len && text[offset] !== '\n' && text[offset] !== '\r') {
+            advanceChar();
+          }
+          // Zeilenende noch normal verarbeiten:
+          if (offset < len) {
+            advanceChar();
+          }
+
+          continue;
+        }
+
+        if (defineStack[defineStack.length - 1]) {
+          const includePattern = /^(\s*)(#include\s+([^\s]+))/.exec(lineBuf);
+          if (includePattern) {
+            const includeStart = includePattern[1];
+            const includeStmt = includePattern[2];
+            const includePath = includePattern[3];
+
+            // Die gesamte #include-Zeile überspringen
+            while (offset < len && text[offset] !== '\n' && text[offset] !== '\r') {
+              advanceChar();
+            }
+            // Zeilenende noch normal verarbeiten:
+            if (offset < len) {
+              advanceChar();
+            }
+
+            const token = addToken('preproc', lineStartOffset + includeStart.length, lineStartLine, lineStartColumn + includeStart.length, lineStartOffset + includeStart.length + includeStmt.length);
+
+            // in #include Makros ersetzen
+            let finalIncludePath = includePath.replace(/([A-Za-z][A-Za-z0-9_]*)/g, (define) => {
+              if (defines.has(define)) {
+                let value = defines.get(define).value || '';
+                const stringPattern = /^'(.*)'$/.exec(value);
+                return stringPattern ? stringPattern[1] : value;
+              }
+              return define;
+            });
+
+            const parentPath = filePathFromUri(uri);
+            const baseDir = parentPath ? path.dirname(parentPath) : process.cwd();
+            const absPath = path.resolve(baseDir, finalIncludePath);
+            if (includeStack.length < 100) { // maximale Include-Tiefe erreicht?
+              const incText = loadFileTextCached(absPath);
+              if (incText.error) {
+                // Dateifehler
+                addDiagnosticError(`#include: ${incText.error}`, token);
+              } else {
+                includeStack.push(absPath);
+                const childUri = uriFromFilePath(absPath);
+
+                // Rekursiv tokenisieren; section-Status durchreichen
+                const incTokens = tokenize(childUri, incText.text, true);
+                includeStack.pop();
+
+                // In Ergebnis einfügen
+                tokens.push(...incTokens);
+              }
+            }
+
+            continue;
+          }
+
+          const definePattern = /^(\s*)(#define\s+([A-Za-z][A-Za-z0-9_]*)(?:\s+"([^"]+)")?)/.exec(lineBuf);
+          if (definePattern) {
+            const defineStart = definePattern[1];
+            const defineStmt = definePattern[2];
+            const defineName = definePattern[3];
+            const defineValue = definePattern[4] || '';
+
+            // Die gesamte #define-Zeile überspringen
+            while (offset < len && text[offset] !== '\n' && text[offset] !== '\r') {
+              advanceChar();
+            }
+            // Zeilenende noch normal verarbeiten:
+            if (offset < len) {
+              advanceChar();
+            }
+
+            const token = addToken('preproc', lineStartOffset + defineStart.length, lineStartLine, lineStartColumn + defineStart.length, lineStartOffset + defineStart.length + defineStmt.length);
+            if (defines.has(defineName)) {
+              addDiagnosticError(`Makro ${defineName} bereits definiert.`, token);
+            }
+            else {
+              defines.set(defineName, { value: defineValue, define: defineStmt });
+            }
+
+            continue;
+          }
+          
+          const undefPattern = /^(\s*)(#undef\s+([A-Za-z][A-Za-z0-9_]*))/.exec(lineBuf);
+          if (undefPattern) {
+            const undefStart = undefPattern[1];
+            const undefStmt = undefPattern[2];
+            const undefName = undefPattern[3];
+
+            // Die gesamte #undef-Zeile überspringen
+            while (offset < len && text[offset] !== '\n' && text[offset] !== '\r') {
+              advanceChar();
+            }
+            // Zeilenende noch normal verarbeiten:
+            if (offset < len) {
+              advanceChar();
+            }
+
+            const token = addToken('preproc', lineStartOffset + undefStart.length, lineStartLine, lineStartColumn + undefStart.length, lineStartOffset + undefStart.length + undefStmt.length);
+            if (!defines.has(undefName)) {
+              addDiagnosticWarning(`Makro ${undefName} nicht definiert.`, token);
+            }
+            defines.delete( undefName );
+
+            continue;
+          }
+
+          const unknownPattern = /^(\s*)(#[A-Za-z][A-Za-z0-9_]*)/.exec(lineBuf);
+          if ( unknownPattern ) {
+            const unknownStart = unknownPattern[1];
+            const unknownStmt = unknownPattern[2];
+
+            const token = addToken('error', lineStartOffset + unknownStart.length, lineStartLine, lineStartColumn + unknownStart.length, lineStartOffset + unknownStart.length + unknownStmt.length);
+            addDiagnosticError(`Unbekannter Präprozessorbefehl ${unknownStmt}`, token);
+
+            // Die gesamte #undef-Zeile überspringen
+            while (offset < len && text[offset] !== '\n' && text[offset] !== '\r') {
+              advanceChar();
+            }
+            // Zeilenende noch normal verarbeiten:
+            const lineEndOffset = offset;
+            if (offset < len) {
+              advanceChar();
+            }
+  
+            continue;
+          }
+        }
+        else {
+          const lineStartOffset = offset;
+          const lineStartLine = line;
+
+          // Die gesamte Zeile überspringen
+          while (offset < len && text[offset] !== '\n' && text[offset] !== '\r') {
+            advanceChar();
+          }
+          // Zeilenende noch normal verarbeiten:
+          const lineEndOffset = offset;
+          if (offset < len) {
+            advanceChar();
+          }
+
+          const token = addToken('inactive', lineStartOffset, lineStartLine, 0, lineEndOffset);
+          addDiagnosticHint( 'inaktiv', token, [DiagnosticTag.Unnecessary]);
+
+          continue;
+        }
+      }
+
+      isLineStart = false;
+
+      // ifdef/ifndef-Block aktiv?
+      if (!defineStack[defineStack.length - 1]) {
+        const lineStartOffset = offset;
+        const lineStartLine = line;
+
+        // Die gesamte Zeile überspringen
+        while (offset < len && text[offset] !== '\n' && text[offset] !== '\r') {
+          advanceChar();
+        }
+        // Zeilenende noch normal verarbeiten:
+        const lineEndOffset = offset;
+        if (offset < len) {
+          advanceChar();
+        }
+
+        const token = addToken('inactive', lineStartOffset, lineStartLine, 0, lineEndOffset);
+        addDiagnosticHint( 'inaktiv', token, [DiagnosticTag.Unnecessary]);
+
+        continue;
+      }
+
+      // String / Bitstring: '...'
+      if (ch === '\'') {
+        const startOffset = offset;
+        const startLine = line;
+        const startColumn = column;
+        offset++;
+        column++;
+        while (offset < len && text[offset] !== '\'') {
+          if (text[offset] === '\n' || text[offset] === '\r') {
+            // Unterbrochener String – wir beenden trotzdem
+            break;
+          }
+          advanceChar();
+        }
+        if (offset < len && text[offset] === '\'') {
+          offset++;
+          column++;
+        }
+        // Optionales B/B1..B4
+        let type = 'string';
+        if (offset < len && text[offset] === 'B') {
+          let tmpOffset = offset;
+          let tmpColumn = column;
+          tmpOffset++;
+          tmpColumn++;
+          if (tmpOffset < len && /[1-4]/.test(text[tmpOffset])) {
+            tmpOffset++;
+            tmpColumn++;
+          }
+          offset = tmpOffset;
+          column = tmpColumn;
+          type = 'bitstring';
+        }
+        addToken(type, startOffset, startLine, startColumn, offset);
+        continue;
+      }
+
+      // Zahl: grob – Hauptsache sie wird nicht als Identifier erkannt
+      if (/[0-9]/.test(ch) || (ch === '.' && offset + 1 < len && /[0-9]/.test(text[offset + 1]))) {
+        const startOffset = offset;
+        const startLine = line;
+        const startColumn = column;
+
+        // Integer/Fraction
+        if (ch === '.') {
+          offset++;
+          column++;
+        }
+        while (offset < len && /[0-9]/.test(text[offset])) {
+          offset++;
+          column++;
+        }
+        // optionaler Dezimalpunkt + weitere Digits
+        if (offset < len && text[offset] === '.') {
+          offset++;
+          column++;
+          while (offset < len && /[0-9]/.test(text[offset])) {
+            offset++;
+            column++;
+          }
+        }
+        // optionaler Exponent
+        if (offset < len && /[Ee]/.test(text[offset])) {
+          offset++;
+          column++;
+          if (offset < len && (text[offset] === '+' || text[offset] === '-')) {
+            offset++;
+            column++;
+          }
+          while (offset < len && /[0-9]/.test(text[offset])) {
+            offset++;
+            column++;
+          }
+        }
+        // optionale Länge (z.B. (31))
+        if (offset < len && text[offset] === '(') {
+          offset++;
+          column++;
+          while (offset < len && /[0-9]/.test(text[offset])) {
+            offset++;
+            column++;
+          }
+          if (offset < len && text[offset] === ')') {
+            offset++;
+            column++;
+          }
+        }
+
+        addToken('number', startOffset, startLine, startColumn, offset);
+        continue;
+      }
+
+      // Identifier / Keyword
+      if (/[A-Za-z]/.test(ch)) {
+        const startOffset = offset;
+        const startLine = line;
+        const startColumn = column;
+        offset++;
+        column++;
+        while (offset < len && /[A-Za-z0-9_]/.test(text[offset])) {
+          offset++;
+          column++;
+        }
+        let value = text.slice(startOffset, offset);
+
+        if (defines.has(value)) {
+          /*
+          * Präprozessor-define
+          * Ersetzung muss geparst werden! z. B. als number, string, identifier ...
+          */
+          const define = defines.get(value);
+          const defineValue = define.value ? define.value : '';
+          addToken('preproc', startOffset, startLine, startColumn, offset);
+          tokens[ tokens.length - 1].define = defineValue;
+connection.console.log(`preproc-Token ${tokens[ tokens.length - 1].type} ${tokens[ tokens.length - 1].value} ${tokens[ tokens.length - 1].define}`);
+          let defineTokens = tokenize(uri, defineValue, false);  // Ersetzungstext tokenisieren, aber nicht rekursiv durch den Präprozessor laufen
+          // Tokenposition korrigieren
+          defineTokens.map( t => { 
+            t.line = startLine;
+            t.offset = startOffset;
+            t.column = startColumn;
+            t.length = offset - startOffset;
+          });
+          
+          // In Ergebnis einfügen
+          tokens.push(...defineTokens);
+          continue;
+        }
+
+        let type = 'identifier';
+        if (PEARL_KEYWORDS.includes(value))
+          type = 'keyword';
+        else if (OPERATOR_KEYWORDS.includes(value))
+          type = 'operator';
+        else if (TYPE_KEYWORDS.includes(value))
+          type = 'type';
+        addToken(type, startOffset, startLine, startColumn, offset);
+        if ( type === 'keyword' ) {
+          if ( section === 'problem' && value === 'SYSTEM' )
+            section = 'system';
+          else if ( section === 'system' && value === 'PROBLEM' )
+            section = 'problem';
+        }
+        continue;
+      }
+
+      // Symbol
+      {
+        const startOffset = offset;
+        const startLine = line;
+        const startColumn = column;
+
+        // DATION-Richtungsoperatoren im SYSTEM-Teil
+        if (section === 'system') {
+          // Dreier-Operator: "<->"
+          if (text[offset] === '<' && offset + 2 < len &&
+              text[offset + 1] === '-' && text[offset + 2] === '>') {
+            const startOffset = offset;
+            const startLine = line;
+            const startColumn = column;
+            offset += 3;
+            column += 3;
+            addToken('operator', startOffset, startLine, startColumn, offset);
+            continue;
+          }
+
+          // "<-" (z.B. Eingabe)
+          if (text[offset] === '<' && offset + 1 < len && text[offset + 1] === '-') {
+            const startOffset = offset;
+            const startLine = line;
+            const startColumn = column;
+            offset += 2;
+            column += 2;
+            addToken('operator', startOffset, startLine, startColumn, offset);
+            continue;
+          }
+
+          // "->" (z.B. Ausgabe)
+          if (text[offset] === '-' && offset + 1 < len && text[offset + 1] === '>') {
+            const startOffset = offset;
+            const startLine = line;
+            const startColumn = column;
+            offset += 2;
+            column += 2;
+            addToken('operator', startOffset, startLine, startColumn, offset);
+            continue;
+          }
+        }
+
+        // : := 
+        if (ch === ':') {
+          offset++;
+          column++;
+          if (offset < len && text[offset] === '=') {
+            offset++;
+            column++;
+          }
+          addToken('symbol', startOffset, startLine, startColumn, offset);
+          continue;
+        }
+        // = == 
+        if (ch === '=') {
+          offset++;
+          column++;
+          if (offset < len && text[offset] === '=') {
+            offset++;
+            column++;
+          }
+          addToken('operator', startOffset, startLine, startColumn, offset);
+          continue;
+        }
+        // < <= <> 
+        if (ch === '<') {
+          offset++;
+          column++;
+          if (offset < len && (text[offset] === '=' || text[offset] === '>') ) {
+            offset++;
+            column++;
+          }
+          addToken('operator', startOffset, startLine, startColumn, offset);
+          continue;
+        }
+        // > >= >< 
+        if (ch === '>') {
+          offset++;
+          column++;
+          if (offset < len && (text[offset] === '=' || text[offset] === '<') ) {
+            offset++;
+            column++;
+          }
+          addToken('operator', startOffset, startLine, startColumn, offset);
+          continue;
+        }
+        // / // /= 
+        if (ch === '/') {
+          offset++;
+          column++;
+          if (offset < len && (text[offset] === '/' || text[offset] === '=') ) {
+            offset++;
+            column++;
+          }
+          addToken('operator', startOffset, startLine, startColumn, offset);
+          continue;
+        }
+        // * ** 
+        if (ch === '*') {
+          offset++;
+          column++;
+          if (offset < len && text[offset] === '*') {
+            offset++;
+            column++;
+          }
+          addToken('operator', startOffset, startLine, startColumn, offset);
+          continue;
+        }
+        // + -
+        if (ch === '+' | ch === '-') {
+          offset++;
+          column++;
+          addToken('operator', startOffset, startLine, startColumn, offset);
+          continue;
+        }
+        // + - ( ) [ ] ; , .
+        if (ch === '(' || ch === ')' || ch === '[' || ch === ']' || ch === ';' || ch === ',' || ch === '.' ) {
+          offset++;
+          column++;
+          addToken('symbol', startOffset, startLine, startColumn, offset);
+          continue;
+        }
+        // unerlaubtes Zeichen
+        offset++;
+        column++;
+        addToken('error', startOffset, startLine, startColumn, offset);
+        continue;
+      }
+    }
+
+    return tokens;
+  }
+
+  const tokens = tokenize(uri, text);
+
+  /*
+  * Typangabe mit Attributen parsen
+  */
+  function parseTypeDescription(tokens, startIndex, endIndex) {
+    const typeTokens = [];
+    let parenLevel = 0;
+    let lastIndex = endIndex + 1;
+    let arrayDim = 0;
+    let inv = false;
+    let ref = false;
+    let global = false;
+    let init = false;
+    let typename = null;
+    let state = 'start';  // dim | dimensions | inv | ref | type | global | init | initval
+
+    for (let i = startIndex; i <= endIndex; i++) {
+      const tt = tokens[i];
+      if (tt.type === 'comment' || tt.type === 'inactive') continue;
+      if (tt.type === 'symbol') {
+        if (tt.value === ',') {
+          if ( parenLevel === 0 ) {
+            lastIndex = i;
+            break;
+          }
+          else {
+            if ( state === 'dimensions' ) {
+              ++arrayDim;
+            }
+          }
+        } 
+        else if (tt.value === '(') {
+          if ( state === 'start' ) {
+            arrayDim = 1;
+            state = 'dimensions';
+          }
+          ++parenLevel;
+        }
+        else if (tt.value === ')') {
+          if ( state === 'dimensions' ) {
+            state = 'inv';
+          }
+          --parenLevel;
+        }
+      } 
+      else if (tt.type === 'keyword') {
+        if ( tt.value === 'INV' && ( state === 'start' || state === 'dim' || state === 'inv' ) ) {
+          state = 'ref';
+          inv = true;
+        }
+        else if ( tt.value === 'REF' && ( state === 'start' || state === 'dim' || state === 'inv' || state === 'ref' ) ) {
+          state = 'type';
+          ref = true;
+        }
+        else if (  ( tt.value === 'PROC' || tt.value === 'PROCEDURE' || tt.value === 'ENTRY' || tt.value === 'TASK' || tt.value === 'DATION') 
+                && ( state === 'start' || state === 'dim' || state === 'inv' || state === 'ref' || state === 'type' )
+                ) {
+          state = 'global';
+          typename = tt;
+        }
+        else if ( tt.value === 'GLOBAL' && state === 'global' ) {
+          state = 'init';
+          global = true;
+        }
+        else if ( tt.value === 'INIT' && ( state === 'global' || state === 'init' ) ) {
+          state = 'initval';
+          init = true;
+        }
+      } 
+      else if ( tt.type === 'identifier') {
+        if ( ( state === 'start' || state === 'dim' || state === 'inv' || state === 'ref' || state === 'type' ) ) {
+          state = 'global';
+          typename = tt;
+        }
+      }
+
+      typeTokens.push(tt);
+    }
+
+    return { 
+      endIndex: lastIndex, 
+      typeTokens,
+      typeDescription: {
+        dim: arrayDim,
+        inv,
+        ref,
+        typename: ( typename ? typename.value : '' ),
+        global, 
+        init
+      }
+    };
+  }
+
+  function parseSpcDclTokens(tokens, startIndex, endIndex) {
+    const result = [];
+
+    for (let j = startIndex; j <= endIndex; j++) {
+
+      const nextToken = skipComments(tokens, j);
+      j = nextToken.index;
+      const t = nextToken.token;
+
+      if (t.type === 'symbol' && t.value === '(') {
+        // SPC/DCL (var1,var2) type;
+        const nameTokens = [];
+        let it = endIndex + 1;
+        for (let i = j + 1; i <= endIndex; i++) {
+          const tt = tokens[i];
+          if (tt.type === 'comment' || tt.type === 'inactive') continue;
+          if (tt.type === 'identifier') {
+            nameTokens.push(tt);
+            continue;
+          }
+          if (tt.type === 'symbol') {
+            if (tt.value === ',') continue;
+            if (tt.value === ')') {
+              it = i + 1;
+              break;
+            }
+          }
+          addDiagnosticWarning(
+            `'${tt.value}' nicht erlaubt.`,
+            tt
+          );
+
+        }
+
+        const typeDescription = parseTypeDescription(tokens, it, endIndex);
+        j = typeDescription.endIndex;
+
+        for (const nameToken of nameTokens) {
+          result.push({nameToken, typeTokens: typeDescription.typeTokens, typeDescription: typeDescription.typeDescription});
+        }
+      }
+      else {
+        // SPC/DCL var type;
+        const typeDescription = parseTypeDescription(tokens, j + 1, endIndex);
+        j = typeDescription.endIndex;
+
+        result.push({nameToken: t, typeTokens: typeDescription.typeTokens, typeDescription: typeDescription.typeDescription});
+      }
+    }
+
+    return result;
+  }
+
+  function createIdentifier( nameToken, typeTokens, dim, inv, ref, typename, global, init )
+  {
+    return {
+      nameToken,
+      typeTokens,
+      typeDescription: {
+        dim,
+        inv,
+        ref,
+        typename,
+        global, 
+        init
+      }
+    };
+  };
+
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t.offset > stopOffset) break;
+
+    if (t.type === 'comment' || t.type === 'inactive' || t.type === 'string' || t.type === 'bitstring' || t.type === 'number' || t.type === 'error'  || t.type === 'preproc') {
+      continue;
+    }
+
+    // Label-Definition: Identifier gefolgt von ':'
+    if (t.type === 'identifier') {
+      const next = findNextCodeToken(tokens, i);
+      if (next && next.token.type === 'symbol' && next.token.value === ':') {
+        // Prüfen, ob danach PROC/TASK kommt -> dann ist es eine PROC/TASK-Implementierung
+        const afterLabel = findNextCodeToken(tokens, next.index);
+        if (!(afterLabel && afterLabel.token.type === 'keyword' && (afterLabel.token.value === 'PROC' || afterLabel.token.value === 'PROCEDURE' || afterLabel.token.value === 'TASK'))) {
+          // normales Label
+          const currentScope = scopeStack[scopeStack.length - 1];
+          const identifier = createIdentifier(t, [], false, false, false, '@LABEL', false, false);
+          currentScope[t.value] = identifier;   // PROC/TASK ist immer globaler Scope
+        }
+        continue;
+      }
+      // Identifier (Verwendung)
+connection.console.log( `identifier verwendung: ${t.value} at ${t.line}.${t.column}/${t.offset}`);
+      const definition = lookupSymbol(scopeStack, t.value);
+      if (definition) {
+connection.console.log( `identifier definition: ${t.value} at ${definition.nameToken.line}.${definition.nameToken.column}/${definition.nameToken.offset}`);
+        t.definition = definition;
+      }
+      else {
+        addDiagnosticError(`${t.value} nicht definiert.`, t);
+      }
+    }
+
+    if (t.type !== 'keyword') {
+      continue;
+    }
+
+    const kw = t.value;
+
+    // ---------------- Blockenden ----------------
+    if (kw === 'END' || kw === 'FIN' || kw === 'MODEND') {
+      if (kw === 'END') {
+        if (
+          blockStack.length === 0 ||
+          !END_KEYWORD_MAP.END.includes(blockStack[blockStack.length - 1].keyword)
+        ) {
+          addDiagnosticError('Unerwartetes END ohne passenden Block (TASK/PROC/REPEAT/BEGIN).', t);
+        } else {
+          const startToken = blockStack.pop();
+          if (scopeStack.length > 1) scopeStack.pop();
+          foldingRanges.push({
+            startToken: startToken.token,
+            endToken: t,
+            kind: 'region'
+          })
+        }
+      } else if (kw === 'FIN') {
+        if (
+          blockStack.length === 0 ||
+          !END_KEYWORD_MAP.FIN.includes(blockStack[blockStack.length - 1].keyword)
+        ) {
+          addDiagnosticError('Unerwartetes FIN ohne passenden Block (IF/CASE).', t);
+        } else {
+          const startToken = blockStack.pop();
+          if (scopeStack.length > 1) scopeStack.pop();
+          foldingRanges.push({
+            startToken: startToken.token,
+            endToken: t,
+            kind: 'region'
+          })
+        }
+      } else if (kw === 'MODEND') {
+        if (
+          blockStack.length === 0 ||
+          !END_KEYWORD_MAP.MODEND.includes(blockStack[blockStack.length - 1].keyword)
+        ) {
+          addDiagnosticError('Unerwartetes MODEND ohne passenden Block (MODULE/SHELLMODULE).', t);
+        } else {
+          const startToken = blockStack.pop();
+          if (scopeStack.length > 1) scopeStack.pop();
+          foldingRanges.push({
+            startToken: startToken.token,
+            endToken: t,
+            kind: 'region'
+          })
+        }
+      }
+      continue;
+    }
+
+    // ---------------- DCL-Statement ----------------
+    if (kw === 'DCL' || kw === 'DECLARE') {
+      const semicolon = findNextSemicolonToken(tokens, i);
+      if ( semicolon ) {
+        let endIndex = semicolon.index;
+        const parsedSpc = parseSpcDclTokens(tokens, i + 1, endIndex - 1);
+
+        const currentScope = scopeStack[scopeStack.length - 1];
+        for (const dclName of parsedSpc) {
+//logIdentifier( dclName, `DCL level: ${scopeStack.length - 1}` );
+          const nameToken = dclName.nameToken;
+          currentScope[dclName.nameToken.value] = dclName;   
+        }
+        i = endIndex;
+      }
+      continue;
+    }
+
+    // ---------------- SPC / SPECIFY ----------------
+    if (kw === 'SPC' || kw === 'SPECIFY') {
+      const semicolon = findNextSemicolonToken(tokens, i);
+      if ( semicolon ) {
+        let endIndex = semicolon.index;
+        const parsedSpc = parseSpcDclTokens(tokens, i + 1, endIndex - 1);
+
+        const currentScope = scopeStack[scopeStack.length - 1];
+        for (const spcName of parsedSpc) {
+//logIdentifier( spcName, `SPC level: ${scopeStack.length - 1}` );
+          currentScope[spcName.nameToken.value] = spcName;   // SPC ist immer globaler Scope
+        }
+
+        i = endIndex;
+      }
+      continue;
+    }
+
+    // ---------------- Blockstarts & Deklarationen ----------------
+    if (kw === 'MODULE' || kw === 'SHELLMODULE' || kw === 'IF' || kw === 'CASE') {
+      if (kw === 'MODULE' || kw === 'SHELLMODULE') {      
+        const next = findNextCodeToken(tokens, i);
+        if (next && next.token.type === 'identifier') {
+          let endIndex = next.index;
+          const identifier = createIdentifier( next.token, [], false, false, false, 'MODULE', false, false );
+          const currentScope = scopeStack[0];
+          currentScope[next.token] = identifier;   // MODULE/SHELLMODULE ist immer globaler Scope
+          i = endIndex;
+        }
+      }
+
+      // Blockstart, keine speziellen Deklarationen
+      blockStack.push({ keyword: kw, token: t });
+      scopeStack.push({});
+      continue;
+    }
+
+    // PROC/TASK als Implementierung oder Deklaration
+    if (kw === 'PROC' || kw === 'PROCEDURE' || kw === 'TASK') {
+      const kind = kw;
+
+      // name : PROC/TASK
+      const prev = findPreviousCodeToken(tokens, i, /*sameLine*/ true);
+      const prev2 = prev ? findPreviousCodeToken(tokens, prev.index, true) : null;
+      if (
+        prev &&
+        prev.token.type === 'symbol' &&
+        prev.token.value === ':' &&
+        prev2 &&
+        prev2.token.type === 'identifier'
+      ) {
+        const labelName = prev2.token.value;
+        // Deklaration
+        if ( scopeStack.length === 2 )
+        {
+          // Nur global erlaubt
+          const currentScope = scopeStack[scopeStack.length - 1];
+          const typeTokens = [ prev2.token, prev.token, t ];
+          const identifier = createIdentifier( prev2.token, typeTokens, false, false, false, kind, false, false );
+//logIdentifier( identifier, `${kind} level: ${scopeStack.length - 1}` );
+          currentScope[labelName] = identifier;   // PROC/TASK ist immer globaler Scope
+
+          // Blockstart
+          blockStack.push({ keyword: kind, token: t });
+          scopeStack.push({});
+
+          // PROC-Parameter aus Header (Text von PROC bis zum nächsten ')')
+          if (kind === 'PROC' || kind === 'PROCEDURE') {
+            const nextTok = findNextCodeToken(tokens, i);
+            if (nextTok && nextTok.token.type === 'symbol' && nextTok.token.value === '(') {
+              const closeParen = findMatchingParenToken(tokens, nextTok.index );
+              if ( closeParen ) {
+                const parsedParam = parseSpcDclTokens(tokens, nextTok.index + 1, closeParen.index - 1);
+                const currentScope = scopeStack[scopeStack.length - 1];
+                for (const paramName of parsedParam) {
+//logIdentifier( paramName, `Param level: ${scopeStack.length - 1}` );
+                  currentScope[paramName.nameToken.value] = paramName;
+                }
+
+                i = closeParen.index;
+                continue;
+              }
+            }
+          }
+        }
+        else {
+          addDiagnosticError(
+            `${kind} '${prev2.token.value}' nur global erlaubt.`,
+            prev2.token,
+            t.offset + t.length - prev2.token.offset
+          );
+        }
+      }
+
+      continue;
+    }
+
+    // REPEAT/BEGIN immer als Blockstart
+    if (kw === 'REPEAT' || kw === 'BEGIN') {
+      blockStack.push({ keyword: kw, token: t });
+      scopeStack.push({});
+      continue;
+    }
+
+    // ---------------- Aufrufe & Operationen ----------------
+
+    // CALL PROC
+    if (kw === 'CALL') {
+      const next = findNextCodeToken(tokens, i);
+      if (next && next.token.type === 'identifier') {
+        const name = next.token.value;
+        const sym = lookupSymbol(scopeStack, name, 'PROC') || lookupSymbol(scopeStack, name, 'PROCEDURE') || lookupSymbol(scopeStack, name, 'ENTRY');
+        if (!sym) {
+          addDiagnosticWarning(
+            `Aufruf von '${name}' ohne passende PROC-Deklaration (PROC/DCL PROC/SPC PROC/ENTRY).`,
+            t,
+            next.token.offset + next.token.length - t.offset
+          );
+        }
+      }
+      continue;
+    }
+
+    // TASK-Operationen
+    if (TASK_CTRL_KEYWORDS.includes(kw)) {
+      const next = findNextCodeToken(tokens, i);
+      if (next && next.token.type === 'identifier') {
+        const name = next.token.value;
+        const sym = lookupSymbol(scopeStack, name, 'TASK');
+        if (!sym) {
+          addDiagnosticWarning(
+            `TASK '${name}' wird mit ${kw} verwendet, es existiert aber keine TASK-Deklaration (TASK/SPC TASK).`,
+            t,
+            next.token.offset + next.token.length - t.offset
+          );
+        }
+      }
+      continue;
+    }
+
+    // SEMA-Operationen
+    if (SEMA_OP_KEYWORDS.includes(kw)) {
+      const next = findNextCodeToken(tokens, i);
+      if (next && next.token.type === 'identifier') {
+        const name = next.token.value;
+        const sym = lookupSymbol(scopeStack, name, 'SEMA');
+        if (!sym) {
+          addDiagnosticWarning(
+            `SEMA '${name}' wird mit ${kw} verwendet, es existiert aber keine SEMA-Deklaration (DCL/SPC SEMA).`,
+            t,
+            next.token.offset + next.token.length - t.offset
+          );
+        }
+      }
+      continue;
+    }
+
+    // BOLT-Operationen
+    if (BOLT_OP_KEYWORDS.includes(kw)) {
+      const next = findNextCodeToken(tokens, i);
+      if (next && next.token.type === 'identifier') {
+        const name = next.token.value;
+        const sym = lookupSymbol(scopeStack, name, 'BOLT');
+        if (!sym) {
+          addDiagnosticWarning(
+            `BOLT '${name}' wird mit ${kw} verwendet, es existiert aber keine BOLT-Deklaration (DCL/SPC BOLT).`,
+            t,
+            next.token.offset + next.token.length - t.offset
+          );
+        }
+      }
+      continue;
     }
   }
-  return false;
+
+  // Offene Blöcke am Ende melden (nur bei vollständiger Analyse)
+  if (collectDiagnostics) {
+    for (const open of blockStack) {
+      const t = open.token;
+      const endKw = BLOCK_END_MAP[open.keyword] || 'END';
+      diagnostics.push({
+        severity: DiagnosticSeverity.Warning,
+        message: `Block '${open.keyword}' wird nicht geschlossen. Erwartet ${endKw}.`,
+        range: {
+          start: { line: t.line, character: t.column },
+          end: { line: t.line, character: t.column + t.length }
+        },
+        source: 'pearl-lsp'
+      });
+    }
+  }
+
+  return {
+    tokens,
+    diagnostics,
+    scopeStack,
+    foldingRanges
+  };
 }
 
-// --- Completion ---
+// ------------------------------
+// Diagnostics
+// ------------------------------
+
+function validateTextDocument(textDocument) {
+  const text = textDocument.getText();
+  const analysis = analyze(textDocument.uri, text, { collectDiagnostics: true });
+  documentTokenCache.set( textDocument.uri, analysis );    // für onDefinition & Co. cachen
+  connection.sendDiagnostics({
+    uri: textDocument.uri,
+    diagnostics: analysis.diagnostics
+  });
+}
+
+// ------------------------------
+// Hilfsfunktionen für DCL/SPC
+// ------------------------------
+
+function logIdentifier( identifier, msg = '' ) {
+  const nameToken = identifier.nameToken;
+  const typeTokens = identifier.typeTokens;
+  let typeString = ' ';
+  for (const idType of typeTokens) {
+    typeString += idType.value + ' ';
+  }
+  const td = identifier.typeDescription;          
+  connection.console.log(`${msg} ${nameToken.value} ${typeString}; dim: ${td.dim} inv: ${td.inv}, ref: ${td.ref}, typename: ${td.typename} global: ${td.global}, init: ${td.init}`);
+}
+
+// ------------------------------
+// Completion
+// ------------------------------
 
 connection.onCompletion(() => {
   return PEARL_KEYWORDS.map((kw) => ({
@@ -210,42 +1777,67 @@ connection.onCompletionResolve((item) => {
   return item;
 });
 
-// --- Hover ---
+// ------------------------------
+// Hover
+// ------------------------------
 
 connection.onHover((params) => {
-  const doc = documents.get(params.textDocument.uri);
-  if (!doc) return null;
+  const analysis = documentTokenCache.get( params.textDocument.uri );    // Aus dem Cache holen
+  if ( !analysis ) return null;
 
-  const text  = doc.getText();
-  const lines = text.split(/\r?\n/);
+  const fullTokens = analysis.tokens;
+  if ( !fullTokens ) return null;
 
-  const offset = doc.offsetAt(params.position);
-  const targetLine = params.position.line;
-  const targetChar = params.position.character;
+  const pos = params.position;
+  const targetToken = findTokenAt(fullTokens, params.textDocument.uri, pos.line, pos.character);
+  if (!targetToken) return null;
 
-  const lineText = lines[targetLine] || '';
-
-  // Keine Hover-Infos für String-/Bit-Literale
-  if (isInsideStringOrBitLiteral(lineText, targetChar)) {
-    return null;
-  }
-
-  let start = offset;
-  while (start > 0 && /\w/.test(text[start - 1])) start--;
-  let end = offset;
-  while (end < text.length && /\w/.test(text[end])) end++;
-
-  const word = text.substring(start, end);
-  if (!word) return null;
-
-  // numerische Literale: keine Hover-Infos
-  if (/^\d/.test(word)) return null;
-
-  if (PEARL_KEYWORDS.includes(word)) {
+  // Test----
+  if ( targetToken.define ) {
     return {
       contents: {
         kind: 'markdown',
-        value: `**${word}** ist ein PEARL-Schlüsselwort.`
+        value: `#define **${targetToken.value}** "${targetToken.define}"`
+      }
+    };
+  }
+  else if ( targetToken.definition ) {
+    return {
+      contents: {
+        kind: 'markdown',
+        value: `Token: ${targetToken.type}: **${targetToken.value}** at offset **${targetToken.offset}** defined at ${targetToken.definition.nameToken.offset}`
+      }
+    };
+  }
+  else {
+    return {
+      contents: {
+        kind: 'markdown',
+        value: `Token: ${targetToken.type}: **${targetToken.value}** at offset **${targetToken.offset}**`
+      }
+    };
+  }
+  // Test----
+
+  // Keine Hoverinfos in Kommentaren, Strings, Bitstrings, Zahlen
+  if (targetToken.type === 'comment' || targetToken.type === 'inactive' || targetToken.type === 'string' || targetToken.type === 'bitstring' || targetToken.type === 'number') {
+    return null;
+  }
+
+  if (targetToken.type === 'keyword' && PEARL_KEYWORDS.includes(targetToken.value)) {
+    return {
+      contents: {
+        kind: 'markdown',
+        value: `**${targetToken.value}** ist ein PEARL-Schlüsselwort.`
+      }
+    };
+  }
+
+  if (targetToken.type === 'identifier') {
+    return {
+      contents: {
+        kind: 'markdown',
+        value: `**${targetToken.value}** ist ein Identifier.`
       }
     };
   }
@@ -253,553 +1845,41 @@ connection.onHover((params) => {
   return null;
 });
 
-// --- Diagnostics mit Scope-Stack ---
-
-function validateTextDocument(textDocument) {
-  const text  = textDocument.getText();
-  const lines = text.split(/\r?\n/);
-
-  /** @type {import('vscode-languageserver').Diagnostic[]} */
-  const diagnostics = [];
-
-  const blockStack = [];
-  const scopeStack = [createEmptyScope()]; // 0 = global
-
-  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-    const raw = lines[lineIndex];
-
-    const commentPos = raw.indexOf('!');
-    const codePart   = commentPos === -1 ? raw : raw.slice(0, commentPos);
-    const trimmed    = codePart.trim();
-    if (trimmed === '') continue;
-
-    // --- Blockende (Scope-Pop) ---
-
-    const hasEND    = /\bEND\b/.test(codePart);
-    const hasFIN    = /\bFIN\b/.test(codePart);
-    const hasMODEND = /\bMODEND\b/.test(codePart);
-
-    if (hasEND) {
-      const col = codePart.indexOf('END');
-      if (
-        blockStack.length === 0 ||
-        !END_FOR_STRUCTURE.includes(blockStack[blockStack.length - 1].keyword)
-      ) {
-        diagnostics.push({
-          severity: DiagnosticSeverity.Error,
-          message: 'Unerwartetes END ohne passenden Block (TASK/PROC/REPEAT/BEGIN).',
-          range: {
-            start: { line: lineIndex, character: col === -1 ? 0 : col },
-            end:   { line: lineIndex, character: col === -1 ? 3 : col + 3 }
-          },
-          source: 'pearl-lsp'
-        });
-      } else {
-        blockStack.pop();
-        if (scopeStack.length > 1) scopeStack.pop();
-      }
-    }
-
-    if (hasFIN) {
-      const col = codePart.indexOf('FIN');
-      if (
-        blockStack.length === 0 ||
-        !FIN_FOR_STRUCTURE.includes(blockStack[blockStack.length - 1].keyword)
-      ) {
-        diagnostics.push({
-          severity: DiagnosticSeverity.Error,
-          message: 'Unerwartetes FIN ohne passenden Block (IF/CASE).',
-          range: {
-            start: { line: lineIndex, character: col === -1 ? 0 : col },
-            end:   { line: lineIndex, character: col === -1 ? 3 : col + 3 }
-          },
-          source: 'pearl-lsp'
-        });
-      } else {
-        blockStack.pop();
-        if (scopeStack.length > 1) scopeStack.pop();
-      }
-    }
-
-    if (hasMODEND) {
-      const col = codePart.indexOf('MODEND');
-      if (
-        blockStack.length === 0 ||
-        !MODEND_FOR_STRUCTURE.includes(blockStack[blockStack.length - 1].keyword)
-      ) {
-        diagnostics.push({
-          severity: DiagnosticSeverity.Error,
-          message: 'Unerwartetes MODEND ohne passenden Block (MODULE/SHELLMODULE).',
-          range: {
-            start: { line: lineIndex, character: col === -1 ? 0 : col },
-            end:   { line: lineIndex, character: col === -1 ? 6 : col + 'MODEND'.length }
-          },
-          source: 'pearl-lsp'
-        });
-      } else {
-        blockStack.pop();
-        if (scopeStack.length > 1) scopeStack.pop();
-      }
-    }
-
-    // --- Blockstart (inkl. Label-Form PROC/TASK) ---
-
-    const labelProcTask = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(PROC|TASK)\b/.exec(
-      codePart
-    );
-    if (labelProcTask) {
-      const kind = labelProcTask[2]; // PROC oder TASK
-      blockStack.push({ keyword: kind, line: lineIndex });
-      scopeStack.push(createEmptyScope());
-    } else {
-      for (const kw of BLOCK_START_KEYWORDS) {
-        const pattern = new RegExp('^\\s*' + kw + '\\b');
-        if (pattern.test(codePart)) {
-          blockStack.push({ keyword: kw, line: lineIndex });
-          scopeStack.push(createEmptyScope());
-          break;
-        }
-      }
-    }
-
-    const currentScope = scopeStack[scopeStack.length - 1];
-    const globalScope  = scopeStack[0];
-
-    const idPos = computeIdentifierPositions(raw);
-
-    // --- PROC-Parameter im Scope (Label-Form PROC(...)) ---
-
-    const procParams = parseProcParamsFromLine(codePart);
-    for (const name of procParams) {
-      const col = idPos[name] ?? raw.indexOf(name);
-      currentScope.vars[name] = { kind: 'VAR', line: lineIndex, character: col };
-    }
-
-    // --- Deklarationen: MODULE/SHELLMODULE/TASK/PROC Name (ohne Label) ---
-
-    const declMatch = /^\s*(MODULE|SHELLMODULE|TASK|PROC)\s+([A-Za-z_][A-Za-z0-9_]*)/.exec(
-      codePart
-    );
-    if (declMatch) {
-      const kind = declMatch[1];
-      const name = declMatch[2];
-      const col  = idPos[name] ?? raw.indexOf(name);
-
-      if (kind === 'PROC') {
-        globalScope.procs[name] = { kind: 'PROC', line: lineIndex, character: col };
-      } else if (kind === 'TASK') {
-        globalScope.tasks[name] = { kind: 'TASK', line: lineIndex, character: col };
-      }
-    }
-
-    // --- Deklarationen: Label-Form "name: PROC/TASK ..." ---
-
-    if (labelProcTask) {
-      const name = labelProcTask[1];
-      const kind = labelProcTask[2];
-      const col  = idPos[name] ?? raw.indexOf(name);
-
-      if (kind === 'PROC') {
-        globalScope.procs[name] = { kind: 'PROC', line: lineIndex, character: col };
-      } else if (kind === 'TASK') {
-        globalScope.tasks[name] = { kind: 'TASK', line: lineIndex, character: col };
-      }
-    }
-
-    // --- DCL: lokale Deklarationen im aktuellen Scope ---
-
-    if (/^\s*DCL\b/.test(codePart)) {
-      const parsed = parseDclLine(codePart);
-
-      for (const name of parsed.semas) {
-        const col = idPos[name] ?? raw.indexOf(name);
-        currentScope.semas[name] = { kind: 'SEMA', line: lineIndex, character: col };
-      }
-      for (const name of parsed.bolts) {
-        const col = idPos[name] ?? raw.indexOf(name);
-        currentScope.bolts[name] = { kind: 'BOLT', line: lineIndex, character: col };
-      }
-      for (const name of parsed.procVars) {
-        const col = idPos[name] ?? raw.indexOf(name);
-        currentScope.procs[name] = { kind: 'PROC', line: lineIndex, character: col };
-      }
-      for (const name of parsed.vars) {
-        const col = idPos[name] ?? raw.indexOf(name);
-        currentScope.vars[name] = { kind: 'VAR', line: lineIndex, character: col };
-      }
-    }
-
-    // --- SPC/SPECIFY: globale Spezifikationen ---
-
-    if (/^\s*(SPC|SPECIFY)\b/.test(codePart)) {
-      const parsedSpc = parseSpcLine(codePart);
-
-      for (const name of parsedSpc.tasks) {
-        const col = idPos[name] ?? raw.indexOf(name);
-        globalScope.tasks[name] = { kind: 'TASK', line: lineIndex, character: col };
-      }
-      for (const name of parsedSpc.procs) {
-        const col = idPos[name] ?? raw.indexOf(name);
-        globalScope.procs[name] = { kind: 'PROC', line: lineIndex, character: col };
-      }
-      for (const name of parsedSpc.semas) {
-        const col = idPos[name] ?? raw.indexOf(name);
-        globalScope.semas[name] = { kind: 'SEMA', line: lineIndex, character: col };
-      }
-      for (const name of parsedSpc.bolts) {
-        const col = idPos[name] ?? raw.indexOf(name);
-        globalScope.bolts[name] = { kind: 'BOLT', line: lineIndex, character: col };
-      }
-    }
-
-    // --- Aufruf-Diagnostics mit Scope-Lookup ---
-
-    // CALL PROC
-    const callRegex = /\bCALL\s+([A-Za-z_][A-Za-z0-9_]*)\b/g;
-    let m;
-    while ((m = callRegex.exec(codePart)) !== null) {
-      const name = m[1];
-      const sym  = lookupSymbol(scopeStack, 'procs', name);
-      if (!sym) {
-        const callStart = m.index;
-        const callEnd   = callStart + m[0].length;
-        diagnostics.push({
-          severity: DiagnosticSeverity.Warning,
-          message: `Aufruf von '${name}' ohne passende PROC-Deklaration (PROC/DCL PROC/SPC PROC/ENTRY).`,
-          range: {
-            start: { line: lineIndex, character: callStart },
-            end:   { line: lineIndex, character: callEnd }
-          },
-          source: 'pearl-lsp'
-        });
-      }
-    }
-
-    // TASK-Operationen
-    for (const kw of TASK_CTRL_KEYWORDS) {
-      const re = new RegExp('\\b' + kw + '\\s+([A-Za-z_][A-Za-z0-9_]*)', 'g');
-      let m2;
-      while ((m2 = re.exec(codePart)) !== null) {
-        const taskName = m2[1];
-        const sym      = lookupSymbol(scopeStack, 'tasks', taskName);
-        if (!sym) {
-          const start = m2.index;
-          const end   = start + m2[0].length;
-          diagnostics.push({
-            severity: DiagnosticSeverity.Warning,
-            message: `TASK '${taskName}' wird mit ${kw} verwendet, es existiert aber keine TASK-Deklaration (TASK/SPC TASK).`,
-            range: {
-              start: { line: lineIndex, character: start },
-              end:   { line: lineIndex, character: end }
-            },
-            source: 'pearl-lsp'
-          });
-        }
-      }
-    }
-
-    // SEMA-Operationen
-    for (const kw of SEMA_OP_KEYWORDS) {
-      const re = new RegExp('\\b' + kw + '\\s+([A-Za-z_][A-Za-z0-9_]*)', 'g');
-      let m2;
-      while ((m2 = re.exec(codePart)) !== null) {
-        const semaName = m2[1];
-        const sym      = lookupSymbol(scopeStack, 'semas', semaName);
-        if (!sym) {
-          const start = m2.index;
-          const end   = start + m2[0].length;
-          diagnostics.push({
-            severity: DiagnosticSeverity.Warning,
-            message: `SEMA '${semaName}' wird mit ${kw} verwendet, es existiert aber keine SEMA-Deklaration (DCL/SPC SEMA).`,
-            range: {
-              start: { line: lineIndex, character: start },
-              end:   { line: lineIndex, character: end }
-            },
-            source: 'pearl-lsp'
-          });
-        }
-      }
-    }
-
-    // BOLT-Operationen
-    for (const kw of BOLT_OP_KEYWORDS) {
-      const re = new RegExp('\\b' + kw + '\\s+([A-Za-z_][A-Za-z0-9_]*)', 'g');
-      let m2;
-      while ((m2 = re.exec(codePart)) !== null) {
-        const boltName = m2[1];
-        const sym      = lookupSymbol(scopeStack, 'bolts', boltName);
-        if (!sym) {
-          const start = m2.index;
-          const end   = start + m2[0].length;
-          diagnostics.push({
-            severity: DiagnosticSeverity.Warning,
-            message: `BOLT '${boltName}' wird mit ${kw} verwendet, es existiert aber keine BOLT-Deklaration (DCL/SPC BOLT).`,
-            range: {
-              start: { line: lineIndex, character: start },
-              end:   { line: lineIndex, character: end }
-            },
-            source: 'pearl-lsp'
-          });
-        }
-      }
-    }
-  }
-
-  // am Ende noch offene Blöcke melden
-  for (const open of blockStack) {
-    const lineTextRaw = lines[open.line];
-    const col = lineTextRaw.indexOf(open.keyword);
-    const endKw = BLOCK_END_MAP[open.keyword] || 'END';
-
-    diagnostics.push({
-      severity: DiagnosticSeverity.Warning,
-      message: `Block '${open.keyword}' wird nicht geschlossen. Erwartet ${endKw}.`,
-      range: {
-        start: {
-          line: open.line,
-          character: col === -1 ? 0 : col
-        },
-        end: {
-          line: open.line,
-          character:
-            col === -1 ? lineTextRaw.length : col + open.keyword.length
-        }
-      },
-      source: 'pearl-lsp'
-    });
-  }
-
-  connection.sendDiagnostics({ uri: textDocument.uri, diagnostics });
-}
-
-// --- Go To Definition (mit Scope-Stack + Labels + PROC-Parametern + Literal-Check) ---
+// ------------------------------
+// Go To Definition
+// ------------------------------
 
 connection.onDefinition((params) => {
+
   const doc = documents.get(params.textDocument.uri);
   if (!doc) return null;
 
-  const text  = doc.getText();
-  const lines = text.split(/\r?\n/);
+  const analysis = documentTokenCache.get( params.textDocument.uri );    // Aus dem Cache holen
+  if ( !analysis ) return null;
 
-  const offset = doc.offsetAt(params.position);
-  let start = offset;
-  while (start > 0 && /\w/.test(text[start - 1])) start--;
-  let end = offset;
-  while (end < text.length && /\w/.test(text[end])) end++;
-  const word = text.substring(start, end);
-  if (!word) return null;
+  const fullTokens = analysis.tokens;
+  if ( !fullTokens ) return null;
 
-  const targetLine = params.position.line;
-  const targetChar = params.position.character;
+  const pos = params.position;
+  const targetToken = findTokenAt(fullTokens, params.textDocument.uri, pos.line, pos.character);
+  if (!targetToken) return null;
 
-  const lineText = lines[targetLine] || '';
-
-  // 1) In String-/Bit-Literal? → kein GoTo
-  if (isInsideStringOrBitLiteral(lineText, targetChar)) {
+  // Kein GoTo in Kommentaren, Strings, Bitstrings, Zahlen, keyword
+  if ( targetToken.type !== 'identifier' ) {
     return null;
   }
 
-  // 2) Numerisches Literal? → kein GoTo
-  if (/^\d/.test(word)) {
-    return null;
-  }
+  const targetName = targetToken.value;
+  const targetOffset = targetToken.offset;
+  const definition = targetToken.definition;
 
-  // 3) Keyword? → kein GoTo (nur Hover)
-  if (PEARL_KEYWORDS.includes(word)) {
-    return null;
-  }
-
-  const blockStack = [];
-  const scopeStack = [createEmptyScope()];
-
-  for (let lineIndex = 0; lineIndex <= targetLine; lineIndex++) {
-    const raw = lines[lineIndex];
-
-    const commentPos = raw.indexOf('!');
-    const codePart   = commentPos === -1 ? raw : raw.slice(0, commentPos);
-    const trimmed    = codePart.trim();
-    if (trimmed === '') continue;
-
-    const idPos = computeIdentifierPositions(raw);
-
-    const hasEND    = /\bEND\b/.test(codePart);
-    const hasFIN    = /\bFIN\b/.test(codePart);
-    const hasMODEND = /\bMODEND\b/.test(codePart);
-
-    if (hasEND && lineIndex < targetLine) {
-      if (
-        blockStack.length &&
-        END_FOR_STRUCTURE.includes(blockStack[blockStack.length - 1].keyword)
-      ) {
-        blockStack.pop();
-        if (scopeStack.length > 1) scopeStack.pop();
-      }
-    }
-    if (hasFIN && lineIndex < targetLine) {
-      if (
-        blockStack.length &&
-        FIN_FOR_STRUCTURE.includes(blockStack[blockStack.length - 1].keyword)
-      ) {
-        blockStack.pop();
-        if (scopeStack.length > 1) scopeStack.pop();
-      }
-    }
-    if (hasMODEND && lineIndex < targetLine) {
-      if (
-        blockStack.length &&
-        MODEND_FOR_STRUCTURE.includes(blockStack[blockStack.length - 1].keyword)
-      ) {
-        blockStack.pop();
-        if (scopeStack.length > 1) scopeStack.pop();
-      }
-    }
-
-    // Blockstart
-    const labelProcTask = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(PROC|TASK)\b/.exec(
-      codePart
-    );
-    if (labelProcTask) {
-      blockStack.push({ keyword: labelProcTask[2], line: lineIndex });
-      scopeStack.push(createEmptyScope());
-    } else {
-      for (const kw of BLOCK_START_KEYWORDS) {
-        const pattern = new RegExp('^\\s*' + kw + '\\b');
-        if (pattern.test(codePart)) {
-          blockStack.push({ keyword: kw, line: lineIndex });
-          scopeStack.push(createEmptyScope());
-          break;
-        }
-      }
-    }
-
-    const currentScope = scopeStack[scopeStack.length - 1];
-    const globalScope  = scopeStack[0];
-
-    const beforeCursor = (col) =>
-      lineIndex < targetLine || (lineIndex === targetLine && col <= targetChar);
-
-    // PROC-Parameter
-    const procParams = parseProcParamsFromLine(codePart);
-    for (const name of procParams) {
-      const col = idPos[name] ?? raw.indexOf(name);
-      if (beforeCursor(col)) {
-        currentScope.vars[name] = { kind: 'VAR', line: lineIndex, character: col };
-      }
-    }
-
-    // Deklaration: klassische FORM
-    const declMatch = /^\s*(MODULE|SHELLMODULE|TASK|PROC)\s+([A-Za-z_][A-Za-z0-9_]*)/.exec(
-      codePart
-    );
-    if (declMatch) {
-      const kind = declMatch[1];
-      const name = declMatch[2];
-      const col  = idPos[name] ?? raw.indexOf(name);
-      if (beforeCursor(col)) {
-        if (kind === 'PROC') {
-          globalScope.procs[name] = { kind: 'PROC', line: lineIndex, character: col };
-        } else if (kind === 'TASK') {
-          globalScope.tasks[name] = { kind: 'TASK', line: lineIndex, character: col };
-        }
-      }
-    }
-
-    // Deklaration: Label-Form "name: PROC/TASK"
-    if (labelProcTask) {
-      const name = labelProcTask[1];
-      const kind = labelProcTask[2];
-      const col  = idPos[name] ?? raw.indexOf(name);
-      if (beforeCursor(col)) {
-        if (kind === 'PROC') {
-          globalScope.procs[name] = { kind: 'PROC', line: lineIndex, character: col };
-        } else if (kind === 'TASK') {
-          globalScope.tasks[name] = { kind: 'TASK', line: lineIndex, character: col };
-        }
-      }
-    }
-
-    // DCL
-    if (/^\s*DCL\b/.test(codePart)) {
-      const parsed = parseDclLine(codePart);
-      for (const name of parsed.semas) {
-        const col = idPos[name] ?? raw.indexOf(name);
-        if (beforeCursor(col)) {
-          currentScope.semas[name] = { kind: 'SEMA', line: lineIndex, character: col };
-        }
-      }
-      for (const name of parsed.bolts) {
-        const col = idPos[name] ?? raw.indexOf(name);
-        if (beforeCursor(col)) {
-          currentScope.bolts[name] = { kind: 'BOLT', line: lineIndex, character: col };
-        }
-      }
-      for (const name of parsed.procVars) {
-        const col = idPos[name] ?? raw.indexOf(name);
-        if (beforeCursor(col)) {
-          currentScope.procs[name] = { kind: 'PROC', line: lineIndex, character: col };
-        }
-      }
-      for (const name of parsed.vars) {
-        const col = idPos[name] ?? raw.indexOf(name);
-        if (beforeCursor(col)) {
-          currentScope.vars[name] = { kind: 'VAR', line: lineIndex, character: col };
-        }
-      }
-    }
-
-    // SPC / SPECIFY
-    if (/^\s*(SPC|SPECIFY)\b/.test(codePart)) {
-      const parsedSpc = parseSpcLine(codePart);
-      for (const name of parsedSpc.tasks) {
-        const col = idPos[name] ?? raw.indexOf(name);
-        if (beforeCursor(col)) {
-          globalScope.tasks[name] = { kind: 'TASK', line: lineIndex, character: col };
-        }
-      }
-      for (const name of parsedSpc.procs) {
-        const col = idPos[name] ?? raw.indexOf(name);
-        if (beforeCursor(col)) {
-          globalScope.procs[name] = { kind: 'PROC', line: lineIndex, character: col };
-        }
-      }
-      for (const name of parsedSpc.semas) {
-        const col = idPos[name] ?? raw.indexOf(name);
-        if (beforeCursor(col)) {
-          globalScope.semas[name] = { kind: 'SEMA', line: lineIndex, character: col };
-        }
-      }
-      for (const name of parsedSpc.bolts) {
-        const col = idPos[name] ?? raw.indexOf(name);
-        if (beforeCursor(col)) {
-          globalScope.bolts[name] = { kind: 'BOLT', line: lineIndex, character: col };
-        }
-      }
-    }
-  }
-
-  // Reihenfolge: zuerst Variablen (inkl. PROC-Parameter), dann PROCs, dann TASK/SEMA/BOLT
-  const kinds = ['vars', 'procs', 'tasks', 'semas', 'bolts'];
-  for (const kind of kinds) {
-    const sym = lookupSymbol(scopeStack, kind, word);
-    if (sym) {
-      return {
-        uri: doc.uri,
-        range: {
-          start: { line: sym.line, character: sym.character },
-          end:   { line: sym.line, character: sym.character + word.length }
-        }
-      };
-    }
-  }
-
-  // Fallback: Label-Definition suchen (MyLabel:)
-  const labelDef = findLabelDefinition(lines, word);
-  if (labelDef) {
+  if (definition) {
+    const nameToken = definition.nameToken;
     return {
-      uri: doc.uri,
+      uri: nameToken.uri,
       range: {
-        start: { line: labelDef.line, character: labelDef.character },
-        end:   { line: labelDef.line, character: labelDef.character + word.length }
+        start: { line: nameToken.line, character: nameToken.column },
+        end: { line: nameToken.line, character: nameToken.column + nameToken.length }
       }
     };
   }
@@ -807,119 +1887,379 @@ connection.onDefinition((params) => {
   return null;
 });
 
-// --- DCL-Parser ---
+// ------------------------------
+// Folding
+// ------------------------------
 
-function parseDclLine(line) {
-  const result = {
-    semas: [],
-    bolts: [],
-    procVars: [],
-    vars: []
+connection.onFoldingRanges((params) => {
+  const uri = params.textDocument.uri;
+  const doc = documents.get(uri);
+  if (!doc) {
+    return [];
+  }
+  
+  const analysis = documentTokenCache.get( uri );    // Aus dem Cache holen
+  if ( !analysis ) return null;
+
+  const foldingRanges = analysis.foldingRanges;
+  if ( !foldingRanges ) return null;
+
+  // Nur Tokens aus *diesem* Dokument berücksichtigen
+  const localRanges = foldingRanges.filter(t => t.startToken.uri === uri && t.endToken.uri === uri);
+
+  const ranges = [];
+  for (const r of localRanges) {
+    ranges.push({
+      startLine: r.startToken.line,
+      startCharacter: r.startToken.column,
+      endLine: r.endToken.line,
+      endCharacter: r.endToken.column,
+      kind: r.kind,
+      collapsedText: r.collapsedText || null
+    });
   };
 
-  const dclMatch = /^\s*DCL\b(.*)/.exec(line);
-  if (!dclMatch) return result;
-  const rest = dclMatch[1];
+  return ranges;
+});
 
-  const ignoreIds = new Set([
-    'REF', 'INV', 'INIT', 'PRESET',
-    'GLOBAL', 'RESIDENT', 'REENTRANT', 'MAIN',
-    'MUTEX',
-    'TASK', 'PROC', 'MODULE', 'SHELLMODULE', 'ENTRY',
-    'PRIO', 'PRIORITY',
-    'SEMA', 'BOLT',
-    'FIXED', 'FLOAT', 'BIT', 'CHAR', 'CHARACTER', 'CLOCK', 'DURATION',
-    'TYPE', 'DATION', 'SIGNAL', 'INTERRUPT', 'IRPT'
-  ]);
+// ------------------------------
+// Semantische Tokens
+// ------------------------------
 
-  function collectBeforeKeyword(keyword, targetArray, extraIgnore) {
-    const parts = rest.split(new RegExp('\\b' + keyword + '\\b'));
-    if (parts.length < 2) return;
-    const namesPart = parts[0];
-    const ids = namesPart.match(/[A-Za-z_][A-Za-z0-9_]*/g) || [];
+function sanitizeSemanticTokensData(data) {
+/*
+  if (!data instanceof Uint32Array) {
+    connection.console.log('[SemanticSanitizer] data is not an Uint32Array.');
+    return [];
+  }
+*/
 
-    for (const id of ids) {
-      if (ignoreIds.has(id)) continue;
-      if (extraIgnore && extraIgnore.has(id)) continue;
-      if (!targetArray.includes(id)) {
-        targetArray.push(id);
-      }
-    }
+  if (data.length === 0) {
+    connection.console.log('[SemanticSanitizer] data is empty.');
+    return [];
   }
 
-  collectBeforeKeyword('SEMA', result.semas, null);
-
-  const extraIgnoreBolt = new Set(['MUTEX']);
-  collectBeforeKeyword('BOLT', result.bolts, extraIgnoreBolt);
-
-  collectBeforeKeyword('PROC', result.procVars, null);
-
-  const allIds = rest.match(/[A-Za-z_][A-Za-z0-9_]*/g) || [];
-  for (const id of allIds) {
-    if (ignoreIds.has(id)) continue;
-    if (result.semas.includes(id)) continue;
-    if (result.bolts.includes(id)) continue;
-    if (result.procVars.includes(id)) continue;
-    if (!result.vars.includes(id)) {
-      result.vars.push(id);
-    }
+  // 1) Länge korrigieren (Vielfaches von 5)
+  if (data.length % 5 !== 0) {
+    connection.console.log(
+      `[SemanticSanitizer] data length ${data.length} is not multiple of 5 -> trimming.`
+    );
+    data = data.slice(0, Math.floor(data.length / 5) * 5);
   }
 
-  return result;
+
+  // Legend-Objekt wie vom LSP erwartet:
+  const tokenTypesLen = semanticTokenTypes.length;
+  const tokenModsLen = semanticTokenModifiers.length;
+  const maxModifierMask = tokenModsLen > 0 ? (1 << tokenModsLen) - 1 : 0;
+
+  const absTokens = [];
+
+  // 2) Deltas in absolute Positionen umwandeln
+  let line = 0;
+  let char = 0;
+
+  for (let i = 0; i < data.length; i += 5) {
+    let deltaLine = data[i];
+    let deltaChar = data[i + 1];
+    let length = data[i + 2];
+    let tokenType = data[i + 3];
+    let tokenMods = data[i + 4];
+
+    // --- Fehlerstelle: Ungültige Werte ------------------------
+    if (
+      !Number.isInteger(deltaLine) || deltaLine < 0 ||
+      !Number.isInteger(deltaChar) || deltaChar < 0 ||
+      !Number.isInteger(length) || length <= 0 ||
+      !Number.isInteger(tokenType) || tokenType < 0 ||
+      !Number.isInteger(tokenMods) || tokenMods < 0
+    ) {
+      connection.console.log(
+        `[SemanticSanitizer] INVALID raw token at index ${i}: ` +
+        `dL=${deltaLine}, dC=${deltaChar}, len=${length}, type=${tokenType}, mods=${tokenMods}`
+      );
+      continue;
+    }
+
+    line += deltaLine;
+    char = deltaLine > 0 ? deltaChar : char + deltaChar;
+
+    // --- Fehlerstelle: Token-Type außerhalb der Legend -------
+    if (tokenType >= tokenTypesLen) {
+      connection.console.log(
+        `[SemanticSanitizer] tokenType index ${tokenType} out of range (max=${tokenTypesLen - 1}) at line=${line}, char=${char}`
+      );
+      continue;
+    }
+
+    // --- Fehlerstelle: Modifier-Bits zu groß ------------------
+    if ((tokenMods & ~maxModifierMask) !== 0) {
+      connection.console.log(
+        `[SemanticSanitizer] modifier bits ${tokenMods} exceed legend capacity, masking to ${tokenMods & maxModifierMask}`
+      );
+      tokenMods &= maxModifierMask;
+    }
+
+    absTokens.push({ line, char, length, tokenType, tokenMods });
+  }
+
+  if (absTokens.length === 0) {
+    connection.console.log('[SemanticSanitizer] no valid absolute tokens found.');
+    return [];
+  }
+
+  // 3) Sortieren
+  absTokens.sort((a, b) =>
+    a.line === b.line ? a.char - b.char : a.line - b.line
+  );
+
+  // 4) Überlappungen entfernen
+  const cleaned = [];
+  let lastLine = -1;
+  let lastEndChar = 0;
+
+  for (const t of absTokens) {
+    const endChar = t.char + t.length;
+
+    // --- Fehlerstelle: Token überlappt mit vorherigem --------
+    if (
+      t.line < lastLine ||
+      (t.line === lastLine && t.char < lastEndChar)
+    ) {
+      connection.console.log(
+        `[SemanticSanitizer] OVERLAP detected: token at line=${t.line}, char=${t.char}, ` +
+        `len=${t.length} overlaps with previous ending at line=${lastLine}, char=${lastEndChar}`
+      );
+      continue;
+    }
+
+    cleaned.push(t);
+    lastLine = t.line;
+    lastEndChar = endChar;
+  }
+
+  if (cleaned.length === 0) {
+    connection.console.log('[SemanticSanitizer] all tokens removed due to overlap or invalidity.');
+    return [];
+  }
+
+  // 5) Zurück in Delta-Form
+  const out = [];
+  let prevLine = 0;
+  let prevChar = 0;
+  let first = true;
+
+  for (const t of cleaned) {
+    let deltaLine;
+    let deltaChar;
+
+    if (first) {
+      deltaLine = t.line;
+      deltaChar = t.char;
+      first = false;
+    } else {
+      deltaLine = t.line - prevLine;
+      deltaChar = deltaLine > 0 ? t.char : t.char - prevChar;
+    }
+
+    if (deltaLine < 0 || deltaChar < 0) {
+      connection.console.log(
+        `[SemanticSanitizer] INTERNAL ERROR: negative delta after sorting! ` +
+        `line=${t.line}, char=${t.char}, prevLine=${prevLine}, prevChar=${prevChar}`
+      );
+      continue; // niemals senden
+    }
+
+    out.push(deltaLine, deltaChar, t.length, t.tokenType, t.tokenMods);
+
+    prevLine = t.line;
+    prevChar = t.char;
+  }
+
+  connection.console.log(
+    `[SemanticSanitizer] Completed: in=${data.length/5} tokens, out=${out.length/5} tokens.`
+  );
+
+  return out;
 }
 
-// --- SPC/SPECIFY-Parser ---
-
-function parseSpcLine(line) {
-  const result = {
-    tasks: [],
-    procs: [],   // PROC + ENTRY
-    semas: [],
-    bolts: []
-  };
-
-  const m = /^\s*(SPC|SPECIFY)\b(.*)/.exec(line);
-  if (!m) return result;
-  const rest = m[2];
-
-  const ignoreIds = new Set([
-    'TASK', 'PROC', 'ENTRY', 'SEMA', 'BOLT',
-    'PRIO', 'PRIORITY',
-    'GLOBAL', 'RESIDENT', 'REENTRANT', 'MAIN',
-    'REF', 'INV', 'INIT', 'PRESET'
-  ]);
-
-  function collect(typeKeyword, targetArray) {
-    const parts = rest.split(new RegExp('\\b' + typeKeyword + '\\b'));
-    if (parts.length < 2) return;
-    const namesPart = parts[0];
-    const ids = namesPart.match(/[A-Za-z_][A-Za-z0-9_]*/g) || [];
-    for (const id of ids) {
-      if (ignoreIds.has(id)) continue;
-      if (!targetArray.includes(id)) {
-        targetArray.push(id);
-      }
-    }
+connection.languages.semanticTokens.on((params) => {
+try {  
+  const uri = params.textDocument.uri
+  const doc = documents.get(uri);
+  if (!doc) {
+    return { data: [] };
   }
 
-  collect('TASK',  result.tasks);
-  collect('PROC',  result.procs);   // PROC → procs
-  collect('ENTRY', result.procs);   // ENTRY → ebenfalls procs
-  collect('SEMA',  result.semas);
-  collect('BOLT',  result.bolts);
+  const analysis = documentTokenCache.get(uri);    // Aus dem Cache holen
+  if (!analysis) {
+    return { data: [] };
+  }
 
-  return result;
+  const tokens = analysis.tokens;
+  if (!tokens) {
+    return { data: [] };
+  }
+
+  const semanticTokens = [];
+  let prevLine = 0;
+  let prevChar = 0;
+
+  function encodeToken(line, char, length, typeName, modifiers) {
+    const lineDelta = line - prevLine;
+    const charDelta = lineDelta === 0 ? char - prevChar : char;
+    prevLine = line;
+    prevChar = char;
+
+    const typeIndex = semanticTokenTypes.indexOf(typeName);
+    if (typeIndex < 0) {
+      return; // unbekannter Typ -> ignorieren
+    }
+
+    let modifierBits = 0;
+    if (modifiers && modifiers.length) {
+      for (const m of modifiers) {
+        const idx = semanticTokenModifiers.indexOf(m);
+        if (idx >= 0) {
+          modifierBits |= 1 << idx;
+        }
+      }
+    }
+
+connection.console.log( `Semantic Token: ${[line, char, length, typeName, modifiers]} -> ${[lineDelta, charDelta, length, typeIndex, modifierBits]}`);
+    semanticTokens.push(lineDelta, charDelta, length, typeIndex, modifierBits);
+  }  
+
+  const sortedTokens = tokens.filter(t => t.uri === uri && (t.type !== 'comment' && t.type !== 'inactive')).sort((a, b) =>
+    a.line === b.line
+      ? a.column - b.column
+      : a.line - b.line
+  );
+
+  for (const t of sortedTokens) {
+connection.console.log( `${t.type} ~${t.value}~ ${t.line} ${t.column} ${t.uri}`);
+
+      /**
+       * Tokenstruktur:
+       * {
+       *   type: 'keyword' | 'identifier' | 'number' | 'string' | 'bitstring' | 'operator' |
+       *         'symbol' | 'comment' | 'inactive' | 'error' | 'preproc',
+       *   value: string,
+       *   uri: string,
+       *   line: number,
+       *   column: number,
+       *   offset: number,
+       *   length: number
+       *   definition: identifier (optional)
+       * }
+       */
+
+
+    if (t.type === 'identifier') {
+      let typeName = 'variable';
+      let mods = [];
+
+/*      
+      const sym = lookupSymbol(scopeStack, t.value);
+      if (!sym) {
+        continue;
+      }
+
+      switch( sym.typeDescription.typename ) {
+        case 'PROC':
+        case 'PROCEDURE':
+        case 'ENTRY':
+          typeName = 'function';
+          mods.push('declaration');
+          break;
+
+        case 'TASK':
+          typeName = 'class';
+          mods.push('declaration');
+          break;
+
+        case 'SEMA':
+        case 'BOLT':
+          typeName = 'property';
+          mods.push('declaration');
+          break;
+
+        default:
+          typeName = 'variable';
+          break;
+      }
+*/
+      encodeToken(t.line, t.column, t.length, typeName, mods);
+      continue;
+    }
+
+    if (t.type === 'type') {
+      encodeToken(t.line, t.column, t.length, 'type', []);
+      continue;
+    }
+
+    if (t.type === 'operator') {
+      encodeToken(t.line, t.column, t.length, 'operator', []);
+      continue;
+    }
+
+    if (t.type === 'number') {
+      encodeToken(t.line, t.column, t.length, 'number', []);
+      continue;
+    }
+   
+    if (t.type === 'string') {
+      encodeToken(t.line, t.column, t.length, 'string', []);
+      continue;
+    }
+
+    if (t.type === 'bitstring') {
+      encodeToken(t.line, t.column, t.length, 'string', []);
+      continue;
+    }
+  }
+  connection.console.log( `semanticTokens: ${semanticTokens}`);
+  return { data: semanticTokens };
+  const safeSemanticTokens = sanitizeSemanticTokensData(semanticTokens);
+  connection.console.log( `safeSemanticTokens: ${safeSemanticTokens}`);
+  return { data: safeSemanticTokens };  
+
+
+
+  const semanticTokenArray = new Uint32Array(semanticTokens);
+  connection.console.log( `semanticTokens: ${semanticTokenArray}`);
+//  return { data: semanticTokenArray };  
+
+//  const safeSemanticTokens = new Uint32Array(sanitizeSemanticTokensData(semanticTokenArray));
+  connection.console.log( `safeSemanticTokens: ${semanticTokenArray}`);
+  return { data: safeSemanticTokens };  
 }
+catch(e) {
+  connection.console.log( `exception: ${e.message}`);
+  connection.console.log( `${e.stack}`);
+  return { data: [] };  
+}
+});
 
-// --- Events ---
+
+// ------------------------------
+// Events & Start
+// ------------------------------
+
+documents.onDidOpen((event) => {
+  connection.console.log( `onDidOpen ${event.document.uri}` );
+  validateTextDocument(event.document);
+});
+
+documents.onDidClose((event) => {
+  connection.console.log( `onDidClose ${event.document.uri}` );
+  documentTokenCache.delete(event.document.uri);  // Dokument aus Cache kegeln
+});
 
 documents.onDidChangeContent((change) => {
   validateTextDocument(change.document);
 });
 
-documents.onDidOpen((openEvent) => {
-  validateTextDocument(openEvent.document);
-});
-
 documents.listen(connection);
 connection.listen();
+

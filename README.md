@@ -3,14 +3,14 @@
 PEARL Language Support ist eine Visual Studio Code Extension, die grundlegende Unterstützung für die Programmiersprache PEARL bietet.
 Die Erweiterung liefert Syntax-Highlighting, Sprachdefinitionen sowie Integration eines Language Servers.
 
-## ✨ Features
+## Features
 
 - Syntax-Highlighting für `.p` / `.P` Dateien
 - Sprachkonfiguration (Keywords, Kommentare etc.)
 - Integration eines Language Servers auf Basis von `vscode-languageserver`
 - Automatische Aktivierung bei PEARL-Dateien
 
-## 📦 Installation
+## Installation
 
 ### Aus VSIX (empfohlen für GPL-Projekte)
 
@@ -25,12 +25,12 @@ git clone https://github.com/JanBartels/pearl-language-support.git
 cd pearl-language-support
 npm install
 
-## 🚀 Verwendung
+## Verwendung
 
 Sobald du eine Datei mit der Endung `.p` oder `.P` öffnest, aktiviert sich die Extension automatisch.
 Der Language Server wird automatisch gestartet und unterstützt grundlegende Sprachfunktionen.
 
-## 🛠 Entwicklung
+## Entwicklung
 
 ### Build
 
@@ -44,7 +44,7 @@ Momentan sind keine Tests vorhanden:
 
 npm test
 
-## 🤝 Beiträge
+## Beiträge
 
 Beiträge sind willkommen!
 
@@ -52,7 +52,7 @@ Indem du einen Beitrag (Pull Request) einreichst, erklärst du dich einverstande
 dass dein Code unter der GPLv3 oder einer späteren Version veröffentlicht wird.
 Weitere Details stehen in der Datei CONTRIBUTING.md.
 
-## 📄 Lizenz
+## Lizenz
 
 Dieses Projekt steht unter der GNU General Public License Version 3 (GPLv3) oder später.
 
@@ -64,24 +64,13 @@ oder online unter:
 
 https://www.gnu.org/licenses/gpl-3.0.html
 
-© 2025 Jan
-
-## 📚 Hinweise
+## Hinweise
 
 - Da die GPLv3 nicht mit den Nutzungsbedingungen des Microsoft Marketplace kompatibel ist,
   wird die Extension nicht über den offiziellen Marketplace veröffentlicht.
 - Für GPL-kompatible Distribution wird die Extension über:
-  - Open VSX Registry oder
+  - Open VSX Registry (geplant) oder
   - manuelle VSIX-Downloads
   bereitgestellt.
 
-
-## Lizenz
-
-Dieses Projekt steht unter der **GNU General Public License Version 3 (GPLv3)**.
-
-Du darfst den Code ausführen, studieren, verändern und weitergeben,
-solange alle Weitergaben ebenfalls unter der GPLv3 stehen.
-
-Den vollständigen Lizenztext findest du in der [COPYING](./COPYING)-Datei
-oder online unter: https://www.gnu.org/licenses/gpl-3.0.html
+© 2025 Jan Bartels

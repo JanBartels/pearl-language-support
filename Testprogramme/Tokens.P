@@ -11,52 +11,7 @@ PROBLEM;
 
 DCL Start FIXED;
 
-#define abc "123"
-#define def "D"
-#define ghi
-#define jkl "IF 1==2 THEN FX = 9; FIN"
-  #include testinc.h
- 
-#define InclDir "'/home/jan/pearl-lsp'"
-#include InclDir/Testprogramme/testinc.h
-
-#define ghi "fehler"
-#undef nohave
-
-#huhu
-
-
-/* 
-Hallo: PROC;
-
-*/
-
-#define mydef
-#define mydef2
-
-#ifndef mydef
-DCL MyDef FIXED;
-#ifndef mydef2
-DCL MyDef_2 FIXED;
-#else
-DCL MyDef_2_2 FIXED;
-#define NotActive
-#endif
-#else
-DCL MyDef2 FIXED;
-#ifndef mydef2
-DCL MyDef_2 FIXED;
-#else
-DCL MyDef_2_2 FIXED;
-#endif
-#endif
-
-#ifdef NotActive
-Hier nicht aktiver
-Abschnitt
-#endif
-
-SPC somethingSPC ENTRY GLOBAL;
+!SPC somethingSPC ENTRY GLOBAL;
 DCL A DURATION;
 DCL (B,B1) REF CLOCK;
 DCL X FLOAT;
