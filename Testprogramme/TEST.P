@@ -15,10 +15,16 @@ DCL Start FIXED;
 #define def "D"
 #define ghi
 #define jkl "IF 1==2 THEN FX = 9; FIN"
-  #include testinc.h
- 
-#define InclDir "'/home/jan/pearl-lsp'"
-#include InclDir/Testprogramme/testinc.h
+!#include testinc.h
+
+DCL bAktiv BIT;
+
+
+#ifndef InclDir
+  #define InclDir "'/home/jan/pearl-lsp'"
+#endif
+
+#include InclDir/testinc.h
 
 #define ghi "fehler"
 #undef nohave
@@ -52,8 +58,8 @@ DCL MyDef_2_2 FIXED;
 #endif
 
 #ifdef NotActive
-Hier nicht aktiver
-Abschnitt
+!Hier nicht aktiver Abschnitt
+SPC InActive BIT;
 #endif
 
 SPC somethingSPC ENTRY GLOBAL;
@@ -88,9 +94,19 @@ IF x = 0 THEN     ! Operator = ist Fehler!
    CALL somethingSPC;
    CALL somethingREF;
    GOTO MyLabel;
+FIN;
+IF x = 0 THEN     ! Operator = ist Fehler!
+   ! Kommentar
+   CALL something( A1, 5,12.3 );
+   CALL somethingSPC;
+   CALL somethingREF;
+   GOTO MyLabel;
    /* noch
    ein
    Kommentar */
+ELSE
+! ELSE wird bei Folding auch unterstützt.
+   CALL somethingSPC;
 FIN;
 myTask = demo;
 WHILE ( 1==2

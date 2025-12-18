@@ -21,6 +21,8 @@ const {
   createConnection,
   TextDocuments,
   ProposedFeatures,
+  InitializeParams,
+  DidChangeConfigurationNotification,
   TextDocumentSyncKind,
   CompletionItemKind,
   DiagnosticSeverity,
@@ -90,7 +92,33 @@ const semanticTokenModifiers = [
   'readonly'
 ];
 
-connection.onInitialize(() => {
+
+// ---- Settings handling ----
+
+let hasConfigurationCapability = false;
+
+// Default settings (fallback if client does not support workspace/configuration)
+const defaultSettings = {
+  maxNumberOfProblems: 100,
+  traceServer: 'off'
+};
+
+let globalSettings = defaultSettings;
+
+// Per-document settings cache: uri -> Promise<settings>
+/** @type {Map<string, Promise<any>>} */
+const documentSettings = new Map();
+
+
+connection.onInitialize((params) => {
+
+  const capabilities = params.capabilities;
+
+  hasConfigurationCapability = !!(
+    capabilities.workspace &&
+    capabilities.workspace.configuration
+  );
+  
   return {
     capabilities: {
       textDocumentSync: TextDocumentSyncKind.Incremental,
@@ -110,6 +138,40 @@ connection.onInitialize(() => {
     }
   };
 });
+
+connection.onInitialized(() => {
+  if (hasConfigurationCapability) {
+    // Register for configuration change notifications
+    connection.client.register(
+      DidChangeConfigurationNotification.type,
+      undefined
+    );
+  }
+});
+
+/**
+ * Get settings for a single document.
+ * @param {string} resource document URI
+ * @returns {Promise<any>}
+ */
+function getDocumentSettings(resource) {
+  if (!hasConfigurationCapability) {
+    // Client does not support workspace/configuration,
+    // use global settings as fallback.
+    return Promise.resolve(globalSettings);
+  }
+
+  let result = documentSettings.get(resource);
+  if (!result) {
+    // Section must match your settings namespace: "pearl"
+    result = connection.workspace.getConfiguration({
+      scopeUri: resource,
+      section: 'pearl'
+    });
+    documentSettings.set(resource, result);
+  }
+  return result;
+}
 
 // ------------------------------
 // Präprozessor-spezifische Daten
@@ -260,6 +322,7 @@ const PEARL_KEYWORDS = [
   'RETURNS',
   'SEC',
   'SEND',
+  'SHELLMODULE',
   'SIGNAL',
   'SPECIFY',
   'SPC',
@@ -383,7 +446,8 @@ const BLOCK_END_MAP = {
 
 const END_KEYWORD_MAP = {
   END: ['TASK', 'PROC', 'REPEAT', 'BEGIN'],
-  FIN: ['IF', 'CASE'],
+  ELSE: ['IF'],
+  FIN: ['IF', 'ELSE', 'CASE'],
   MODEND: ['MODULE', 'SHELLMODULE']
 };
 
@@ -425,7 +489,7 @@ function findTokenAt(tokens, uri, line, character) {
  *  - stopOffset: nur Token bis zu diesem Offset auswerten (für GoTo Definition)
  *  - collectDiagnostics: boolean
  */
-function analyze(uri, text, options) {
+function analyze(uri, text, settings, options) {
   const diagnostics = [];
 
   const stopOffset = options && typeof options.stopOffset === 'number'
@@ -485,8 +549,23 @@ function analyze(uri, text, options) {
   const includeStack = [];
   const defines = new Map();
   const defineStack = [ true ];
+  const preprocStack = [{}];
   let section = 'problem';
   const foldingRanges = [];
+
+
+  // Vordefinierte Makros aus den Einstellungen holen
+  const macros = settings.macros || {};
+
+  for (const [name, value] of Object.entries(macros)) {
+    // no-value macro: #define NAME → -DNAME
+    if (value === "" || value == null) {
+      defines.set(name, { value: null, define: undefined });      
+    } else {
+      // value macro: #define NAME VALUE → -DNAME=VALUE
+      defines.set(name, { value, define: undefined });      
+    }
+  }
 
   /**
    * Tokenstruktur:
@@ -580,10 +659,15 @@ function analyze(uri, text, options) {
   }
 
   function lookupSymbol(scopeStack, name, kind = '') {
+connection.console.log( `lookupSymbol ${name} as ${kind} from ${scopeStack.length-1} to 0` );
     for (let i = scopeStack.length - 1; i >= 0; i--) {
       const table = scopeStack[i];
-      if (table && table[name] && (kind === '' || table[name].typeDescription.typename === kind) ) {
-        return table[name];
+      if (table && table[name]){
+connection.console.log( `lookupSymbol ${JSON.stringify(table[name])}` );
+        if (kind === '' || table[name].typeDescription.typename === kind) {
+          return table[name];
+        }
+        return undefined;
       }
     }
     return undefined;
@@ -591,6 +675,12 @@ function analyze(uri, text, options) {
   
   function tokenize(uri, text, preprocess = true) {
     const tokens = [];
+    const lineOffsets = [];
+    lineOffsets[ 0 ] = {
+      startOfLineOffset: 0,
+      startOfLineLine: 0,
+      startOfLineColumn: 0
+    };
     let offset = 0;
     let line = 0;
     let column = 0;
@@ -628,17 +718,41 @@ function analyze(uri, text, options) {
 
     function advanceChar() {
       const ch = text[offset];
+
+      if (ch === '\n' || ch === '\r') {
+      }
       offset++;
       if (ch === '\n') {
+        // Altes Zeilenende
+        lineOffsets[ line ].endOfLineOffset = offset - 1;
+        lineOffsets[ line ].endOfLineLine = line;
+        lineOffsets[ line ].endOfLineColumn = column;
         line++;
         column = 0;
+        // Neuer Zeilenanfang
+        lineOffsets[ line ] = {
+          startOfLineOffset: offset,
+          startOfLineLine: line,
+          startOfLineColumn: 0
+        };
         isLineStart = true;
       } else if (ch === '\r') {
+        // Altes Zeilenende
+        lineOffsets[ line ].endOfLineOffset = offset - 1;
+        lineOffsets[ line ].endOfLineLine = line;
+        lineOffsets[ line ].endOfLineColumn = column;
+        // CR/LF?
         if (text[offset] === '\n') {
           offset++;
         }
         line++;
         column = 0;
+        // Neuer Zeilenanfang
+        lineOffsets[ line ] = {
+          startOfLineOffset: offset,
+          startOfLineLine: line,
+          startOfLineColumn: 0
+        };
         isLineStart = true;
       } else {
         column++;
@@ -726,7 +840,7 @@ function analyze(uri, text, options) {
           tmpOffset++;
         }
 
-        const ifdefPattern = /^(\s*)((#ifn?def)\s+([A-Za-z][A-Za-z0-9_]*))/.exec(lineBuf);
+        const ifdefPattern = /^(\s*)((#ifn?def)\s+([A-Za-z_][A-Za-z0-9_]*))/.exec(lineBuf);
         if (ifdefPattern) {
           const ifdefStart = ifdefPattern[1];
           const ifdefStmt = ifdefPattern[2];
@@ -734,7 +848,7 @@ function analyze(uri, text, options) {
           const ifdefName = ifdefPattern[4];
 
           const token = addToken('preproc', lineStartOffset + ifdefStart.length, lineStartLine, lineStartColumn + ifdefStart.length, lineStartOffset + ifdefStart.length + ifdefStmt.length);
-          if (!defineStack[defineStack.length - 1])
+          if (defineStack.length > 0 && !defineStack[defineStack.length - 1])
             addDiagnosticHint( 'inaktiv', token, [DiagnosticTag.Unnecessary]);
 
           const value = defines.has(ifdefName);
@@ -744,6 +858,7 @@ function analyze(uri, text, options) {
           }, process );
 
           defineStack.push( stackProcess );
+          preprocStack.push( token );
 
           // Die gesamte #ifdef-Zeile überspringen
           while (offset < len && text[offset] !== '\n' && text[offset] !== '\r') {
@@ -771,8 +886,27 @@ function analyze(uri, text, options) {
           }, elseValue );
           defineStack.push( stackProcess );
 
-          if (!defineStack[defineStack.length - 1])
+          if (defineStack.length > 0 && !defineStack[defineStack.length - 1])
             addDiagnosticHint( 'inaktiv', token, [DiagnosticTag.Unnecessary]);
+
+          if ( preprocStack.length > 0 ) {
+            const ifToken = preprocStack.pop();
+            foldingRanges.push({
+              startToken: ifToken,
+              endToken: {
+                type: 'preproz',
+                value: '',
+                uri,
+                line: line-1,
+                column: lineOffsets[line - 1].endOfLineColumn,
+                offset: lineOffsets[line - 1].endOfLineOffset,
+                length: 0
+              },
+              kind: 'preproz',
+              collapsedText: '...'
+            });
+          }
+          preprocStack.push( token );
 
           // Die gesamte #undef-Zeile überspringen
           while (offset < len && text[offset] !== '\n' && text[offset] !== '\r') {
@@ -794,8 +928,28 @@ function analyze(uri, text, options) {
 
           const token = addToken('preproc', lineStartOffset + endifStart.length, lineStartLine, lineStartColumn + endifStart.length, lineStartOffset + endifStart.length + endifStmt.length);
 
-          defineStack.pop();
-          if (!defineStack[defineStack.length - 1])
+          if ( defineStack.length > 1 )
+            defineStack.pop();
+
+          if ( preprocStack.length > 0 ) {
+            const ifElseToken = preprocStack.pop();
+            foldingRanges.push({
+              startToken: ifElseToken,
+              endToken: {
+                type: 'preproz',
+                value: '',
+                uri,
+                line: line-1,
+                column: lineOffsets[line - 1].endOfLineColumn,
+                offset: lineOffsets[line - 1].endOfLineOffset,
+                length: 0
+              },
+              kind: 'preproz',
+              collapsedText: '...'
+            });
+          }
+
+          if (defineStack.length > 0 && !defineStack[defineStack.length - 1])
             addDiagnosticHint( 'inaktiv', token, [DiagnosticTag.Unnecessary]);
 
           // Die gesamte #undef-Zeile überspringen
@@ -810,7 +964,7 @@ function analyze(uri, text, options) {
           continue;
         }
 
-        if (defineStack[defineStack.length - 1]) {
+        if (defineStack.length == 0 || defineStack[defineStack.length - 1]) {
           const includePattern = /^(\s*)(#include\s+([^\s]+))/.exec(lineBuf);
           if (includePattern) {
             const includeStart = includePattern[1];
@@ -829,7 +983,7 @@ function analyze(uri, text, options) {
             const token = addToken('preproc', lineStartOffset + includeStart.length, lineStartLine, lineStartColumn + includeStart.length, lineStartOffset + includeStart.length + includeStmt.length);
 
             // in #include Makros ersetzen
-            let finalIncludePath = includePath.replace(/([A-Za-z][A-Za-z0-9_]*)/g, (define) => {
+            let finalIncludePath = includePath.replace(/([A-Za-z_][A-Za-z0-9_]*)/g, (define) => {
               if (defines.has(define)) {
                 let value = defines.get(define).value || '';
                 const stringPattern = /^'(.*)'$/.exec(value);
@@ -851,18 +1005,18 @@ function analyze(uri, text, options) {
                 const childUri = uriFromFilePath(absPath);
 
                 // Rekursiv tokenisieren; section-Status durchreichen
-                const incTokens = tokenize(childUri, incText.text, true);
+                const incTokenizeData = tokenize(childUri, incText.text, true);
                 includeStack.pop();
 
                 // In Ergebnis einfügen
-                tokens.push(...incTokens);
+                tokens.push(...incTokenizeData.tokens);
               }
             }
 
             continue;
           }
 
-          const definePattern = /^(\s*)(#define\s+([A-Za-z][A-Za-z0-9_]*)(?:\s+"([^"]+)")?)/.exec(lineBuf);
+          const definePattern = /^(\s*)(#define\s+([A-Za-z_][A-Za-z0-9_]*)(?:\s+"([^"]+)")?)/.exec(lineBuf);
           if (definePattern) {
             const defineStart = definePattern[1];
             const defineStmt = definePattern[2];
@@ -889,7 +1043,7 @@ function analyze(uri, text, options) {
             continue;
           }
           
-          const undefPattern = /^(\s*)(#undef\s+([A-Za-z][A-Za-z0-9_]*))/.exec(lineBuf);
+          const undefPattern = /^(\s*)(#undef\s+([A-Za-z_][A-Za-z0-9_]*))/.exec(lineBuf);
           if (undefPattern) {
             const undefStart = undefPattern[1];
             const undefStmt = undefPattern[2];
@@ -1093,7 +1247,8 @@ function analyze(uri, text, options) {
           addToken('preproc', startOffset, startLine, startColumn, offset);
           tokens[ tokens.length - 1].define = defineValue;
 connection.console.log(`preproc-Token ${tokens[ tokens.length - 1].type} ${tokens[ tokens.length - 1].value} ${tokens[ tokens.length - 1].define}`);
-          let defineTokens = tokenize(uri, defineValue, false);  // Ersetzungstext tokenisieren, aber nicht rekursiv durch den Präprozessor laufen
+          const defineTokenizeData = tokenize(uri, defineValue, false);  // Ersetzungstext tokenisieren, aber nicht rekursiv durch den Präprozessor laufen
+          const defineTokens = defineTokenizeData.tokens;
           // Tokenposition korrigieren
           defineTokens.map( t => { 
             t.line = startLine;
@@ -1255,10 +1410,15 @@ connection.console.log(`preproc-Token ${tokens[ tokens.length - 1].type} ${token
       }
     }
 
-    return tokens;
+    return {
+      tokens,
+      lineOffsets
+    };
   }
 
-  const tokens = tokenize(uri, text);
+  const tokenizeData = tokenize(uri, text);
+  const tokens = tokenizeData.tokens;
+  const lineOffsets = tokenizeData.lineOffsets;
 
   /*
   * Typangabe mit Attributen parsen
@@ -1272,6 +1432,7 @@ connection.console.log(`preproc-Token ${tokens[ tokens.length - 1].type} ${token
     let ref = false;
     let global = false;
     let init = false;
+    let ident = false;
     let typename = null;
     let state = 'start';  // dim | dimensions | inv | ref | type | global | init | initval
 
@@ -1313,7 +1474,9 @@ connection.console.log(`preproc-Token ${tokens[ tokens.length - 1].type} ${token
           state = 'type';
           ref = true;
         }
-        else if (  ( tt.value === 'PROC' || tt.value === 'PROCEDURE' || tt.value === 'ENTRY' || tt.value === 'TASK' || tt.value === 'DATION') 
+        else if (  (  tt.value === 'PROC' || tt.value === 'PROCEDURE' || tt.value === 'ENTRY' || tt.value === 'TASK' 
+                   || tt.value === 'DATION' || tt.value === 'SEMA'  || tt.value === 'BOLT'
+                   ) 
                 && ( state === 'start' || state === 'dim' || state === 'inv' || state === 'ref' || state === 'type' )
                 ) {
           state = 'global';
@@ -1323,12 +1486,22 @@ connection.console.log(`preproc-Token ${tokens[ tokens.length - 1].type} ${token
           state = 'init';
           global = true;
         }
-        else if ( tt.value === 'INIT' && ( state === 'global' || state === 'init' ) ) {
+        else if ( ( tt.value === 'INIT' || tt.value === 'PRESET' ) && ( state === 'global' || state === 'init' ) ) {
           state = 'initval';
           init = true;
         }
+        else if ( tt.value === 'IDENT' && ( state === 'global' || state === 'init' ) ) {
+          state = 'initval';
+          ident = true;
+        }
       } 
       else if ( tt.type === 'identifier') {
+        if ( ( state === 'start' || state === 'dim' || state === 'inv' || state === 'ref' || state === 'type' ) ) {
+          state = 'global';
+          typename = tt;
+        }
+      }
+      else if ( tt.type === 'type') {
         if ( ( state === 'start' || state === 'dim' || state === 'inv' || state === 'ref' || state === 'type' ) ) {
           state = 'global';
           typename = tt;
@@ -1347,7 +1520,8 @@ connection.console.log(`preproc-Token ${tokens[ tokens.length - 1].type} ${token
         ref,
         typename: ( typename ? typename.value : '' ),
         global, 
-        init
+        init,
+        ident
       }
     };
   }
@@ -1390,7 +1564,7 @@ connection.console.log(`preproc-Token ${tokens[ tokens.length - 1].type} ${token
         j = typeDescription.endIndex;
 
         for (const nameToken of nameTokens) {
-          result.push({nameToken, typeTokens: typeDescription.typeTokens, typeDescription: typeDescription.typeDescription});
+          result.push({nameToken, typeTokens: typeDescription.typeTokens, typeDescription: typeDescription.typeDescription, used: false});
         }
       }
       else {
@@ -1398,7 +1572,7 @@ connection.console.log(`preproc-Token ${tokens[ tokens.length - 1].type} ${token
         const typeDescription = parseTypeDescription(tokens, j + 1, endIndex);
         j = typeDescription.endIndex;
 
-        result.push({nameToken: t, typeTokens: typeDescription.typeTokens, typeDescription: typeDescription.typeDescription});
+        result.push({nameToken: t, typeTokens: typeDescription.typeTokens, typeDescription: typeDescription.typeDescription, used: false});
       }
     }
 
@@ -1417,7 +1591,8 @@ connection.console.log(`preproc-Token ${tokens[ tokens.length - 1].type} ${token
         typename,
         global, 
         init
-      }
+      },
+      used: false
     };
   };
 
@@ -1462,52 +1637,93 @@ connection.console.log( `identifier definition: ${t.value} at ${definition.nameT
     const kw = t.value;
 
     // ---------------- Blockenden ----------------
-    if (kw === 'END' || kw === 'FIN' || kw === 'MODEND') {
-      if (kw === 'END') {
-        if (
-          blockStack.length === 0 ||
-          !END_KEYWORD_MAP.END.includes(blockStack[blockStack.length - 1].keyword)
-        ) {
-          addDiagnosticError('Unerwartetes END ohne passenden Block (TASK/PROC/REPEAT/BEGIN).', t);
-        } else {
-          const startToken = blockStack.pop();
-          if (scopeStack.length > 1) scopeStack.pop();
-          foldingRanges.push({
-            startToken: startToken.token,
-            endToken: t,
-            kind: 'region'
-          })
-        }
-      } else if (kw === 'FIN') {
-        if (
-          blockStack.length === 0 ||
-          !END_KEYWORD_MAP.FIN.includes(blockStack[blockStack.length - 1].keyword)
-        ) {
-          addDiagnosticError('Unerwartetes FIN ohne passenden Block (IF/CASE).', t);
-        } else {
-          const startToken = blockStack.pop();
-          if (scopeStack.length > 1) scopeStack.pop();
-          foldingRanges.push({
-            startToken: startToken.token,
-            endToken: t,
-            kind: 'region'
-          })
-        }
-      } else if (kw === 'MODEND') {
-        if (
-          blockStack.length === 0 ||
-          !END_KEYWORD_MAP.MODEND.includes(blockStack[blockStack.length - 1].keyword)
-        ) {
-          addDiagnosticError('Unerwartetes MODEND ohne passenden Block (MODULE/SHELLMODULE).', t);
-        } else {
-          const startToken = blockStack.pop();
-          if (scopeStack.length > 1) scopeStack.pop();
-          foldingRanges.push({
-            startToken: startToken.token,
-            endToken: t,
-            kind: 'region'
-          })
-        }
+    if (kw === 'END') {
+      if (
+        blockStack.length === 0 ||
+        !END_KEYWORD_MAP.END.includes(blockStack[blockStack.length - 1].keyword)
+      ) {
+        addDiagnosticError('Unerwartetes END ohne passenden Block (TASK/PROC/REPEAT/BEGIN).', t);
+      } else {
+        const startToken = blockStack.pop();
+        if (scopeStack.length > 1) scopeStack.pop();
+        let endToken = structuredClone(t);
+        endToken.line = t.line - 1;
+        endToken.column = lineOffsets[t.line-1].endOfLineColumn;
+        endToken.offset = lineOffsets[t.line-1].endOfLineOffset;
+        foldingRanges.push({
+          startToken: startToken.token,
+          endToken,
+          kind: 'region'
+        })
+      }
+      continue;
+    } 
+
+    if (kw === 'ELSE') {
+      if (
+        blockStack.length === 0 ||
+        !END_KEYWORD_MAP.ELSE.includes(blockStack[blockStack.length - 1].keyword)
+      ) {
+        addDiagnosticError('Unerwartetes ELSE ohne passenden Block (IF).', t);
+      } else {
+        const startToken = blockStack.pop();
+        if (scopeStack.length > 1) scopeStack.pop();
+        let endToken = structuredClone(t);
+        endToken.line = t.line - 1;
+        endToken.column = lineOffsets[t.line-1].endOfLineColumn;
+        endToken.offset = lineOffsets[t.line-1].endOfLineOffset;
+        foldingRanges.push({
+          startToken: startToken.token,
+          endToken,
+          kind: 'region'
+        });
+        blockStack.push({ keyword: kw, token: t });
+        scopeStack.push({});
+      }
+      continue;
+    }
+    
+    if (kw === 'FIN') {
+      if (
+        blockStack.length === 0 ||
+        !END_KEYWORD_MAP.FIN.includes(blockStack[blockStack.length - 1].keyword)
+      ) {
+        addDiagnosticError('Unerwartetes FIN ohne passenden Block (IF/CASE).', t);
+      } else {
+        const startToken = blockStack.pop();
+        if (scopeStack.length > 1) scopeStack.pop();
+        let endToken = structuredClone(t);
+        endToken.line = t.line - 1;
+        endToken.column = lineOffsets[t.line-1].endOfLineColumn;
+        endToken.offset = lineOffsets[t.line-1].endOfLineOffset;
+connection.console.log( `FIN für ${startToken.token.value} von ${startToken.token.line}`);
+        foldingRanges.push({
+          startToken: startToken.token,
+          endToken,
+          kind: 'region'
+        })
+      }
+      continue;
+    }
+    
+    if (kw === 'MODEND') {
+      if (
+        blockStack.length === 0 ||
+        !END_KEYWORD_MAP.MODEND.includes(blockStack[blockStack.length - 1].keyword)
+      ) {
+        addDiagnosticError('Unerwartetes MODEND ohne passenden Block (MODULE/SHELLMODULE).', t);
+      } else {
+        const startToken = blockStack.pop();
+        if (scopeStack.length > 1) scopeStack.pop();
+        let endToken = structuredClone(t);
+        endToken.line = t.line - 1;
+        endToken.column = lineOffsets[t.line-1].endOfLineColumn;
+        endToken.offset = lineOffsets[t.line-1].endOfLineOffset;
+        foldingRanges.push({
+          startToken: startToken.token,
+          endToken,
+          kind: 'region'
+        })
       }
       continue;
     }
@@ -1734,9 +1950,13 @@ connection.console.log( `identifier definition: ${t.value} at ${definition.nameT
 // Diagnostics
 // ------------------------------
 
-function validateTextDocument(textDocument) {
+async function validateTextDocument(textDocument) {
+  const settings = await getDocumentSettings(textDocument.uri);
+  
+connection.console.log('[pearl] settings = ' + JSON.stringify(settings));
+
   const text = textDocument.getText();
-  const analysis = analyze(textDocument.uri, text, { collectDiagnostics: true });
+  const analysis = analyze(textDocument.uri, text, settings, { collectDiagnostics: true });
   documentTokenCache.set( textDocument.uri, analysis );    // für onDefinition & Co. cachen
   connection.sendDiagnostics({
     uri: textDocument.uri,
@@ -1805,7 +2025,7 @@ connection.onHover((params) => {
     return {
       contents: {
         kind: 'markdown',
-        value: `Token: ${targetToken.type}: **${targetToken.value}** at offset **${targetToken.offset}** defined at ${targetToken.definition.nameToken.offset}`
+        value: `Token: ${targetToken.type}: **${targetToken.value}** at offset **${targetToken.offset}** defined at ${targetToken.definition.nameToken.offset} as ${JSON.stringify( targetToken.definition.typeDescription)}`
       }
     };
   }
@@ -2254,10 +2474,27 @@ documents.onDidOpen((event) => {
 documents.onDidClose((event) => {
   connection.console.log( `onDidClose ${event.document.uri}` );
   documentTokenCache.delete(event.document.uri);  // Dokument aus Cache kegeln
+  documentSettings.delete(event.document.uri);  
 });
 
-documents.onDidChangeContent((change) => {
-  validateTextDocument(change.document);
+documents.onDidChangeContent((event) => {
+  validateTextDocument(event.document);
+});
+
+// React to configuration changes
+connection.onDidChangeConfiguration((event) => {
+  if (hasConfigurationCapability) {
+    // Reset all cached document settings
+    documentSettings.clear();
+  } else {
+    // Use global settings from `settings.json`
+    globalSettings = (event.settings.pearl || defaultSettings);
+  }
+
+  // Revalidate all open documents with the new settings
+  documents.all().forEach((doc) => {
+    validateTextDocument(doc);
+  });
 });
 
 documents.listen(connection);

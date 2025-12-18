@@ -2,7 +2,7 @@
   "name": "pearl-language-support",
   "displayName": "PEARL Language Support",
   "description": "VS Code Extension mit Language Server für die Sprache PEARL",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "publisher": "none",
   "author": {
     "name": "Jan Bartels"
@@ -58,6 +58,34 @@
         "scope": [ "entity.name.variable.special.extra" ]
       }
     ],
+    "configuration": {
+      "title": "PEARL",
+      "type": "object",
+      "properties": {
+        "pearl.maxNumberOfProblems": {
+          "scope": "resource",
+          "type": "number",
+          "default": 100,
+          "description": "Maximum number of diagnostics per PEARL file."
+        },
+        "pearl.trace.server": {
+          "scope": "window",
+          "type": "string",
+          "enum": ["off", "messages", "verbose"],
+          "default": "off",
+          "description": "Trace level for the PEARL language server."
+        },
+        "pearl.macros": {
+          "type": "object",
+          "scope": "resource",
+          "markdownDescription": "C-style preprocessor macros für den externen Präprozessor.\n\nSchlüssel = Makroname, Wert = optionaler Ersatztext.\nLeerer Wert bedeutet: Makro nur definiert (`#define NAME`).",
+          "default": {},
+          "additionalProperties": {
+            "type": "string"
+          }
+        }        
+      }
+    },    
     "configurationDefaults": {
       "editor.semanticTokenColorCustomizations": {
         "rules": {
