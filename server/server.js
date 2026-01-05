@@ -321,6 +321,7 @@ const PEARL_KEYWORDS = [
   'RETURN',
   'RETURNS',
   'SEC',
+  'SEMASET',
   'SEND',
   'SHELLMODULE',
   'SIGNAL',
@@ -1274,10 +1275,14 @@ connection.console.log(`preproc-Token ${tokens[ tokens.length - 1].type} ${token
           type = 'type';
         addToken(type, startOffset, startLine, startColumn, offset);
         if ( type === 'keyword' ) {
-          if ( section === 'problem' && value === 'SYSTEM' )
-            section = 'system';
-          else if ( section === 'system' && value === 'PROBLEM' )
-            section = 'problem';
+          if (value === 'SYSTEM') {
+            if (section === 'problem')
+              section = 'system';
+          }
+          else if (value === 'PROBLEM') {
+            if (section === 'system')
+              section = 'problem';
+          }
         }
         continue;
       }
@@ -1773,7 +1778,7 @@ connection.console.log( `FIN für ${startToken.token.value} von ${startToken.tok
         const next = findNextCodeToken(tokens, i);
         if (next && next.token.type === 'identifier') {
           let endIndex = next.index;
-          const identifier = createIdentifier( next.token, [], false, false, false, 'MODULE', false, false );
+          const identifier = createIdentifier( next.token, [], false, false, false, kw, false, false );
           const currentScope = scopeStack[0];
           currentScope[next.token] = identifier;   // MODULE/SHELLMODULE ist immer globaler Scope
           i = endIndex;
@@ -1785,6 +1790,14 @@ connection.console.log( `FIN für ${startToken.token.value} von ${startToken.tok
       scopeStack.push({});
       continue;
     }
+
+    if (kw === 'SYSTEM' || kw === 'PROBLEM') {      
+      if (blockStack.length!==1 || (blockStack[0].keyword !== 'MODULE' && blockStack[0].keyword !== 'SHELLMODULE' ) ) {
+        addDiagnosticError('Unerwartetes SYSTEM ohne passenden Block (MODULE/SHELLMODULE).', t);
+      }
+    }
+
+    // ---------------- Blockstarts & Deklarationen ----------------
 
     // PROC/TASK als Implementierung oder Deklaration
     if (kw === 'PROC' || kw === 'PROCEDURE' || kw === 'TASK') {
@@ -1875,50 +1888,124 @@ connection.console.log( `FIN für ${startToken.token.value} von ${startToken.tok
     // TASK-Operationen
     if (TASK_CTRL_KEYWORDS.includes(kw)) {
       const next = findNextCodeToken(tokens, i);
+      const semicolon = findNextCodeToken(tokens, i+1);
+      const nextSemicolon = findNextSemicolonToken(tokens, i+1);
       if (next && next.token.type === 'identifier') {
         const name = next.token.value;
         const sym = lookupSymbol(scopeStack, name, 'TASK');
         if (!sym) {
-          addDiagnosticWarning(
+          addDiagnosticError(
             `TASK '${name}' wird mit ${kw} verwendet, es existiert aber keine TASK-Deklaration (TASK/SPC TASK).`,
             t,
             next.token.offset + next.token.length - t.offset
           );
         }
       }
+      if (!semicolon || !nextSemicolon || nextSemicolon.index !== i+2) {
+        addDiagnosticError(
+          `${kw} Semikolon erwartet.`,
+          semicolon.token,
+          semicolon.token.offset + semicolon.token.length
+        );
+        i = semicolon.index;
+      }
       continue;
     }
 
     // SEMA-Operationen
-    if (SEMA_OP_KEYWORDS.includes(kw)) {
-      const next = findNextCodeToken(tokens, i);
-      if (next && next.token.type === 'identifier') {
-        const name = next.token.value;
+    if (kw==='SEMASET') {
+      const value = findNextCodeToken(tokens, i);
+      const comma = findNextCodeToken(tokens, i+1);
+      const sema = findNextCodeToken(tokens, i+2);
+      const semicolon = findNextCodeToken(tokens, i+3);
+      const nextSemicolon = findNextSemicolonToken(tokens, i+3);
+
+      if (value && value.token.type !== 'number') {
+        addDiagnosticError(
+          `SEMASET Preset-Wert ist ungültig.`,
+          value.token,
+          value.token.offset + value.token.length
+        );
+      }
+      if (comma && comma.token.type !== 'symbol' && comma.token.value !== ',') {
+        addDiagnosticError(
+          `SEMASET Komma erwartet.`,
+          comma.token,
+          comma.token.offset + comma.token.length
+        );
+      }
+      if (sema && sema.token.type === 'identifier') {
+        const name = sema.token.value;
         const sym = lookupSymbol(scopeStack, name, 'SEMA');
         if (!sym) {
-          addDiagnosticWarning(
+          addDiagnosticError(
             `SEMA '${name}' wird mit ${kw} verwendet, es existiert aber keine SEMA-Deklaration (DCL/SPC SEMA).`,
-            t,
-            next.token.offset + next.token.length - t.offset
+            sema.token,
+            sema.token.offset + sema.token.length - t.offset
           );
         }
+      }
+      if (!semicolon || !nextSemicolon || nextSemicolon.index !== i+4) {
+        addDiagnosticError(
+          `SEMASET Semikolon erwartet.`,
+          semicolon.token,
+          semicolon.token.offset + semicolon.token.length
+        );
+        i = semicolon.index;
+      }
+      continue;
+    }
+
+    // ... REQUEST/RELEASE
+    if (SEMA_OP_KEYWORDS.includes(kw)) {
+      const sema = findNextCodeToken(tokens, i);
+      const semicolon = findNextCodeToken(tokens, i+1);
+      const nextSemicolon = findNextSemicolonToken(tokens, i+1);
+      if (sema && sema.token.type === 'identifier') {
+        const name = sema.token.value;
+        const sym = lookupSymbol(scopeStack, name, 'SEMA');
+        if (!sym) {
+          addDiagnosticError(
+            `SEMA '${name}' wird mit ${kw} verwendet, es existiert aber keine SEMA-Deklaration (DCL/SPC SEMA).`,
+            t,
+            sema.token.offset + sema.token.length - t.offset
+          );
+        }
+      }
+      if (!semicolon || !nextSemicolon || nextSemicolon.index !== i+2) {
+        addDiagnosticError(
+          `${kw} Semikolon erwartet.`,
+          semicolon.token,
+          semicolon.token.offset + semicolon.token.length
+        );
+        i = semicolon.index;
       }
       continue;
     }
 
     // BOLT-Operationen
     if (BOLT_OP_KEYWORDS.includes(kw)) {
-      const next = findNextCodeToken(tokens, i);
-      if (next && next.token.type === 'identifier') {
-        const name = next.token.value;
+      const bolt = findNextCodeToken(tokens, i);
+      const semicolon = findNextCodeToken(tokens, i+1);
+      const nextSemicolon = findNextSemicolonToken(tokens, i+1);
+      if (bolt && bolt.token.type === 'identifier') {
+        const name = bolt.token.value;
         const sym = lookupSymbol(scopeStack, name, 'BOLT');
         if (!sym) {
-          addDiagnosticWarning(
+          addDiagnosticError(
             `BOLT '${name}' wird mit ${kw} verwendet, es existiert aber keine BOLT-Deklaration (DCL/SPC BOLT).`,
             t,
-            next.token.offset + next.token.length - t.offset
+            bolt.token.offset + bolt.token.length - t.offset
           );
         }
+      }
+      if (!semicolon || !nextSemicolon || nextSemicolon.index !== i+2) {
+        addDiagnosticError(
+          `${kw} Semikolon erwartet.`,
+          semicolon.token,
+          semicolon.token.offset + semicolon.token.length
+        );
+        i = semicolon.index;
       }
       continue;
     }

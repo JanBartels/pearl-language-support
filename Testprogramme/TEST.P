@@ -11,6 +11,8 @@ PROBLEM;
 
 DCL Start FIXED;
 
+DCL MySema SEMA;
+
 #define abc "123"
 #define def "D"
 #define ghi
@@ -79,6 +81,8 @@ STR = 'IF';
 STR.CHAR(3) = 'D';
 PUT STR TO D BY LIST,SKIP;
 CALL GlobProc;    ! Aus Include-Datei
+SEMASET 3, MySema;
+REQUEST MySema;
 END;
 
 demo: TASK PRIO 8;
@@ -109,6 +113,7 @@ ELSE
    CALL somethingSPC;
 FIN;
 myTask = demo;
+ACTIVATE myTask;
 WHILE ( 1==2
 AND 3 == 4 ) REPEAT
  x = 2 * x;
