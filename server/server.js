@@ -499,7 +499,10 @@ function analyze(uri, text, settings, options) {
 
 //https://www.vscodeapi.com/classes/vscode.diagnostic#tags
 
-  function addDiagnostic(severity, message, line, column, length, tags = null ) {
+  function addDiagnostic(severity, message, diagUri, line, column, length, tags = null ) {
+    if (diagUri !== uri)  // nicht bei IncludeDateien
+      return;
+
     if ( !Number.isInteger(line)   || line < 0   ||
          !Number.isInteger(column) || column < 0 ||
          !Number.isInteger(length) || length < 0
@@ -520,28 +523,28 @@ function analyze(uri, text, settings, options) {
     });
   }
 
-  function addDiagnosticErrorPos(message, line, column, length) {
-    addDiagnostic(DiagnosticSeverity.Error, message, line, column, length);
+  function addDiagnosticErrorPos(message, diagUri, line, column, length) {
+    addDiagnostic(DiagnosticSeverity.Error, message, diagUri, line, column, length);
   }
 
   function addDiagnosticError(message, token) {
-    addDiagnostic(DiagnosticSeverity.Error, message, token.line, token.column, token.length);
+    addDiagnostic(DiagnosticSeverity.Error, message, token.uri, token.line, token.column, token.length);
   }
 
-  function addDiagnosticWarningPos(message, line, column, length) {
-    addDiagnostic(DiagnosticSeverity.Warning, message, line, column, length);
+  function addDiagnosticWarningPos(message, diagUri, line, column, length) {
+    addDiagnostic(DiagnosticSeverity.Warning, message, diagUri, line, column, length);
   }
 
   function addDiagnosticWarning(message, token) {
-    addDiagnostic(DiagnosticSeverity.Warning, message, token.line, token.column, token.length);
+    addDiagnostic(DiagnosticSeverity.Warning, message, token.uri, token.line, token.column, token.length);
   }
 
-  function addDiagnosticHintPos(message, line, column, length, tags) {
-    addDiagnostic(DiagnosticSeverity.Hint, message, line, column, length, tags);
+  function addDiagnosticHintPos(message, diagUri, line, column, length, tags) {
+    addDiagnostic(DiagnosticSeverity.Hint, message, diagUri, line, column, length, tags);
   }
 
   function addDiagnosticHint(message, token, tags) {
-    addDiagnostic(DiagnosticSeverity.Hint, message, token.line, token.column, token.length, tags);
+    addDiagnostic(DiagnosticSeverity.Hint, message, token.uri, token.line, token.column, token.length, tags);
   }
 
   const blockStack = [];
