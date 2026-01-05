@@ -969,7 +969,10 @@ connection.console.log( `lookupSymbol ${JSON.stringify(table[name])}` );
         }
 
         if (defineStack.length == 0 || defineStack[defineStack.length - 1]) {
-          const includePattern = /^(\s*)(#include\s+([^\s]+))/.exec(lineBuf);
+          let includePattern = /^(\s*)(#include\s+"([^\s"]+)")/.exec(lineBuf);   // Variante mit Anführungszeichen
+          if (!includePattern) {
+            includePattern = /^(\s*)(#include\s+([^\s]+))/.exec(lineBuf);
+          }
           if (includePattern) {
             const includeStart = includePattern[1];
             const includeStmt = includePattern[2];
