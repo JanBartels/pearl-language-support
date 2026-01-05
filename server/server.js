@@ -763,6 +763,22 @@ connection.console.log( `lookupSymbol ${JSON.stringify(table[name])}` );
       }
     }
 
+    function skipRestOfLine() {
+      while (offset < len && text[offset] !== '\n' && text[offset] !== '\r') {
+        advanceChar();
+      }
+      // Zeilenende noch normal verarbeiten:
+      const lineEndOffset = offset;
+      const lineEndColumn = column;
+      if (offset < len) {
+        advanceChar();
+      }
+      return {
+        offset: lineEndOffset,
+        column: lineEndColumn
+      };
+    }
+
     while (offset < len) {
       const ch = text[offset];
 
@@ -783,11 +799,9 @@ connection.console.log( `lookupSymbol ${JSON.stringify(table[name])}` );
         const startOffset = offset;
         const startLine = line;
         const startColumn = column;
-        while (offset < len && text[offset] !== '\n' && text[offset] !== '\r') {
-          offset++;
-          column++;
-        }
-        addToken('comment', startOffset, startLine, startColumn, offset);
+
+        const lineEnd = skipRestOfLine()
+        addToken('comment', startOffset, startLine, startColumn, lineEnd.offset);
         continue;
       }
 
@@ -865,14 +879,8 @@ connection.console.log( `lookupSymbol ${JSON.stringify(table[name])}` );
           preprocStack.push( token );
 
           // Die gesamte #ifdef-Zeile überspringen
-          while (offset < len && text[offset] !== '\n' && text[offset] !== '\r') {
-            advanceChar();
-          }
-          // Zeilenende noch normal verarbeiten:
-          if (offset < len) {
-            advanceChar();
-          }
-//          addToken('preproc', lineStartOffset, lineStartLine, lineStartColumn, lineEndOffset);
+          const lineEnd = skipRestOfLine();
+          addToken('inactive', lineStartOffset + ifdefStmt.length, lineStartLine, lineStartColumn + ifdefStmt.length, lineEnd.offset);
 
           continue;
         }
@@ -913,14 +921,8 @@ connection.console.log( `lookupSymbol ${JSON.stringify(table[name])}` );
           preprocStack.push( token );
 
           // Die gesamte #undef-Zeile überspringen
-          while (offset < len && text[offset] !== '\n' && text[offset] !== '\r') {
-            advanceChar();
-          }
-          // Zeilenende noch normal verarbeiten:
-          if (offset < len) {
-            advanceChar();
-          }
-//          addToken('preproc', lineStartOffset + elsePattern[1].length, lineStartLine, lineStartColumn + elsePattern[1].length, elsePattern[2].length);
+          const lineEnd = skipRestOfLine();
+          addToken('inactive', lineStartOffset + elseStmt.length, lineStartLine, lineStartColumn + elseStmt.length, lineEnd.offset);
 
           continue;
         }
@@ -957,13 +959,8 @@ connection.console.log( `lookupSymbol ${JSON.stringify(table[name])}` );
             addDiagnosticHint( 'inaktiv', token, [DiagnosticTag.Unnecessary]);
 
           // Die gesamte #undef-Zeile überspringen
-          while (offset < len && text[offset] !== '\n' && text[offset] !== '\r') {
-            advanceChar();
-          }
-          // Zeilenende noch normal verarbeiten:
-          if (offset < len) {
-            advanceChar();
-          }
+          const lineEnd = skipRestOfLine();
+          addToken('inactive', lineStartOffset + endifStmt.length, lineStartLine, lineStartColumn + endifStmt.length, lineEnd.offset);
 
           continue;
         }
@@ -978,16 +975,11 @@ connection.console.log( `lookupSymbol ${JSON.stringify(table[name])}` );
             const includeStmt = includePattern[2];
             const includePath = includePattern[3];
 
-            // Die gesamte #include-Zeile überspringen
-            while (offset < len && text[offset] !== '\n' && text[offset] !== '\r') {
-              advanceChar();
-            }
-            // Zeilenende noch normal verarbeiten:
-            if (offset < len) {
-              advanceChar();
-            }
-
             const token = addToken('preproc', lineStartOffset + includeStart.length, lineStartLine, lineStartColumn + includeStart.length, lineStartOffset + includeStart.length + includeStmt.length);
+
+            // Die gesamte #include-Zeile überspringen
+            const lineEnd = skipRestOfLine();
+            addToken('inactive', lineStartOffset + includeStmt.length, lineStartLine, lineStartColumn + includeStmt.length, lineEnd.offset);
 
             // in #include Makros ersetzen
             let finalIncludePath = includePath.replace(/([A-Za-z_][A-Za-z0-9_]*)/g, (define) => {
@@ -1030,15 +1022,6 @@ connection.console.log( `lookupSymbol ${JSON.stringify(table[name])}` );
             const defineName = definePattern[3];
             const defineValue = definePattern[4] || '';
 
-            // Die gesamte #define-Zeile überspringen
-            while (offset < len && text[offset] !== '\n' && text[offset] !== '\r') {
-              advanceChar();
-            }
-            // Zeilenende noch normal verarbeiten:
-            if (offset < len) {
-              advanceChar();
-            }
-
             const token = addToken('preproc', lineStartOffset + defineStart.length, lineStartLine, lineStartColumn + defineStart.length, lineStartOffset + defineStart.length + defineStmt.length);
             if (defines.has(defineName)) {
               addDiagnosticError(`Makro ${defineName} bereits definiert.`, token);
@@ -1046,6 +1029,10 @@ connection.console.log( `lookupSymbol ${JSON.stringify(table[name])}` );
             else {
               defines.set(defineName, { value: defineValue, define: defineStmt });
             }
+
+            // Die gesamte #define-Zeile überspringen
+            const lineEnd = skipRestOfLine();
+            addToken('inactive', lineStartOffset + defineStmt.length, lineStartLine, lineStartColumn + defineStmt.length, lineEnd.offset);
 
             continue;
           }
@@ -1056,20 +1043,15 @@ connection.console.log( `lookupSymbol ${JSON.stringify(table[name])}` );
             const undefStmt = undefPattern[2];
             const undefName = undefPattern[3];
 
-            // Die gesamte #undef-Zeile überspringen
-            while (offset < len && text[offset] !== '\n' && text[offset] !== '\r') {
-              advanceChar();
-            }
-            // Zeilenende noch normal verarbeiten:
-            if (offset < len) {
-              advanceChar();
-            }
-
             const token = addToken('preproc', lineStartOffset + undefStart.length, lineStartLine, lineStartColumn + undefStart.length, lineStartOffset + undefStart.length + undefStmt.length);
             if (!defines.has(undefName)) {
               addDiagnosticWarning(`Makro ${undefName} nicht definiert.`, token);
             }
             defines.delete( undefName );
+
+            // Die gesamte #undef-Zeile überspringen
+            const lineEnd = skipRestOfLine();
+            addToken('inactive', lineStartOffset + undefStmt.length, lineStartLine, lineStartColumn + undefStmt.length, lineEnd.offset);
 
             continue;
           }
@@ -1082,16 +1064,10 @@ connection.console.log( `lookupSymbol ${JSON.stringify(table[name])}` );
             const token = addToken('error', lineStartOffset + unknownStart.length, lineStartLine, lineStartColumn + unknownStart.length, lineStartOffset + unknownStart.length + unknownStmt.length);
             addDiagnosticError(`Unbekannter Präprozessorbefehl ${unknownStmt}`, token);
 
-            // Die gesamte #undef-Zeile überspringen
-            while (offset < len && text[offset] !== '\n' && text[offset] !== '\r') {
-              advanceChar();
-            }
-            // Zeilenende noch normal verarbeiten:
-            const lineEndOffset = offset;
-            if (offset < len) {
-              advanceChar();
-            }
-  
+            // Die gesamte Zeile überspringen
+            const lineEnd = skipRestOfLine();
+            addToken('inactive', lineStartOffset + unknownStmt.length, lineStartLine, lineStartColumn + unknownStmt.length, lineEnd.offset);
+
             continue;
           }
         }
@@ -1100,16 +1076,10 @@ connection.console.log( `lookupSymbol ${JSON.stringify(table[name])}` );
           const lineStartLine = line;
 
           // Die gesamte Zeile überspringen
-          while (offset < len && text[offset] !== '\n' && text[offset] !== '\r') {
-            advanceChar();
-          }
-          // Zeilenende noch normal verarbeiten:
-          const lineEndOffset = offset;
-          if (offset < len) {
-            advanceChar();
-          }
+          const lineEnd = skipRestOfLine();
+          addToken('inactive', lineStartOffset, lineStartLine, 0, lineEnd.offset);
 
-          const token = addToken('inactive', lineStartOffset, lineStartLine, 0, lineEndOffset);
+          const token = addToken('inactive', lineStartOffset, lineStartLine, 0, lineEnd.offset);
           addDiagnosticHint( 'inaktiv', token, [DiagnosticTag.Unnecessary]);
 
           continue;
@@ -1124,16 +1094,8 @@ connection.console.log( `lookupSymbol ${JSON.stringify(table[name])}` );
         const lineStartLine = line;
 
         // Die gesamte Zeile überspringen
-        while (offset < len && text[offset] !== '\n' && text[offset] !== '\r') {
-          advanceChar();
-        }
-        // Zeilenende noch normal verarbeiten:
-        const lineEndOffset = offset;
-        if (offset < len) {
-          advanceChar();
-        }
-
-        const token = addToken('inactive', lineStartOffset, lineStartLine, 0, lineEndOffset);
+        const lineEnd = skipRestOfLine();
+        const token = addToken('inactive', lineStartOffset, lineStartLine, 0, lineEnd.offset);
         addDiagnosticHint( 'inaktiv', token, [DiagnosticTag.Unnecessary]);
 
         continue;
