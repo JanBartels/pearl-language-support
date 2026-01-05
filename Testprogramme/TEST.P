@@ -123,6 +123,9 @@ BEGIN ! hier kommentar mit 'String' X
 DCL AFDim1 INV FIXED INIT(3);
 DCL I FIXED, X FLOAT, AF (AFDim1,4)FIXED, T CLOCK, D DURATION;
 
+DCL Doppelt FIXED;
+DCL Doppelt FLOAT;
+
 DCL MyBolt REF BOLT;
 DCL MyArr (4,5)FLOAT;
 DCL something FIXED;
@@ -149,6 +152,11 @@ def := 2 MIN;
 def := 3 MIN;
 jkl;
 IF 1==2 THEN FY = 9; FIN;
+
+
+FOR I2 FROM 3 TO 5 WHILE I2 < 10 REPEAT
+  X = I2;
+END;
 
 A := '110010100111'B1;
 B := '302213'B2;

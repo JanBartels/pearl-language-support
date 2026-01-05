@@ -1604,6 +1604,7 @@ connection.console.log(`preproc-Token ${tokens[ tokens.length - 1].type} ${token
     };
   };
 
+  let loopVar = undefined;  // für FOR-Loop
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];
     if (t.offset > stopOffset) break;
@@ -1747,7 +1748,12 @@ connection.console.log( `FIN für ${startToken.token.value} von ${startToken.tok
         for (const dclName of parsedSpc) {
 //logIdentifier( dclName, `DCL level: ${scopeStack.length - 1}` );
           const nameToken = dclName.nameToken;
-          currentScope[dclName.nameToken.value] = dclName;   
+          if (currentScope[dclName.nameToken.value]) {
+            addDiagnosticError(`Variable ${nameToken.value} existiert bereits.`, nameToken);
+          }
+          else {
+            currentScope[dclName.nameToken.value] = dclName;   
+          }
         }
         i = endIndex;
       }
@@ -1780,7 +1786,7 @@ connection.console.log( `FIN für ${startToken.token.value} von ${startToken.tok
           let endIndex = next.index;
           const identifier = createIdentifier( next.token, [], false, false, false, kw, false, false );
           const currentScope = scopeStack[0];
-          currentScope[next.token] = identifier;   // MODULE/SHELLMODULE ist immer globaler Scope
+          currentScope[next.token.value] = identifier;   // MODULE/SHELLMODULE ist immer globaler Scope
           i = endIndex;
         }
       }
@@ -1859,13 +1865,36 @@ connection.console.log( `FIN für ${startToken.token.value} von ${startToken.tok
       continue;
     }
 
-    // REPEAT/BEGIN immer als Blockstart
-    if (kw === 'REPEAT' || kw === 'BEGIN') {
+    if (kw === 'FOR') {
+      const next = findNextCodeToken(tokens, i);
+      if (next && next.token.type === 'identifier') {
+        loopVar = next;
+        blockStack.push({ keyword: 'REPEAT', token: t });
+        scopeStack.push({});
+        const identifier = createIdentifier( next.token, [], false, false, false, 'FIXED', false, false );
+        const currentScope = scopeStack[scopeStack.length - 1];
+        currentScope[next.token.value] = identifier;
+        i = next.index + 1;
+      }
+      continue;
+    }
+
+    // REPEAT immer als Blockstart
+    if (kw === 'REPEAT') {
+      if (!loopVar) {
+        blockStack.push({ keyword: kw, token: t });
+        scopeStack.push({});
+      }
+      loopVar = undefined;
+      continue;
+    }
+
+    // BEGIN immer als Blockstart
+    if (kw === 'BEGIN') {
       blockStack.push({ keyword: kw, token: t });
       scopeStack.push({});
       continue;
     }
-
     // ---------------- Aufrufe & Operationen ----------------
 
     // CALL PROC
