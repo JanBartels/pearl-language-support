@@ -73,4 +73,4 @@ https://www.gnu.org/licenses/gpl-3.0.html
   - manuelle VSIX-Downloads
   bereitgestellt.
 
-© 2025 Jan Bartels
+(C) 2025, 2026 Jan Bartels
