@@ -17,7 +17,9 @@ DCL MySema SEMA;
 #define def "D"
 #define ghi
 #define jkl "IF 1==2 THEN FX = 9; FIN"
-!#include testinc.h
+
+#include testinc.h
+#include "testinc.h"
 
 DCL bAktiv BIT;
 
@@ -27,6 +29,7 @@ DCL bAktiv BIT;
 #endif
 
 #include InclDir/testinc.h
+#include "InclDir/testinc.h"
 
 #define ghi "fehler"
 #undef nohave
@@ -42,7 +45,7 @@ Hallo: PROC;
 #define mydef
 #define mydef2
 
-#ifndef mydef
+#ifdef mydef
 DCL MyDef FIXED;
 #ifndef mydef2
 DCL MyDef_2 FIXED;
@@ -59,7 +62,7 @@ DCL MyDef_2_2 FIXED;
 #endif
 #endif
 
-#ifdef NotActive
+#ifndef NotActive
 !Hier nicht aktiver Abschnitt
 SPC InActive BIT;
 #endif
@@ -70,9 +73,10 @@ DCL (B,B1) REF CLOCK;
 DCL X FLOAT;
 SPC demo TASK;
 DCL STR CHAR(20);
+DCL UnusedGlobalVar FIXED;
 
 something: PROC( D DATION INOUT ALPHIC IDENT, A FIXED, B FLOAT);
-DCL X FIXED;
+DCL (X,UnusedLocalVar) FIXED;
 A = abc;
 B = A * 1.0;
 X = A;
@@ -91,13 +95,17 @@ DCL y FLOAT INIT(8.15);
 DCL somethingREF REF PROC;
 DCL myTask REF TASK;
 x = -7;
+UnusedLabel:
 y := 47.11E+10;
+AlreadyDefinedLabel:
 IF x = 0 THEN     ! Operator = ist Fehler!
    ! Kommentar
    CALL something( A1, 5,12.3 );
-   CALL somethingSPC;
+   CALL somethingUndefined;
    CALL somethingREF;
-   GOTO MyLabel;
+   GOTO UndefinedLabel;
+   CALL something;
+   GOTO AlreadyDefinedLabel;
 FIN;
 IF x = 0 THEN     ! Operator = ist Fehler!
    ! Kommentar
@@ -129,6 +137,8 @@ DCL Doppelt FLOAT;
 DCL MyBolt REF BOLT;
 DCL MyArr (4,5)FLOAT;
 DCL something FIXED;
+
+!DCL Ch CHAR(10);
 
 something = 2;
 
