@@ -279,6 +279,7 @@ const PEARL_KEYWORDS = [
   'IF',
   'IN',
   'INDUCE',
+  'INIT',
   'INITIAL',
   'INLINE',
   'INOUT',
@@ -1505,7 +1506,7 @@ connection.console.log( `lookupSymbol name ${JSON.stringify(table[name])}` );
           state = 'init';
           global = true;
         }
-        else if ( ( tt.value === 'INIT' || tt.value === 'PRESET' ) && ( state === 'global' || state === 'init' ) ) {
+        else if ( ( tt.value === 'INIT' || tt.value === 'INITIAL' || tt.value === 'PRESET' ) && ( state === 'global' || state === 'init' ) ) {
           state = 'initval';
           init = true;
         }
