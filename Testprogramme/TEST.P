@@ -74,6 +74,13 @@ DCL X FLOAT;
 SPC demo TASK;
 DCL STR CHAR(20);
 DCL UnusedGlobalVar FIXED;
+DCL UnusedGlobalVarGlobal FIXED GLOBAL;
+DCL Var FIXED;  ! Verwendung per Makro defVar
+#define defVar "Var"
+
+somethingGlobal: PROC GLOBAL;
+   defVar = 1;
+END;
 
 something: PROC( D DATION INOUT ALPHIC IDENT, A FIXED, B FLOAT);
 DCL (X,UnusedLocalVar) FIXED;
@@ -92,7 +99,8 @@ END;
 demo: TASK PRIO 8;
 DCL x FIXED INIT(8);
 DCL y FLOAT INIT(8.15);
-DCL somethingREF REF PROC;
+DCL somethingREF REF PROC RETURNS( FIXED(31) );
+DCL retVal FIXED(31);
 DCL myTask REF TASK;
 x = -7;
 UnusedLabel:
@@ -101,8 +109,9 @@ AlreadyDefinedLabel:
 IF x = 0 THEN     ! Operator = ist Fehler!
    ! Kommentar
    CALL something( A1, 5,12.3 );
+   something( A1, 5,12.3 );
    CALL somethingUndefined;
-   CALL somethingREF;
+   retVal = somethingREF();
    GOTO UndefinedLabel;
    CALL something;
    GOTO AlreadyDefinedLabel;
@@ -121,7 +130,20 @@ ELSE
    CALL somethingSPC;
 FIN;
 myTask = demo;
+ACTIVATE;
+ACTIVATE myTask ALL 1 SEC;
+ACTIVATE myTask 10;
 ACTIVATE myTask;
+ACTIVATE myTask PRIO 10;
+SUSPEND myTask;
+SUSPEND;
+CONTINUE myTask;
+CONTINUE myTask PRIO 11;
+AFTER 10 SEC RESUME;
+TERMINATE myTask;
+TERMINATE;
+PREVENT myTask;
+PREVENT;
 WHILE ( 1==2
 AND 3 == 4 ) REPEAT
  x = 2 * x;
@@ -184,5 +206,15 @@ Hallo: PROC;
 CALL something;
 */
 
+SPC P2 PROC( FIXED, FIXED );
+
+T2: TASK;
+   CALL P2(1,2);
+   P2(1,2);
+END;
+
+P2: PROC( A FIXED, B FIXED );
+  A := 1;
+END;
 
 MODEND;

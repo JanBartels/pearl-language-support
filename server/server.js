@@ -453,7 +453,39 @@ const END_KEYWORD_MAP = {
   MODEND: ['MODULE', 'SHELLMODULE']
 };
 
-const TASK_CTRL_KEYWORDS = ['ACTIVATE', 'PREVENT', 'TERMINATE', 'SUSPEND', 'RESUME'];
+// ... ACTIVATE taskname [ PRIO prio ];
+// PREVENT [ taskname ];
+// TERMINATE [ taskname ];
+// SUSPEND [ taskname ];
+// ... CONTINUE [taskname] [ PRIO prio ];
+// RESUME;
+const TASK_CTRL_KEYWORDS = ['ACTIVATE', 'PREVENT', 'TERMINATE', 'SUSPEND', 'CONTINUE', 'RESUME'];
+const TASK_CTRL_KEYWORDS_OPTIONS = {
+  'ACTIVATE': {
+    task: true,
+    prio: 'opt'
+  },
+  'PREVENT': {
+    task: 'opt',
+    prio: false
+  },
+  'TERMINATE': {
+    task: 'opt',
+    prio: false
+  },
+  'SUSPEND': {
+    task: 'opt',
+    prio: false
+  },
+  'CONTINUE': {
+    task: 'opt',
+    prio: 'opt'
+  },
+  'RESUME': {
+    task: false,
+    prio: false
+  }  
+};
 const SEMA_OP_KEYWORDS = ['REQUEST', 'RELEASE'];
 const BOLT_OP_KEYWORDS = ['ENTER', 'LEAVE', 'RESERVE', 'FREE'];
 
@@ -555,7 +587,7 @@ function analyze(uri, text, settings, options) {
   let section = 'problem';
   const foldingRanges = [];
   let gotoList = [];
-
+  let modendFound = false;
 
   // Vordefinierte Makros aus den Einstellungen holen
   const macros = settings.macros || {};
@@ -626,6 +658,21 @@ function analyze(uri, text, settings, options) {
       const t = tokens[i];
       if (t.type === 'symbol' && t.value === ';') {
         return { token: t, index: i };
+      }
+    }
+    return null;
+  }
+
+  function findNextCommaToken(tokens, index) {
+    for (let i = index + 1; i < tokens.length; i++) {
+      const t = tokens[i];
+      if (t.type === 'symbol') {
+        if (t.value === ',') {  // Token liefern
+          return { token: t, index: i };
+        }
+        if (t.value === ';') {  // Abbruch
+          return null;
+        }
       }
     }
     return null;
@@ -1564,7 +1611,7 @@ connection.console.log( `lookupSymbol name ${JSON.stringify(table[name])}` );
         global, 
         init
       },
-      used: false
+      used: global    // Globale Symbole als benutzt markieren
     };
   };
 
@@ -1573,7 +1620,7 @@ connection.console.log(`markUnusedVariables: length ${scopeStack.length}`);
     if ( scopeStack.length > 0 ) {
       const currentScope = scopeStack[ scopeStack.length - 1];
 connection.console.log(`markUnusedVariables: currentScope: ${JSON.stringify(currentScope)}`);
-      Object.values(currentScope).filter(identifier => !identifier.used ).forEach(identifier => {
+      Object.values(currentScope).filter(identifier => !identifier.used && !( identifier.typeDescription && identifier.typeDescription.global) ).forEach(identifier => {
         addDiagnosticWarning(`Bezeichner ${identifier.nameToken.value} nicht verwendet.`, identifier.nameToken);
         addDiagnosticHint( 'inaktiv', identifier.nameToken, [DiagnosticTag.Unnecessary]);
       });
@@ -1589,24 +1636,29 @@ connection.console.log(`markUnusedVariables: currentScope: ${JSON.stringify(curr
       continue;
     }
 
-    // Label-Definition: Identifier gefolgt von ':'
+    // Label-Definition: Identifier gefolgt von ':' (Label, PROC, TASK) oder '(' (Prozeduraufruf)
     if (t.type === 'identifier') {
       const next = findNextCodeToken(tokens, i);
-      if (next && next.token.type === 'symbol' && next.token.value === ':') {
-        // Prüfen, ob danach PROC/TASK kommt -> dann ist es eine PROC/TASK-Implementierung
-        const afterLabel = findNextCodeToken(tokens, next.index);
-        if (!(afterLabel && afterLabel.token.type === 'keyword' && (afterLabel.token.value === 'PROC' || afterLabel.token.value === 'PROCEDURE' || afterLabel.token.value === 'TASK'))) {
-          // normales Label
-          if ( scopeStack.length >= 2 ) {
-            const currentScope = scopeStack[1];
-            const identifier = createIdentifier(t, [], false, false, false, '@LABEL', false, false);
-            currentScope[t.value] = identifier;   // PROC/TASK ist immer globaler Scope
+      if (next && next.token.type === 'symbol') {
+        if (next.token.value === ':') {
+          // Prüfen, ob danach PROC/TASK kommt -> dann ist es eine PROC/TASK-Implementierung
+          const afterLabel = findNextCodeToken(tokens, next.index);
+          if (!(afterLabel && afterLabel.token.type === 'keyword' && (afterLabel.token.value === 'PROC' || afterLabel.token.value === 'PROCEDURE' || afterLabel.token.value === 'TASK'))) {
+            // normales Label
+            if ( scopeStack.length >= 2 ) {
+              const currentScope = scopeStack[1];
+              const identifier = createIdentifier(t, [], false, false, false, '@LABEL', false, false);
+              currentScope[t.value] = identifier;   // PROC/TASK ist immer globaler Scope
+            }
+            else {
+              addDiagnosticError(`Label ${t.value} außerhalb von PROC/TASK.`, t);
+            }
           }
-          else {
-            addDiagnosticError(`Label ${t.value} außerhalb von PROC/TASK.`, t);
-          }
+          continue;
         }
-        continue;
+        if (next.token.value === '(') {
+          // Prozeduraufruf
+        }
       }
       // Identifier (Verwendung)
       const definition = lookupSymbol(scopeStack, t.value);
@@ -1730,6 +1782,7 @@ connection.console.log( `FIN für ${startToken.token.value} von ${startToken.tok
       ) {
         addDiagnosticError('Unerwartetes MODEND ohne passenden Block (MODULE/SHELLMODULE).', t);
       } else {
+        modendFound = true;
         const startToken = blockStack.pop();
         markUnusedVariables();
         if (scopeStack.length > 1) scopeStack.pop();
@@ -1788,21 +1841,24 @@ logIdentifier( dclName, `DCL level: ${scopeStack.length - 1}` );
     }
 
     // ---------------- Blockstarts & Deklarationen ----------------
-    if (kw === 'MODULE' || kw === 'SHELLMODULE' || kw === 'IF' || kw === 'CASE') {
-      if (kw === 'MODULE' || kw === 'SHELLMODULE') {      
-        const next = findNextCodeToken(tokens, i);
-        if (next && next.token.type === 'identifier') {
-          let endIndex = next.index;
-          const identifier = createIdentifier( next.token, [], false, false, false, kw, false, false );
-          const currentScope = scopeStack[0];
-          currentScope[next.token.value] = identifier;   // MODULE/SHELLMODULE ist immer globaler Scope
-          i = endIndex;
-        }
+    if (kw === 'MODULE' || kw === 'SHELLMODULE') {
+      const next = findNextCodeToken(tokens, i);
+      if (next && next.token.type === 'identifier') {
+        let endIndex = next.index;
+        const identifier = createIdentifier( next.token, [], false, false, false, kw, false, false );
+        identifier.used = true; // MODULE/SHELLMODULE ist 'used', weil nach außen sichtbar
+        const currentScope = scopeStack[0];
+        currentScope[next.token.value] = identifier;   // MODULE/SHELLMODULE ist immer globaler Scope
+        i = endIndex;
       }
-
       // Blockstart, keine speziellen Deklarationen
       blockStack.push({ keyword: kw, token: t });
-//      scopeStack.push({});
+      continue;
+    }
+
+    if (kw === 'IF' || kw === 'CASE') {
+      // Blockstart, keine speziellen Deklarationen
+      blockStack.push({ keyword: kw, token: t });
       continue;
     }
 
@@ -1845,6 +1901,7 @@ logIdentifier( dclName, `DCL level: ${scopeStack.length - 1}` );
           const currentScope = scopeStack[scopeStack.length - 1];
           const typeTokens = [ prev2.token, prev.token, t ];
           const identifier = createIdentifier( prev2.token, typeTokens, false, false, false, kind, false, false );
+          identifier.used = ( kw === 'TASK' );    // immer setzen, weil TASK nach außen sichtbar ist.
 //logIdentifier( identifier, `${kind} level: ${scopeStack.length - 1}` );
           currentScope[labelName] = identifier;   // PROC/TASK ist immer globaler Scope
 
@@ -1854,7 +1911,7 @@ logIdentifier( dclName, `DCL level: ${scopeStack.length - 1}` );
 
           // PROC-Parameter aus Header (Text von PROC bis zum nächsten ')')
           if (kind === 'PROC' || kind === 'PROCEDURE') {
-            const nextTok = findNextCodeToken(tokens, i);
+            let nextTok = findNextCodeToken(tokens, i);
             if (nextTok && nextTok.token.type === 'symbol' && nextTok.token.value === '(') {
               const closeParen = findMatchingParenToken(tokens, nextTok.index );
               if ( closeParen ) {
@@ -1865,7 +1922,32 @@ logIdentifier( dclName, `DCL level: ${scopeStack.length - 1}` );
                   currentScope[paramName.nameToken.value] = paramName;
                 }
 
-                i = closeParen.index;
+                // ... [RETURNS( type )] [GLOBAL];
+                nextTok = findNextCodeToken(tokens, i = closeParen.index);
+                if (nextTok && nextTok.token.type === 'keyword') {
+                  if (nextTok.token.value === 'RETURNS') {
+                    nextTok = findNextCodeToken(tokens, i = nextTok.index);
+                    if (nextTok && nextTok.token.type === 'symbol' && nextTok.token.value === '(') {
+                      const openIndex = nextTok.index;
+                      const closeParen = findMatchingParenToken(tokens, nextTok.index );
+                      if ( closeParen ) {
+                        const nextTok = findNextCodeToken(tokens, i = openIndex);
+                        const typeDescription = parseTypeDescription(tokens, nextTok.index, closeTok.index);
+                        i = closeTok.index;
+                      }
+                      else {
+                        addDiagnosticError(`) erwartet.`, nextTok.token);
+                      }
+                    }
+                    else {
+                      addDiagnosticError(`( erwartet.`, nextTok.token);
+                    }
+                  }
+                  if (nextTok.token.value === 'GLOBAL') {
+                    identifier.used = identifier.typeDescription.global = true;
+                    i = nextTok.index;
+                  }
+                }
                 continue;
               }
             }
@@ -1914,7 +1996,6 @@ logIdentifier( dclName, `DCL level: ${scopeStack.length - 1}` );
     // CALL PROC
     if (kw === 'CALL') {
       const proc = findNextCodeToken(tokens, i);
-      const nextSemicolon = findNextSemicolonToken(tokens, proc.index);
       if (proc && proc.token.type === 'identifier') {
         const name = proc.token.value;
         const sym = lookupSymbol(scopeStack, name, 'PROCEDURE');
@@ -1925,12 +2006,11 @@ logIdentifier( dclName, `DCL level: ${scopeStack.length - 1}` );
         else {
           addDiagnosticError(`Aufruf von '${name}' ohne passende PROC-Deklaration (PROC/DCL PROC/SPC PROC/ENTRY).`, proc.token);
         }
+        i = proc.index;
       }
       else {
         addDiagnosticError(`${kw}: Bezeichner (PROC/PROCEDURE/ENTRY) erwartet.`, proc.token);
       }
-      if (nextSemicolon)
-        i = nextSemicolon.index;
       continue;
     }
 
@@ -1956,25 +2036,88 @@ connection.console.log( `GOTO ${JSON.stringify( label )} ${JSON.stringify( semic
 
     // TASK-Operationen
     if (TASK_CTRL_KEYWORDS.includes(kw)) {
-      const task = findNextCodeToken(tokens, i);
-      const semicolon = findNextCodeToken(tokens, task.index);
-      const nextSemicolon = findNextSemicolonToken(tokens, i);
-      if (task && task.token.type === 'identifier') {
-        const name = task.token.value;
+      // ... ACTIVATE taskname [ PRIO prio ];
+      // PREVENT [ taskname ];
+      // TERMINATE [ taskname ];
+      // SUSPEND [ taskname ];
+      // ... CONTINUE [taskname] [ PRIO prio ];
+      // RESUME;
+/*      
+const TASK_CTRL_KEYWORDS_OPTIONS = {
+  'ACTIVATE': {
+    task: true,
+    prio: 'opt'
+  },
+  'PREVENT': {
+    task: 'opt',
+    prio: false
+  },
+  'TERMINATE': {
+    task: 'opt',
+    prio: false
+  },
+  'SUSPEND': {
+    task: 'opt',
+    prio: false
+  },
+  'CONTINUE': {
+    task: 'opt',
+    prio: 'opt'
+  },
+  'RESUME': {
+    task: false,
+    prio: false
+  }  
+};
+*/
+      const options = TASK_CTRL_KEYWORDS_OPTIONS[kw];
+      let next = findNextCodeToken(tokens, i);
+      if (next && next.token.type === 'identifier') {
+        const name = next.token.value;
         const sym = lookupSymbol(scopeStack, name, 'TASK');
         if (sym) {
-          task.token.definition = sym;
-          sym.used = true;
+          if (options.task === true || options.task === 'opt' ) {
+            next.token.definition = sym;
+            sym.used = true;
+          }
+          else {
+            addDiagnosticError(`'${name}' wird mit ${kw} verwendet, ist aber keine TASK-Deklaration (TASK/SPC TASK).`, next.token);
+          }
         }
         else {
-          addDiagnosticError(`TASK '${name}' wird mit ${kw} verwendet, es existiert aber keine TASK-Deklaration (TASK/SPC TASK).`, task.token);
+          addDiagnosticError(`TASK '${name}' wird mit ${kw} verwendet, es existiert aber keine TASK-Deklaration (TASK/SPC TASK).`, next.token);
+        }
+        next = findNextCodeToken(tokens, i = next.index);
+      }
+      else {
+        if (options.task === true) {
+          addDiagnosticError(`'TASK-Name erwartet`, next.token);
         }
       }
-      if (semicolon && (!nextSemicolon || nextSemicolon.index !== semicolon.index) ) {
-        addDiagnosticError(`${kw} Semikolon erwartet.`, semicolon.token);
+      if (next && next.token.type === 'keyword') {
+        if (next.token.value === 'PRIO' || next.token.value === 'PRIORITY')
+        {
+          if (options.prio === false ) {
+            addDiagnosticError(`'Schlüsselwort PRIO nicht erlaubt bei ${kw}`, next.token);
+          }
+        }
+        else {
+          addDiagnosticError(`'Schlüsselwort PRIO erwartet`, next.token);
+        }
+        next = findNextSemicolonToken(tokens, i = next.index);
       }
-      if ( semicolon )
-        i = semicolon.index;
+      else {
+        if (options.prio === true) {
+          addDiagnosticError(`'PRIO erwartet`, next.token);
+        }
+      }
+
+      if (next && next.token.type === 'symbol' && next.token.value === ';') {
+        i = next.index;
+      }
+      else {
+        addDiagnosticError(`${kw} Semikolon erwartet.`, next.token);
+      }
 
       continue;
     }
@@ -2062,8 +2205,10 @@ connection.console.log( `GOTO ${JSON.stringify( label )} ${JSON.stringify( semic
   }
 
   // unbenutze globale Variablen suchen
-  connection.console.log( 'globale unbenutzte Variablen: -------');
-  markUnusedVariables();
+  if (!modendFound) {
+    connection.console.log( 'globale unbenutzte Variablen: -------');
+    markUnusedVariables();
+  }
 
   // Offene Blöcke am Ende melden (nur bei vollständiger Analyse)
   for (const open of blockStack) {
