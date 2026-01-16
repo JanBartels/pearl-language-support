@@ -490,6 +490,245 @@ const TASK_CTRL_KEYWORDS_OPTIONS = {
 const SEMA_OP_KEYWORDS = ['REQUEST', 'RELEASE'];
 const BOLT_OP_KEYWORDS = ['ENTER', 'LEAVE', 'RESERVE', 'FREE'];
 
+const BUILTIN_PROCS = {
+  'NOW': {
+    signature: "SPC NOW PROC RETURNS ( CLOCK ) GLOBAL ;",
+    notes: "Predefined function; returns current system time as CLOCK."
+  },
+  'DATE': {
+    signature: "SPC DATE PROC RETURNS ( CHAR(10) ) GLOBAL ;",
+    notes: "Predefined function; returns date as \"yyyy-mm-dd\"."
+  },
+  'ASSIGN': {
+    signature: "SPC ASSIGN ENTRY ( d DATION ALPHIC IDENT, new CHAR(24) ) GLOBAL ;",
+    notes: "Change logical assignment of an ALPHIC DATION (RTOS-UH)."
+  },
+  'RANF': {
+    signature: "SPC RANF ENTRY ( state1 FIXED(31) IDENT, state2 FIXED(31) IDENT ) RETURNS ( FLOAT(23) ) GLOBAL ;",
+    notes: "Random float in [0,1); updates generator state in state1/state2."
+  },
+  'DRANF': {
+    signature: "SPC DRANF ENTRY ( state1 FIXED(31) IDENT, state2 FIXED(31) IDENT ) RETURNS ( FLOAT(55) ) GLOBAL ;",
+    notes: "Double-precision variant of RANF."
+  },
+  'TASKST': {
+    signature: "SPC TASKST ENTRY ( name CHAR(24) ) RETURNS ( BIT(32) ) GLOBAL ;",
+    notes: "Returns encoded task status bits for the named task."
+  },
+  'SETPRI': {
+    signature: "SPC SETPRI ENTRY ( newprio FIXED ) RETURNS ( FIXED ) GLOBAL ;",
+    notes: "Set priority of current task; returns old priority."
+  },
+  'GETPRI': {
+    signature: "SPC GETPRI ENTRY ( what FIXED ) RETURNS ( FIXED ) GLOBAL ;",
+    notes: "Return default or current priority depending on parameter value."
+  },
+  'ACOS': {
+    signature: "SPC ACOS PROC ( x FLOAT(23) ) RETURNS ( FLOAT(23) ) GLOBAL ;",
+    notes: "ACOS = each of the standard math builtins"
+  },
+  'ACOS': {
+    signature: "SPC ACOS PROC ( x FLOAT(55) ) RETURNS ( FLOAT(55) ) GLOBAL ;",
+    notes: "ACOS = each of the standard math builtins"
+  },
+  'ASIN': {
+    signature: "SPC ASIN PROC ( x FLOAT(23) ) RETURNS ( FLOAT(23) ) GLOBAL ;",
+    notes: "ASIN = each of the standard math builtins"
+  },
+  'ASIN': {
+    signature: "SPC ASIN PROC ( x FLOAT(55) ) RETURNS ( FLOAT(55) ) GLOBAL ;",
+    notes: "ASIN = each of the standard math builtins"
+  },
+  'ATAN': {
+    signature: "SPC ATAN PROC ( x FLOAT(23) ) RETURNS ( FLOAT(23) ) GLOBAL ;",
+    notes: "ATAN = each of the standard math builtins"
+  },
+  'ATAN': {
+    signature: "SPC ATAN PROC ( x FLOAT(55) ) RETURNS ( FLOAT(55) ) GLOBAL ;",
+    notes: "ATAN = each of the standard math builtins"
+  },
+  'COS': {
+    signature: "SPC COS PROC ( x FLOAT(23) ) RETURNS ( FLOAT(23) ) GLOBAL ;",
+    notes: "COS = each of the standard math builtins"
+  },
+  'COS': {
+    signature: "SPC COS PROC ( x FLOAT(55) ) RETURNS ( FLOAT(55) ) GLOBAL ;",
+    notes: "COS = each of the standard math builtins"
+  },
+  'EXP': {
+    signature: "SPC EXP PROC ( x FLOAT(23) ) RETURNS ( FLOAT(23) ) GLOBAL ;",
+    notes: "EXP = each of the standard math builtins"
+  },
+  'EXP': {
+    signature: "SPC EXP PROC ( x FLOAT(55) ) RETURNS ( FLOAT(55) ) GLOBAL ;",
+    notes: "EXP = each of the standard math builtins"
+  },
+  'LD': {
+    signature: "SPC LD PROC ( x FLOAT(23) ) RETURNS ( FLOAT(23) ) GLOBAL ;",
+    notes: "LD = each of the standard math builtins"
+  },
+  'LD': {
+    signature: "SPC LD PROC ( x FLOAT(55) ) RETURNS ( FLOAT(55) ) GLOBAL ;",
+    notes: "LD = each of the standard math builtins"
+  },
+  'LG': {
+    signature: "SPC LG PROC ( x FLOAT(23) ) RETURNS ( FLOAT(23) ) GLOBAL ;",
+    notes: "LG = each of the standard math builtins"
+  },
+  'LG': {
+    signature: "SPC LG PROC ( x FLOAT(55) ) RETURNS ( FLOAT(55) ) GLOBAL ;",
+    notes: "LG = each of the standard math builtins"
+  },
+  'LN': {
+    signature: "SPC LN PROC ( x FLOAT(23) ) RETURNS ( FLOAT(23) ) GLOBAL ;",
+    notes: "LN = each of the standard math builtins"
+  },
+  'LN': {
+    signature: "SPC LN PROC ( x FLOAT(55) ) RETURNS ( FLOAT(55) ) GLOBAL ;",
+    notes: "LN = each of the standard math builtins"
+  },
+  'PI': {
+    signature: "SPC PI PROC ( x FLOAT(23) ) RETURNS ( FLOAT(23) ) GLOBAL ;",
+    notes: "NPIAME = each of the standard math builtins"
+  },
+  'PI': {
+    signature: "SPC PI PROC ( x FLOAT(55) ) RETURNS ( FLOAT(55) ) GLOBAL ;",
+    notes: "PI = each of the standard math builtins"
+  },
+  'SIN': {
+    signature: "SPC SIN PROC ( x FLOAT(23) ) RETURNS ( FLOAT(23) ) GLOBAL ;",
+    notes: "SIN = each of the standard math builtins"
+  },
+  'SIN': {
+    signature: "SPC SIN PROC ( x FLOAT(55) ) RETURNS ( FLOAT(55) ) GLOBAL ;",
+    notes: "SIN = each of the standard math builtins"
+  },
+  'SQRT': {
+    signature: "SPC SQRT PROC ( x FLOAT(23) ) RETURNS ( FLOAT(23) ) GLOBAL ;",
+    notes: "SQRT = each of the standard math builtins"
+  },
+  'SQRT': {
+    signature: "SPC SQRT PROC ( x FLOAT(55) ) RETURNS ( FLOAT(55) ) GLOBAL ;",
+    notes: "SQRT = each of the standard math builtins"
+  },
+  'TAN': {
+    signature: "SPC TAN PROC ( x FLOAT(55) ) RETURNS ( FLOAT(55) ) GLOBAL ;",
+    notes: "TAN = each of the standard math builtins"
+  },
+  'ATANH': {
+    signature: "SPC ATANH PROC ( x FLOAT ) RETURNS ( FLOAT ) GLOBAL ;",
+    notes: "FPU-specific builtin functions; only present if compiled with FPU support."
+  },
+  'COSH': {
+    signature: "SPC COSH PROC ( x FLOAT ) RETURNS ( FLOAT ) GLOBAL ;",
+    notes: "FPU-specific builtin functions; only present if compiled with FPU support."
+  },
+  'EXPM1': {
+    signature: "SPC EXPM1 PROC ( x FLOAT ) RETURNS ( FLOAT ) GLOBAL ;",
+    notes: "FPU-specific builtin functions; only present if compiled with FPU support."
+  },
+  'INT': {
+    signature: "SPC INT PROC ( x FLOAT ) RETURNS ( FLOAT ) GLOBAL ;",
+    notes: "FPU-specific builtin functions; only present if compiled with FPU support."
+  },
+  'INTRZ': {
+    signature: "SPC INTRZ PROC ( x FLOAT ) RETURNS ( FLOAT ) GLOBAL ;",
+    notes: "FPU-specific builtin functions; only present if compiled with FPU support."
+  },
+  'LNP1': {
+    signature: "SPC LNP1 PROC ( x FLOAT ) RETURNS ( FLOAT ) GLOBAL ;",
+    notes: "FPU-specific builtin functions; only present if compiled with FPU support."
+  },
+  'NEG': {
+    signature: "SPC NEG PROC ( x FLOAT ) RETURNS ( FLOAT ) GLOBAL ;",
+    notes: "FPU-specific builtin functions; only present if compiled with FPU support."
+  },
+  'SINH': {
+    signature: "SPC SINH PROC ( x FLOAT ) RETURNS ( FLOAT ) GLOBAL ;",
+    notes: "FPU-specific builtin functions; only present if compiled with FPU support."
+  },
+  'TANH': {
+    signature: "SPC TANH PROC ( x FLOAT ) RETURNS ( FLOAT ) GLOBAL ;",
+    notes: "FPU-specific builtin functions; only present if compiled with FPU support."
+  },
+  'TENTOX': {
+    signature: "SPC TENTOX PROC ( x FLOAT ) RETURNS ( FLOAT ) GLOBAL ;",
+    notes: "FPU-specific builtin functions; only present if compiled with FPU support."
+  },
+  'TWOTOX': {
+    signature: "SPC TWOTOX PROC ( x FLOAT ) RETURNS ( FLOAT ) GLOBAL ;",
+    notes: "FPU-specific builtin functions; only present if compiled with FPU support."
+  },
+  'ST': {
+    signature: "SPC ST PROC ( d DATION IDENT ) RETURNS ( FIXED(15) ) GLOBAL ;",
+    notes: "Status of last I/O for given DATION."
+  },
+  'REWIND': {
+    signature: "SPC REWIND ENTRY ( d DATION IDENT ) GLOBAL ;",
+    notes: "Rewind DATION"
+  },
+  'SYNC': {
+    signature: "SPC SYNC   ENTRY ( d DATION IDENT ) GLOBAL ;",
+    notes: "Sync DATION and device"
+  },
+  'SEEK': {
+    signature: "SPC SEEK   ENTRY ( d DATION IDENT, pos FIXED(31) ) GLOBAL ;",
+    notes: "Seek position of DATION."
+  },
+  'SAVEP': {
+    signature: "SPC SAVEP  ENTRY ( d DATION IDENT, pos FIXED(31) IDENT ) GLOBAL ;",
+    notes: "Get position of DATION."
+  },
+  'APPEND': {
+    signature: "SPC APPEND ENTRY ( d DATION IDENT ) GLOBAL ;",
+    notes: "Open DATION for appending data."
+  },
+  'SETPIX': {
+    signature: "SPC SETPIX ENTRY ( xpos FIXED(15), ypos FIXED(15), colour FIXED(15) ) GLOBAL ;",
+    notes: "Set pixel in bitmapped graphics."
+  },
+  'GETPIX': {
+    signature: "SPC GETPIX ENTRY ( xpos FIXED(15), ypos FIXED(15), colour FIXED(15) IDENT ) GLOBAL ;",
+    notes: "Get pixel in bitmapped graphics."
+  },
+  'LINE': {
+    signature: "SPC LINE   ENTRY ( x1pos FIXED(15), y1pos FIXED(15), x2pos FIXED(15), y2pos FIXED(15), colour FIXED(15) ) GLOBAL ;",
+    notes: "Draw line in bitmapped graphics."
+  },
+  'REFADD': {
+    signature: "SPC REFADD ENTRY ( p REF, shift FIXED(31) ) GLOBAL ;",
+    notes: "Pointer arithmetic on REF"
+  },
+  'BEG': {
+    signature: "SPC BEG ENTRY ( s CHAR(255) IDENT ) RETURNS ( FIXED(15) ) GLOBAL ;",
+    notes: "BEG → erste nicht-Blank-Position, LEN."
+  },
+  'LEN': {
+    signature: "SPC LEN ENTRY ( s CHAR(255) IDENT ) RETURNS ( FIXED(15) ) GLOBAL ;",
+    notes: "letzte nicht-Blank-Position."
+  },
+  'INSTR': {
+    signature: "SPC INSTR ENTRY ( s1 CHAR(255) IDENT, anf1 FIXED(15) IDENT, end1 FIXED(15) IDENT, s2 CHAR(255) IDENT, anf2 FIXED(15) IDENT, end2 FIXED(15) IDENT ) RETURNS ( FIXED(15) ) GLOBAL ;",
+    notes: "Teilstring-Suche."
+  },
+  'CMPW': {
+    signature: "SPC CMPW ENTRY ( s1 CHAR(255) IDENT, anf1 FIXED(15) IDENT, end1 FIXED(15) IDENT, s2 CHAR(255) IDENT, anf2 FIXED(15) IDENT, end2 FIXED(15) IDENT ) RETURNS ( FIXED(15) ) GLOBAL ;",
+    notes: "Vergleich mit Wildcards (*, ?)."
+  },
+  'MID': {
+    signature: "SPC MID ENTRY ( s CHAR(255) IDENT, anf1 FIXED(15) IDENT, end1 FIXED(15) IDENT ) RETURNS ( CHAR(255) ) GLOBAL ;",
+    notes: "Teilstring kopieren: string2 = MID(string1, anf1, end1)."
+  },
+  'KON': {
+    signatures: "SPC KON ENTRY ( s1 CHAR(255) IDENT, anf1 FIXED(15) IDENT, end1 FIXED(15) IDENT, s2 CHAR(255) IDENT, anf2 FIXED(15) IDENT, end2 FIXED(15) IDENT ) RETURNS ( CHAR(255) ) GLOBAL ;",
+    notes: "zwei Teilstrings konkateniert → string3"
+  },
+  'INSER': {
+    signature: "SPC INSER ENTRY ( s1 CHAR(255) IDENT, anf1 FIXED(15) IDENT, end1 FIXED(15) IDENT, s2 CHAR(255) IDENT, anf2 FIXED(15) IDENT, end2 FIXED(15) IDENT ) RETURNS ( CHAR(255) ) GLOBAL ;",
+    notes: "Teilstring aus s2 in s1 einfügen → string3."
+  }
+};
+
 // ------------------------------
 // Tokenizer
 // ------------------------------
@@ -722,6 +961,20 @@ connection.console.log( `lookupSymbol name ${JSON.stringify(table[name])}` );
         }
         return undefined;
       }
+    }
+    if (kind === 'PROCEDURE') {
+      // vordefinierte Prozeduren checken
+/*      
+      const BUILTIN_PROCS = {
+        'NOW': {
+          signature: "SPC NOW PROC RETURNS ( CLOCK ) GLOBAL ;",
+          notes: "Predefined function; returns current system time as CLOCK."
+        },
+        ...
+    };
+*/
+    if (BUILTIN_PROCS[ name ])
+      connection.console.log( `lookupSymbol builtin PROC ${JSON.stringify(BUILTIN_PROCS[ name ])}` );
     }
     return undefined;
   }
@@ -1628,7 +1881,7 @@ connection.console.log(`markUnusedVariables: currentScope: ${JSON.stringify(curr
     }
   }
 
-  let loopVar = undefined;  // für FOR-Loop
+  let loopVar = undefined;  // für FOR-Loop Laufvariablen
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];
     if (t.offset > stopOffset) break;
@@ -1639,6 +1892,7 @@ connection.console.log(`markUnusedVariables: currentScope: ${JSON.stringify(curr
 
     // Label-Definition: Identifier gefolgt von ':' (Label, PROC, TASK) oder '(' (Prozeduraufruf)
     if (t.type === 'identifier') {
+      let kind = '';
       const next = findNextCodeToken(tokens, i);
       if (next && next.token.type === 'symbol') {
         if (next.token.value === ':') {
@@ -1659,10 +1913,11 @@ connection.console.log(`markUnusedVariables: currentScope: ${JSON.stringify(curr
         }
         if (next.token.value === '(') {
           // Prozeduraufruf
+          kind = 'PROCEDURE';
         }
       }
       // Identifier (Verwendung)
-      const definition = lookupSymbol(scopeStack, t.value);
+      const definition = lookupSymbol(scopeStack, t.value, kind);
       if (definition) {
         t.definition = definition;
         definition.used = true;
@@ -1933,8 +2188,8 @@ logIdentifier( dclName, `DCL level: ${scopeStack.length - 1}` );
                       const closeParen = findMatchingParenToken(tokens, nextTok.index );
                       if ( closeParen ) {
                         const nextTok = findNextCodeToken(tokens, i = openIndex);
-                        const typeDescription = parseTypeDescription(tokens, nextTok.index, closeTok.index);
-                        i = closeTok.index;
+                        const typeDescription = parseTypeDescription(tokens, nextTok.index, closeParen.index);
+                        i = closeParen.index;
                       }
                       else {
                         addDiagnosticError(`) erwartet.`, nextTok.token);
