@@ -22,6 +22,7 @@ const {
   TextDocuments,
   ProposedFeatures,
   InitializeParams,
+  WorkspaceFolder,
   DidChangeConfigurationNotification,
   TextDocumentSyncKind,
   CompletionItemKind,
@@ -29,7 +30,136 @@ const {
   DiagnosticTag
 } = require('vscode-languageserver');
 
+const { fileURLToPath, pathToFileURL } = require('url');
+
 const { TextDocument } = require('vscode-languageserver-textdocument');
+
+const path = require('path');
+
+// Workspace-Unterstützung
+let workspaceFolders = null;
+let legacyRootUri = null;
+
+/**
+ * Muss einmal im onInitialize-Handler aufgerufen werden.
+ * Kümmert sich um workspaceFolders / rootUri / rootPath.
+ */
+function initWorkspaceState(params){
+  // workspaceFolders vom Client übernehmen:
+  //  - null     => kein Workspace (typisch: nur Datei geöffnet)
+  //  - []       => Workspace ohne Ordner
+  //  - [...]/n>0=> normaler (auch multi-root) Workspace
+  workspaceFolders = params.workspaceFolders ?? null;
+
+  // Fallback für ältere Clients:
+  if (!workspaceFolders || workspaceFolders.length === 0) {
+    if (params.rootUri) {
+      legacyRootUri = params.rootUri;
+    } else if (params.rootPath) {
+      // rootPath ist deprecated, aber immer noch verbreitet
+      legacyRootUri = pathToFileURL(params.rootPath).toString();
+    } else {
+      legacyRootUri = null;
+    }
+  } else {
+    legacyRootUri = null;
+  }
+}
+
+/**
+ * Muss im workspace/didChangeWorkspaceFolders-Handler aufgerufen werden.
+ */
+function updateWorkspaceFolders(event) {
+  if (workspaceFolders === null) {
+    workspaceFolders = [];
+  }
+
+  // Entfernte Folders rauswerfen
+  const removedUris = new Set(event.removed.map(f => f.uri));
+  workspaceFolders = workspaceFolders.filter(f => !removedUris.has(f.uri));
+
+  // Hinzugefügte Folders anhängen
+  workspaceFolders.push(...event.added);
+}
+
+/**
+ * Liefert das passende WorkspaceFolder-Objekt zu einem Dokument-URI,
+ * oder undefined wenn es keinen passenden Workspace-Folder gibt.
+ */
+function getWorkspaceFolderForUri(docUri) {
+  if (!workspaceFolders || workspaceFolders.length === 0) return undefined;
+
+  const doc = docUri;
+
+  // Längstes passendes Prefix wählen (wichtig bei Multi-Root)
+  let best;
+  let bestLen = -1;
+
+  for (const folder of workspaceFolders) {
+    let folderUri = folder.uri;
+    if (!folderUri.endsWith('/')) {
+      folderUri += '/';
+    }
+
+    if (doc.startsWith(folderUri) && folderUri.length > bestLen) {
+      best = folder;
+      bestLen = folderUri.length;
+    }
+  }
+
+  return best;
+}
+
+/**
+ * Liefert ein sinnvolles "Working Directory" für ein Dokument:
+ *
+ * Priorität:
+ *  1) Passender Workspace-Folder (Multi-Root-fähig)
+ *  2) legacy rootUri / rootPath (ältere Clients)
+ *  3) Ordner der Datei selbst (Open-File-Modus)
+ *
+ * Gibt undefined zurück, wenn gar nichts ableitbar ist (sollte praktisch
+ * nur ohne docUri und ohne Workspace passieren).
+ */
+function getWorkingDirectoryForDocument(docUri) {
+  // 1) Passenden Workspace-Folder zu dieser Datei suchen
+  if (docUri) {
+    const folder = getWorkspaceFolderForUri(docUri);
+    if (folder) {
+       return filePathFromUri(folder.uri);
+    }
+  }
+
+  // 2) Fallback: legacy rootUri / rootPath
+  if (legacyRootUri) {
+    return filePathFromUri(legacyRootUri);
+  }
+
+  // 3) Open-File-Fall: einfach den Ordner der Datei nehmen
+  if (docUri) {
+    const fsPath = filePathFromUri(docUri);
+    return path.dirname(fsPath);
+  }
+
+  // Kein Hinweis, was sinnvoll wäre
+  return undefined;
+}
+
+/**
+ * Optional: Gibt irgendein "Workspace Root" zurück, z.B. für globale Scans.
+ *  - Bei Multi-Root einfach der erste Folder
+ *  - Sonst legacy root
+ */
+function getAnyWorkspaceRoot() {
+  if (workspaceFolders && workspaceFolders.length > 0) {
+    return filePathFromUri(workspaceFolders[0].uri);
+  }
+  if (legacyRootUri) {
+    return filePathFromUri(legacyRootUri);
+  }
+  return undefined;
+}
+
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments(TextDocument);
@@ -109,8 +239,15 @@ let globalSettings = defaultSettings;
 /** @type {Map<string, Promise<any>>} */
 const documentSettings = new Map();
 
+let hasWorkspaceFolderCapability = false;
 
 connection.onInitialize((params) => {
+//  connection.console.log(`onInialize: ${JSON.stringify(params, null, 2)}`);
+
+  hasWorkspaceFolderCapability = !!(
+    params.capabilities.workspace && params.capabilities.workspace.workspaceFolders
+  );
+  initWorkspaceState(params);
 
   const capabilities = params.capabilities;
 
@@ -122,6 +259,12 @@ connection.onInitialize((params) => {
   return {
     capabilities: {
       textDocumentSync: TextDocumentSyncKind.Incremental,
+      workspace: {
+        workspaceFolders: {
+          supported: true,
+          changeNotifications: true,
+        },
+      },      
       completionProvider: { resolveProvider: true },
       hoverProvider: true,
       definitionProvider: true,
@@ -134,13 +277,22 @@ connection.onInitialize((params) => {
         },        
         full: true,     // wir liefern das ganze Dokument
         range: false    // Range-Unterstützung erstmal nicht
-      }      
+      }
     }
   };
 });
 
 connection.onInitialized(() => {
   if (hasConfigurationCapability) {
+
+    // Register for WorkspaceFolders change notifications
+    if (hasWorkspaceFolderCapability) {
+      connection.workspace.onDidChangeWorkspaceFolders(event => {
+        connection.console.log( `workspaceFolders changed: ${JSON.stringify(event, null, 2)}`);
+        updateWorkspaceFolders(event);
+      });
+    }    
+
     // Register for configuration change notifications
     connection.client.register(
       DidChangeConfigurationNotification.type,
@@ -178,16 +330,20 @@ function getDocumentSettings(resource) {
 // ------------------------------
 
 const fs = require('fs');
-const path = require('path');
-const { fileURLToPath, pathToFileURL } = require('url');
 
 // key: absoluter Pfad
 // value: { mtimeMs, text }
 const includeFileCache = new Map();
 
 function filePathFromUri(uri) {
-  if (!uri.startsWith('file://')) return null;
-  return fileURLToPath(uri);
+ if (uri.startsWith('file://')) {
+    try {
+      return fileURLToPath(uri);
+    } catch {
+      // Fallback: lieber irgendwas zurückgeben als crashen
+    }
+  }
+  return uri;
 }
 
 function uriFromFilePath(absPath) {
@@ -369,9 +525,9 @@ const OPERATOR_KEYWORDS = [
 //  'ABS',
   'AND',
   'CAT',
-  'COS',
+//  'COS',
   'CSHIFT',
-  'DATE',
+//  'DATE',
   'ENTIER',
   'EQ',
   'EXOR',
@@ -382,7 +538,7 @@ const OPERATOR_KEYWORDS = [
   'IS',
   'ISNT',
   'LE',
-  'LN',
+//  'LN',
   'LT',
   'LWB',
   'NE',
@@ -391,10 +547,10 @@ const OPERATOR_KEYWORDS = [
   'REM',
   'ROUND',
   'SIGN',
-  'SIN',
-  'SQRT',
-  'TAN',
-  'TANH',
+//  'SIN',
+//  'SQRT',
+//  'TAN',
+//  'TANH',
   'TOBIT',
   'TOCHAR',
   'TOFIXED',
@@ -460,8 +616,7 @@ const END_KEYWORD_MAP = {
 // SUSPEND [ taskname ];
 // ... CONTINUE [taskname] [ PRIO prio ];
 // RESUME;
-const TASK_CTRL_KEYWORDS = ['ACTIVATE', 'PREVENT', 'TERMINATE', 'SUSPEND', 'CONTINUE', 'RESUME'];
-const TASK_CTRL_KEYWORDS_OPTIONS = {
+const TASK_CTRL_KEYWORDS = {
   'ACTIVATE': {
     task: true,
     prio: 'opt'
@@ -973,8 +1128,8 @@ connection.console.log( `lookupSymbol name ${JSON.stringify(table[name])}` );
         ...
     };
 */
-    if (BUILTIN_PROCS[ name ])
-      connection.console.log( `lookupSymbol builtin PROC ${JSON.stringify(BUILTIN_PROCS[ name ])}` );
+      if (BUILTIN_PROCS[ name ])
+        connection.console.log( `lookupSymbol builtin PROC ${JSON.stringify(BUILTIN_PROCS[ name ])}` );
     }
     return undefined;
   }
@@ -1289,9 +1444,8 @@ connection.console.log( `lookupSymbol name ${JSON.stringify(table[name])}` );
               return define;
             });
 
-            const parentPath = filePathFromUri(uri);
-            const baseDir = parentPath ? path.dirname(parentPath) : process.cwd();
-            const absPath = path.resolve(baseDir, finalIncludePath);
+            const parentPath = getWorkingDirectoryForDocument(uri);            
+            const absPath = path.resolve(parentPath, finalIncludePath);
             if (includeStack.length < 100) { // maximale Include-Tiefe erreicht?
               const incText = loadFileTextCached(absPath);
               if (incText.error) {
@@ -1892,7 +2046,6 @@ connection.console.log(`markUnusedVariables: currentScope: ${JSON.stringify(curr
 
     // Label-Definition: Identifier gefolgt von ':' (Label, PROC, TASK) oder '(' (Prozeduraufruf)
     if (t.type === 'identifier') {
-      let kind = '';
       const next = findNextCodeToken(tokens, i);
       if (next && next.token.type === 'symbol') {
         if (next.token.value === ':') {
@@ -1913,11 +2066,20 @@ connection.console.log(`markUnusedVariables: currentScope: ${JSON.stringify(curr
         }
         if (next.token.value === '(') {
           // Prozeduraufruf
-          kind = 'PROCEDURE';
+          const definition = lookupSymbol(scopeStack, t.value, 'PROCEDURE');
+          if (definition) {
+            t.definition = definition;
+            definition.used = true;
+          }
+          else {
+            addDiagnosticError(`${t.value} nicht definiert.`, t);
+          }
+          i = next.index;
+          continue;
         }
       }
       // Identifier (Verwendung)
-      const definition = lookupSymbol(scopeStack, t.value, kind);
+      const definition = lookupSymbol(scopeStack, t.value);
       if (definition) {
         t.definition = definition;
         definition.used = true;
@@ -2291,42 +2453,14 @@ connection.console.log( `GOTO ${JSON.stringify( label )} ${JSON.stringify( semic
     }
 
     // TASK-Operationen
-    if (TASK_CTRL_KEYWORDS.includes(kw)) {
+    if (Object.hasOwn(TASK_CTRL_KEYWORDS,kw)) {
       // ... ACTIVATE taskname [ PRIO prio ];
       // PREVENT [ taskname ];
       // TERMINATE [ taskname ];
       // SUSPEND [ taskname ];
       // ... CONTINUE [taskname] [ PRIO prio ];
       // RESUME;
-/*      
-const TASK_CTRL_KEYWORDS_OPTIONS = {
-  'ACTIVATE': {
-    task: true,
-    prio: 'opt'
-  },
-  'PREVENT': {
-    task: 'opt',
-    prio: false
-  },
-  'TERMINATE': {
-    task: 'opt',
-    prio: false
-  },
-  'SUSPEND': {
-    task: 'opt',
-    prio: false
-  },
-  'CONTINUE': {
-    task: 'opt',
-    prio: 'opt'
-  },
-  'RESUME': {
-    task: false,
-    prio: false
-  }  
-};
-*/
-      const options = TASK_CTRL_KEYWORDS_OPTIONS[kw];
+      const options = TASK_CTRL_KEYWORDS[kw];
       let next = findNextCodeToken(tokens, i);
       if (next && next.token.type === 'identifier') {
         const name = next.token.value;
@@ -3010,7 +3144,10 @@ catch(e) {
 // ------------------------------
 
 documents.onDidOpen((event) => {
-  connection.console.log( `onDidOpen ${event.document.uri}` );
+  const doc = event.document;
+  const wd = getWorkingDirectoryForDocument(doc.uri);
+
+  connection.console.log( `onDidOpen ${event.document.uri} wd: ${wd ?? '<none>'}` );
   validateTextDocument(event.document);
 });
 

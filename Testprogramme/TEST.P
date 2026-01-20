@@ -105,7 +105,7 @@ DCL retVal FIXED(31);
 DCL myTask REF TASK;
 x = -7;
 UnusedLabel:
-y := 47.11E+10;
+y := SIN( 47.11E+10 );
 AlreadyDefinedLabel:
 IF x = 0 THEN     ! Operator = ist Fehler!
    ! Kommentar
@@ -181,6 +181,7 @@ T := 15:45:3.5;
 D := 5 MIN 30 SEC;
 D := .05 SEC;
 D := 5 HRS 10 SEC;
+D := NOW;
 def := 2 MIN;
 #undef def
 def := 3 MIN;
