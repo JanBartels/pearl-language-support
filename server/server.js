@@ -1016,7 +1016,6 @@ function analyze(uri, text, settings, options) {
    * Vorherigen "signifikanten" Token suchen (ohne Kommentare),
    */
   function findPreviousCodeToken(tokens, index) {
-    const line = sameLine ? tokens[index].line : null;
     for (let i = index - 1; i >= 0; i--) {
       const t = tokens[i];
       if (t.type === 'comment' || t.type === 'inactive') continue;
@@ -2488,7 +2487,8 @@ connection.console.log( `GOTO ${JSON.stringify( label )} ${JSON.stringify( semic
             sym.used = true;
           }
           else {
-            addDiagnosticError(`'${name}' wird mit ${kw} verwendet, ist aber keine TASK-Deklaration (TASK/SPC TASK).`, next.token);
+            // options.task === false
+            addDiagnosticError(`${kw} darf nur ohne TASK verwendet werden.`, next.token);
           }
         }
         else {
