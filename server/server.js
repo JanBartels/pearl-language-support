@@ -1128,8 +1128,12 @@ connection.console.log( `lookupSymbol name ${JSON.stringify(table[name])}` );
         ...
     };
 */
-      if (BUILTIN_PROCS[ name ])
+      if (BUILTIN_PROCS[ name ]) {
         connection.console.log( `lookupSymbol builtin PROC ${JSON.stringify(BUILTIN_PROCS[ name ])}` );
+        return {
+          builtin: BUILTIN_PROCS[ name ]
+        };
+      }
     }
     return undefined;
   }
@@ -2068,8 +2072,13 @@ connection.console.log(`markUnusedVariables: currentScope: ${JSON.stringify(curr
           // Prozeduraufruf
           const definition = lookupSymbol(scopeStack, t.value, 'PROCEDURE');
           if (definition) {
-            t.definition = definition;
-            definition.used = true;
+            if ( definition.builtin ) {
+              t.builtin = definition.builtin;
+            }
+            else {
+              t.definition = definition;
+              definition.used = true;
+            }
           }
           else {
             addDiagnosticError(`${t.value} nicht definiert.`, t);
@@ -2081,8 +2090,13 @@ connection.console.log(`markUnusedVariables: currentScope: ${JSON.stringify(curr
       // Identifier (Verwendung)
       const definition = lookupSymbol(scopeStack, t.value);
       if (definition) {
-        t.definition = definition;
-        definition.used = true;
+        if ( definition.builtin ) {
+          t.builtin = definition.builtin;
+        }
+        else {
+          t.definition = definition;
+          definition.used = true;
+        }
       }
       else {
         addDiagnosticError(`${t.value} nicht definiert.`, t);
@@ -2418,8 +2432,13 @@ logIdentifier( dclName, `DCL level: ${scopeStack.length - 1}` );
         const name = proc.token.value;
         const sym = lookupSymbol(scopeStack, name, 'PROCEDURE');
         if (sym) {
-          proc.token.definition = sym;
-          sym.used = true;
+          if ( sym.builtin ) {
+            proc.token.builtin = sym.builtin;
+          }
+          else {
+            proc.token.definition = sym;
+            sym.used = true;
+          }
         }
         else {
           addDiagnosticError(`Aufruf von '${name}' ohne passende PROC-Deklaration (PROC/DCL PROC/SPC PROC/ENTRY).`, proc.token);
@@ -2703,6 +2722,14 @@ connection.onHover((params) => {
       contents: {
         kind: 'markdown',
         value: `Token: ${targetToken.type}: **${targetToken.value}** at offset **${targetToken.offset}** defined at ${targetToken.definition.nameToken.offset} as ${JSON.stringify( targetToken.definition.typeDescription)}`
+      }
+    };
+  }
+  else if ( targetToken.builtin ) {
+    return {
+      contents: {
+        kind: 'markdown',
+        value: `Token: ${targetToken.type}: **${targetToken.value}** at offset **${targetToken.offset}** builtin **${targetToken.builtin.signature}**: **${targetToken.builtin.notes}**}`
       }
     };
   }

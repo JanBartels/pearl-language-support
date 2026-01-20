@@ -132,6 +132,7 @@ ELSE
 FIN;
 myTask = demo;
 CALL REFADD( myTask, 1);
+REFADD( myTask, 1);
 ACTIVATE;
 ACTIVATE myTask ALL 1 SEC;
 ACTIVATE myTask 10;
