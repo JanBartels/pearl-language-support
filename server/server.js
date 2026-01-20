@@ -1014,13 +1014,11 @@ function analyze(uri, text, settings, options) {
 
   /**
    * Vorherigen "signifikanten" Token suchen (ohne Kommentare),
-   * optional nur in derselben Zeile.
    */
-  function findPreviousCodeToken(tokens, index, sameLine) {
+  function findPreviousCodeToken(tokens, index) {
     const line = sameLine ? tokens[index].line : null;
     for (let i = index - 1; i >= 0; i--) {
       const t = tokens[i];
-      if (sameLine && t.line !== line) break;
       if (t.type === 'comment' || t.type === 'inactive') continue;
       return { token: t, index: i };
     }
@@ -2314,8 +2312,8 @@ logIdentifier( dclName, `DCL level: ${scopeStack.length - 1}` );
       const kind = kw;
 
       // name : PROC/TASK
-      const prev = findPreviousCodeToken(tokens, i, /*sameLine*/ true);
-      const prev2 = prev ? findPreviousCodeToken(tokens, prev.index, true) : null;
+      const prev = findPreviousCodeToken(tokens, i);
+      const prev2 = prev ? findPreviousCodeToken(tokens, prev.index) : null;
       if (
         prev &&
         prev.token.type === 'symbol' &&
