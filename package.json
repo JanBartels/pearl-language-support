@@ -83,7 +83,14 @@
           "additionalProperties": {
             "type": "string"
           }
-        }        
+        },
+        "pearl.workingDirMode": {
+          "scope": "window",
+          "type": "string",
+          "enum": ["workspace", "file"],
+          "default": "file",
+          "description": "Workingdirectory im Workspace-Root oder im Verzeichnis der Datei (für #include)"
+        }
       }
     },    
     "configurationDefaults": {

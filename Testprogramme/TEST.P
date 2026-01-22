@@ -13,6 +13,7 @@ DCL Start FIXED;
 
 DCL MySema SEMA;
 
+#define PPC
 #define abc "123"
 #define def "D"
 #define ghi

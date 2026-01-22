@@ -87,6 +87,7 @@ function updateWorkspaceFolders(event) {
  * oder undefined wenn es keinen passenden Workspace-Folder gibt.
  */
 function getWorkspaceFolderForUri(docUri) {
+
   if (!workspaceFolders || workspaceFolders.length === 0) return undefined;
 
   const doc = docUri;
@@ -121,7 +122,11 @@ function getWorkspaceFolderForUri(docUri) {
  * Gibt undefined zurück, wenn gar nichts ableitbar ist (sollte praktisch
  * nur ohne docUri und ohne Workspace passieren).
  */
-function getWorkingDirectoryForDocument(docUri) {
+function getWorkingDirectoryForDocument(docUri, settings) {
+  if ( settings.workingDirMode === 'file' && docUri) {
+    const fsPath = filePathFromUri(docUri);
+    return path.dirname(fsPath);
+  }
   // 1) Passenden Workspace-Folder zu dieser Datei suchen
   if (docUri) {
     const folder = getWorkspaceFolderForUri(docUri);
@@ -230,7 +235,8 @@ let hasConfigurationCapability = false;
 // Default settings (fallback if client does not support workspace/configuration)
 const defaultSettings = {
   maxNumberOfProblems: 100,
-  traceServer: 'off'
+  traceServer: 'off',
+  workingDirMode: 'file'
 };
 
 let globalSettings = defaultSettings;
@@ -1445,7 +1451,7 @@ connection.console.log( `lookupSymbol name ${JSON.stringify(table[name])}` );
               return define;
             });
 
-            const parentPath = getWorkingDirectoryForDocument(uri);            
+            const parentPath = getWorkingDirectoryForDocument(uri, settings);            
             const absPath = path.resolve(parentPath, finalIncludePath);
             if (includeStack.length < 100) { // maximale Include-Tiefe erreicht?
               const incText = loadFileTextCached(absPath);
@@ -3170,9 +3176,6 @@ catch(e) {
 
 documents.onDidOpen((event) => {
   const doc = event.document;
-  const wd = getWorkingDirectoryForDocument(doc.uri);
-
-  connection.console.log( `onDidOpen ${event.document.uri} wd: ${wd ?? '<none>'}` );
   validateTextDocument(event.document);
 });
 
