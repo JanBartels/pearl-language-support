@@ -67,7 +67,11 @@ DCL MyDef_2_2 FIXED;
 !Hier nicht aktiver Abschnitt
 SPC InActive BIT;
 #endif
+TYPE MyTypeUnused CHAR(255);
+TYPE MyTypeUsed CHAR(255);
 
+DCL TT MyTypeUsed;
+DCL PTT REF MyTypeUsed;
 SPC somethingSPC ENTRY GLOBAL;
 DCL A DURATION;
 DCL (B,B1) REF CLOCK;
@@ -79,15 +83,21 @@ DCL UnusedGlobalVarGlobal FIXED GLOBAL;
 DCL Var FIXED;  ! Verwendung per Makro defVar
 #define defVar "Var"
 
+DCL MyTestStruct TestStruct;
+
+DCL InitializedFloat FLOAT INIT(5.0);
+
 somethingGlobal: PROC RETURNS( FIXED ) GLOBAL;
    defVar = 1;
+   TT = 'Mein Typ';
+   MyTestStruct.Element1 = 42;
    RETURN 1;
 END;
 
 something: PROC( D DATION INOUT ALPHIC IDENT, A FIXED, B FLOAT);
 DCL (X,UnusedLocalVar) FIXED;
 A = abc;
-B = A * 1.0;
+B = A * 1.0 + InitializedFloat;
 X = A;
 ACTIVATE demo;
 STR = 'IF';

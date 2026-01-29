@@ -202,7 +202,7 @@ const semanticTokenTypes = [
   'parameter',  // PROC-Parameter
   'function',   // PROC / ENTRY
   'class',      // TASK (oder "class"-ähnlich)
-  'property',   // SEMA, BOLT (kannst du auch anders wählen)
+  'property',   // SEMA, BOLT
   'label',      // Sprungmarken MyLabel:
   'operator',   // Operatoren (z. B. +, ==)  
   'string',     // String-Literale
@@ -1953,11 +1953,28 @@ connection.console.log( `lookupSymbol name ${JSON.stringify(table[name])}` );
         inv,
         ref,
         typename: ( typename ? typename.value : '' ),
+        typetoken: typename,
         global, 
         init,
         ident
       }
     };
+  }
+
+  function markTypeAsUsed(scopeStack, typename, typeToken) {
+    
+    if (!TYPE_KEYWORDS.includes(typename)
+        && typename !== 'PROC' && typename !== 'PROCEDURE' && typename !== 'TASK'
+        ) {
+      const definition = lookupSymbol(scopeStack, typename, 'TYPE');
+      if (definition) {
+        definition.used = true;
+        typeToken.definition = definition;
+      }
+      else {
+        addDiagnosticError(`${typename} nicht definiert.`, typeToken);
+      }
+    }
   }
 
   function parseSpcDclTokens(tokens, startIndex, endIndex) {
@@ -1988,7 +2005,6 @@ connection.console.log( `lookupSymbol name ${JSON.stringify(table[name])}` );
             }
           }
           addDiagnosticWarning(`'${tt.value}' nicht erlaubt.`, tt);
-
         }
 
         const typeDescription = parseTypeDescription(tokens, it, endIndex);
@@ -1997,12 +2013,17 @@ connection.console.log( `lookupSymbol name ${JSON.stringify(table[name])}` );
         for (const nameToken of nameTokens) {
           result.push({nameToken, typeTokens: typeDescription.typeTokens, typeDescription: typeDescription.typeDescription, used: false});
         }
+        if (typeDescription && typeDescription.typeDescription && typeDescription.typeDescription.typename) {
+          markTypeAsUsed(scopeStack, typeDescription.typeDescription.typename, typeDescription.typeDescription.typetoken);
+        }
       }
       else {
         // SPC/DCL var type;
         const typeDescription = parseTypeDescription(tokens, j + 1, endIndex);
         j = typeDescription.endIndex;
-
+        if (typeDescription && typeDescription.typeDescription && typeDescription.typeDescription.typename) {
+          markTypeAsUsed(scopeStack, typeDescription.typeDescription.typename, typeDescription.typeDescription.typetoken);
+        }
         result.push({nameToken: t, typeTokens: typeDescription.typeTokens, typeDescription: typeDescription.typeDescription, used: false});
       }
     }
@@ -2311,7 +2332,31 @@ logIdentifier( dclName, `DCL level: ${scopeStack.length - 1}` );
     }
 
     // ---------------- Blockstarts & Deklarationen ----------------
+    if (kw === 'TYPE') {
+      // TYPE TypBezeichner Typ
+      const typeIdentifier = findNextCodeToken(tokens, i);
+      typ = findNextCodeToken(tokens,typeIdentifier.index);
+      semicolon = findNextSemicolonToken(tokens,typ.index);
+      if (
+        typeIdentifier &&
+        typeIdentifier.token.type === 'identifier' &&
+        semicolon
+      ) {
+        const typeName = typeIdentifier.token.value;
 
+        const currentScope = scopeStack[scopeStack.length - 1];
+        const typeTokens = [ typ.token, typ.token, t ];
+        const identifier = createIdentifier( typeIdentifier.token, typeTokens, false, false, false, 'TYPE', false, false );
+        const typeDescription = parseTypeDescription(tokens, typeName.index, semicolon.index);        
+//        identifier.typeDescription = typeDescription;
+logIdentifier( identifier, `TYPE level: ${scopeStack.length - 1}` );
+        currentScope[typeName] = identifier;
+        i = semicolon.index;
+      }
+
+      continue;
+    }
+//xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx    
     // PROC/TASK als Implementierung oder Deklaration
     if (kw === 'PROC' || kw === 'PROCEDURE' || kw === 'TASK') {
       const kind = kw;
@@ -2676,7 +2721,7 @@ function logIdentifier( identifier, msg = '' ) {
     typeString += idType.value + ' ';
   }
   const td = identifier.typeDescription;          
-  connection.console.log(`${msg} ${nameToken.value} ${typeString}; dim: ${td.dim} inv: ${td.inv}, ref: ${td.ref}, typename: ${td.typename} global: ${td.global}, init: ${td.init}`);
+  connection.console.log(`${msg} value: ${nameToken.value} typeString: ${typeString}; dim: ${td.dim} inv: ${td.inv}, ref: ${td.ref}, typename: ${td.typename} global: ${td.global}, init: ${td.init}`);
 }
 
 // ------------------------------
@@ -2733,7 +2778,7 @@ connection.onHover((params) => {
     return {
       contents: {
         kind: 'markdown',
-        value: `Token: ${targetToken.type}: **${targetToken.value}** at offset **${targetToken.offset}** builtin **${targetToken.builtin.signature}**: **${targetToken.builtin.notes}**}`
+        value: `**${targetToken.value}**: ${targetToken.builtin.signature}: *${targetToken.builtin.notes}*`
       }
     };
   }
@@ -2741,7 +2786,7 @@ connection.onHover((params) => {
     return {
       contents: {
         kind: 'markdown',
-        value: `Token: ${targetToken.type}: **${targetToken.value}** at offset **${targetToken.offset}**`
+        value: `Token: ${targetToken.type}: **${targetToken.value}** at offset **${targetToken.offset}**: ${JSON.stringify(targetToken)}`
       }
     };
   }
@@ -2853,163 +2898,6 @@ connection.onFoldingRanges((params) => {
 // ------------------------------
 // Semantische Tokens
 // ------------------------------
-
-function sanitizeSemanticTokensData(data) {
-/*
-  if (!data instanceof Uint32Array) {
-    connection.console.log('[SemanticSanitizer] data is not an Uint32Array.');
-    return [];
-  }
-*/
-
-  if (data.length === 0) {
-    connection.console.log('[SemanticSanitizer] data is empty.');
-    return [];
-  }
-
-  // 1) Länge korrigieren (Vielfaches von 5)
-  if (data.length % 5 !== 0) {
-    connection.console.log(
-      `[SemanticSanitizer] data length ${data.length} is not multiple of 5 -> trimming.`
-    );
-    data = data.slice(0, Math.floor(data.length / 5) * 5);
-  }
-
-
-  // Legend-Objekt wie vom LSP erwartet:
-  const tokenTypesLen = semanticTokenTypes.length;
-  const tokenModsLen = semanticTokenModifiers.length;
-  const maxModifierMask = tokenModsLen > 0 ? (1 << tokenModsLen) - 1 : 0;
-
-  const absTokens = [];
-
-  // 2) Deltas in absolute Positionen umwandeln
-  let line = 0;
-  let char = 0;
-
-  for (let i = 0; i < data.length; i += 5) {
-    let deltaLine = data[i];
-    let deltaChar = data[i + 1];
-    let length = data[i + 2];
-    let tokenType = data[i + 3];
-    let tokenMods = data[i + 4];
-
-    // --- Fehlerstelle: Ungültige Werte ------------------------
-    if (
-      !Number.isInteger(deltaLine) || deltaLine < 0 ||
-      !Number.isInteger(deltaChar) || deltaChar < 0 ||
-      !Number.isInteger(length) || length <= 0 ||
-      !Number.isInteger(tokenType) || tokenType < 0 ||
-      !Number.isInteger(tokenMods) || tokenMods < 0
-    ) {
-      connection.console.log(
-        `[SemanticSanitizer] INVALID raw token at index ${i}: ` +
-        `dL=${deltaLine}, dC=${deltaChar}, len=${length}, type=${tokenType}, mods=${tokenMods}`
-      );
-      continue;
-    }
-
-    line += deltaLine;
-    char = deltaLine > 0 ? deltaChar : char + deltaChar;
-
-    // --- Fehlerstelle: Token-Type außerhalb der Legend -------
-    if (tokenType >= tokenTypesLen) {
-      connection.console.log(
-        `[SemanticSanitizer] tokenType index ${tokenType} out of range (max=${tokenTypesLen - 1}) at line=${line}, char=${char}`
-      );
-      continue;
-    }
-
-    // --- Fehlerstelle: Modifier-Bits zu groß ------------------
-    if ((tokenMods & ~maxModifierMask) !== 0) {
-      connection.console.log(
-        `[SemanticSanitizer] modifier bits ${tokenMods} exceed legend capacity, masking to ${tokenMods & maxModifierMask}`
-      );
-      tokenMods &= maxModifierMask;
-    }
-
-    absTokens.push({ line, char, length, tokenType, tokenMods });
-  }
-
-  if (absTokens.length === 0) {
-    connection.console.log('[SemanticSanitizer] no valid absolute tokens found.');
-    return [];
-  }
-
-  // 3) Sortieren
-  absTokens.sort((a, b) =>
-    a.line === b.line ? a.char - b.char : a.line - b.line
-  );
-
-  // 4) Überlappungen entfernen
-  const cleaned = [];
-  let lastLine = -1;
-  let lastEndChar = 0;
-
-  for (const t of absTokens) {
-    const endChar = t.char + t.length;
-
-    // --- Fehlerstelle: Token überlappt mit vorherigem --------
-    if (
-      t.line < lastLine ||
-      (t.line === lastLine && t.char < lastEndChar)
-    ) {
-      connection.console.log(
-        `[SemanticSanitizer] OVERLAP detected: token at line=${t.line}, char=${t.char}, ` +
-        `len=${t.length} overlaps with previous ending at line=${lastLine}, char=${lastEndChar}`
-      );
-      continue;
-    }
-
-    cleaned.push(t);
-    lastLine = t.line;
-    lastEndChar = endChar;
-  }
-
-  if (cleaned.length === 0) {
-    connection.console.log('[SemanticSanitizer] all tokens removed due to overlap or invalidity.');
-    return [];
-  }
-
-  // 5) Zurück in Delta-Form
-  const out = [];
-  let prevLine = 0;
-  let prevChar = 0;
-  let first = true;
-
-  for (const t of cleaned) {
-    let deltaLine;
-    let deltaChar;
-
-    if (first) {
-      deltaLine = t.line;
-      deltaChar = t.char;
-      first = false;
-    } else {
-      deltaLine = t.line - prevLine;
-      deltaChar = deltaLine > 0 ? t.char : t.char - prevChar;
-    }
-
-    if (deltaLine < 0 || deltaChar < 0) {
-      connection.console.log(
-        `[SemanticSanitizer] INTERNAL ERROR: negative delta after sorting! ` +
-        `line=${t.line}, char=${t.char}, prevLine=${prevLine}, prevChar=${prevChar}`
-      );
-      continue; // niemals senden
-    }
-
-    out.push(deltaLine, deltaChar, t.length, t.tokenType, t.tokenMods);
-
-    prevLine = t.line;
-    prevChar = t.char;
-  }
-
-  connection.console.log(
-    `[SemanticSanitizer] Completed: in=${data.length/5} tokens, out=${out.length/5} tokens.`
-  );
-
-  return out;
-}
 
 connection.languages.semanticTokens.on((params) => {
 try {  
@@ -3148,19 +3036,6 @@ try {
   }
 //  connection.console.log( `semanticTokens: ${semanticTokens}`);
   return { data: semanticTokens };
-  const safeSemanticTokens = sanitizeSemanticTokensData(semanticTokens);
-  connection.console.log( `safeSemanticTokens: ${safeSemanticTokens}`);
-  return { data: safeSemanticTokens };  
-
-
-
-  const semanticTokenArray = new Uint32Array(semanticTokens);
-  connection.console.log( `semanticTokens: ${semanticTokenArray}`);
-//  return { data: semanticTokenArray };  
-
-//  const safeSemanticTokens = new Uint32Array(sanitizeSemanticTokensData(semanticTokenArray));
-  connection.console.log( `safeSemanticTokens: ${semanticTokenArray}`);
-  return { data: safeSemanticTokens };  
 }
 catch(e) {
   connection.console.log( `exception: ${e.message}`);
