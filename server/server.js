@@ -883,8 +883,8 @@ const BUILTIN_PROCS = {
     notes: "Teilstring kopieren: string2 = MID(string1, anf1, end1)."
   },
   'KON': {
-    signatures: "SPC KON ENTRY ( s1 CHAR(255) IDENT, anf1 FIXED(15) IDENT, end1 FIXED(15) IDENT, s2 CHAR(255) IDENT, anf2 FIXED(15) IDENT, end2 FIXED(15) IDENT ) RETURNS ( CHAR(255) ) GLOBAL ;",
-    notes: "zwei Teilstrings konkateniert → string3"
+    signature: "SPC KON ENTRY ( s1 CHAR(255) IDENT, anf1 FIXED(15) IDENT, end1 FIXED(15) IDENT, s2 CHAR(255) IDENT, anf2 FIXED(15) IDENT, end2 FIXED(15) IDENT ) RETURNS ( CHAR(255) ) GLOBAL ;",
+    notes: "zwei Teilstrings verketten → string3"
   },
   'INSER': {
     signature: "SPC INSER ENTRY ( s1 CHAR(255) IDENT, anf1 FIXED(15) IDENT, end1 FIXED(15) IDENT, s2 CHAR(255) IDENT, anf2 FIXED(15) IDENT, end2 FIXED(15) IDENT ) RETURNS ( CHAR(255) ) GLOBAL ;",

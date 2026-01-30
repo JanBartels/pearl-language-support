@@ -102,6 +102,7 @@ X = A;
 ACTIVATE demo;
 STR = 'IF';
 STR.CHAR(3) = 'D';
+STR = KON( 'String1', 2, 4, 'STRING2', 4, 6 );
 PUT STR TO D BY LIST,SKIP;
 CALL GlobProc;    ! Aus Include-Datei
 SEMASET 3, MySema;
