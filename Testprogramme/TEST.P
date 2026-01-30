@@ -83,13 +83,38 @@ DCL UnusedGlobalVarGlobal FIXED GLOBAL;
 DCL Var FIXED;  ! Verwendung per Makro defVar
 #define defVar "Var"
 
+#define defVarName "Var2"
+DCL defVarName FIXED;
+
 DCL MyTestStruct TestStruct;
 
 DCL InitializedFloat FLOAT INIT(5.0);
 
 somethingGlobal: PROC RETURNS( FIXED ) GLOBAL;
+DCL MyArr(2) FIXED;
+DCL SpecialChar CHAR(20);
+
+   ! Modes bei OPEN/CAN
+   OPEN A1 BY IDF('HUHU'),OLD;
+   CLOSE A1 BY CAN;
+
+   ! String-Escaping checken
+   SpecialChar = 'Hallo '\0D0A\' Welt';
+
+   ! Feldzugriffe   
+   MyArr(1) = SIZEOF MyArr FIT MyArr(1);
+   FOR I TO 1 UPB MyArr REPEAT
+     MyArr(I) = I;
+   END;
+
+   ! Ersetzte Variablennamen
    defVar = 1;
+   defVarName = 3;
+   defVar = defVarName;
+
    TT = 'Mein Typ';
+
+   ! Strukturelemente
    MyTestStruct.Element1 = 42;
    RETURN 1;
 END;
@@ -109,14 +134,18 @@ SEMASET 3, MySema;
 REQUEST MySema;
 END;
 
+TYPE TRefProc REF PROC( FIXED ) RETURNS( FIXED );
+DCL MyRefProc TRefProc;
+
 demo: 
    TASK PRIO 8;
 DCL x FIXED INIT(8);
 DCL y FLOAT INIT(8.15);
-DCL somethingREF REF PROC RETURNS( FIXED(31) );
+DCL somethingREF REF PROC( FIXED ) RETURNS( FIXED(31) );
 DCL retVal FIXED(31);
 DCL myTask REF TASK;
 x = -7;
+x = MyRefProc( 7 );
 UnusedLabel:
 y := SIN( 47.11E+10 );
 AlreadyDefinedLabel:
@@ -125,7 +154,7 @@ IF x = 0 THEN     ! Operator = ist Fehler!
    CALL something( A1, 5,12.3 );
    something( A1, 5,12.3 );
    CALL somethingUndefined;
-   retVal = somethingREF();
+   retVal = somethingREF( 5 );
    GOTO UndefinedLabel;
    CALL something;
    GOTO AlreadyDefinedLabel;
