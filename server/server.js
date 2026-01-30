@@ -28,7 +28,7 @@ const {
   CompletionItemKind,
   DiagnosticSeverity,
   DiagnosticTag
-} = require('vscode-languageserver');
+} = require('vscode-languageserver/node');
 
 const { fileURLToPath, pathToFileURL } = require('url');
 
