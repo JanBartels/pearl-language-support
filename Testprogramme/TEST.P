@@ -13,6 +13,17 @@ DCL Start FIXED;
 
 DCL MySema SEMA;
 
+PP2: PROC( A FIXED, B FIXED );
+  A := 1;
+END;
+
+#define LetsGoWrong ""
+
+PP3: PROC( A FIXED, B FIXED );
+  A := 1;
+END;
+
+
 #define PPC
 #define abc "123"
 #define def "D"
@@ -176,6 +187,7 @@ myTask = demo;
 CALL REFADD( myTask, 1);
 REFADD( myTask, 1);
 ACTIVATE;
+ALL 1 SEC ACTIVATE myTask;
 ACTIVATE myTask ALL 1 SEC;
 ACTIVATE myTask 10;
 ACTIVATE myTask;
@@ -206,14 +218,21 @@ DCL MyBolt REF BOLT;
 DCL MyArr (4,5)FLOAT;
 DCL something FIXED;
 
-!DCL Ch CHAR(10);
+DCL Ch CHAR(10);
 
 something = 2;
 
 LEAVE MyBolt;
 
 Ch = '!Huhu';
+Ch = 'Dieser String '\0D0A\' enthält zwei Steuerzeichen'\1B\'';
+Ch = ''\0D\' Steuerzeichen am String-Anfang';
+Ch = 'Steuerzeichen am String-Ende'\00\'';
+Ch = ''\00\''; /* String bestehend aus einem einzigen Steuerzeichen */
 
+Ch1 = 'Var gips nicht';
+
+Ch = 'Hallo';
 I := 123(31); ! Noch einer
 I := 110B;
 
@@ -252,6 +271,11 @@ END;
 Hallo: PROC;
 CALL something;
 */
+
+/* Einzeiliger Kommentar */
+
+! Wenn man hier hinter einen Kommentar beginnt, crasht es. Bedingung: Es ist der letzte Kommentar vor Dateiende
+! /* 
 
 SPC P2 PROC( FIXED, FIXED );
 

@@ -901,11 +901,9 @@ const documentTokenCache = new Map();
 /**
  * Token an Position (line, character) suchen.
  */
-function findTokenAt(tokens, uri, line, character) {
+function findTokenAt(tokens, uri, offset) {
   for (const t of tokens) {
-    if (t.line !== line) continue;
-    if (t.uri !== uri) continue;
-    if (character >= t.column && character <= t.column + t.length) {
+    if (offset >= t.startOffset && offset < t.endOffset && t.uri === uri) {
       return t;
     }
   }
@@ -934,51 +932,59 @@ function analyze(uri, text, settings, options) {
 
 //https://www.vscodeapi.com/classes/vscode.diagnostic#tags
 
-  function addDiagnostic(severity, message, diagUri, line, column, length, tags = null ) {
+  function addDiagnostic(severity, message, diagUri, startOffset, endOffset, tags = null ) {
     if (diagUri !== uri)  // nicht bei IncludeDateien
       return;
 
-    if ( !Number.isInteger(line)   || line < 0   ||
-         !Number.isInteger(column) || column < 0 ||
-         !Number.isInteger(length) || length < 0
+    if ( !Number.isInteger(startOffset) || startOffset < 0   ||
+         !Number.isInteger(endOffset) || endOffset < startOffset
        ) {
-      connection.console.log(`addDiagnostic ${line}:${column}L${length}: ${message}`);
+      connection.console.log(`addDiagnostic error ${startOffset}:${endOffset}: ${message}`);
       return;
     }
+
+    const doc = documents.get(diagUri);
+    if (!doc) return;
+
+    // Bei evtl. Lexer-Fehlern Offsets begrenzen
+    const textLen = doc.getText().length;
+    const s = Math.min(startOffset, textLen);
+    const e = Math.min(endOffset, textLen);
+
     diagnostics.push({
       severity,
       message,
       range: {
-        start: { line, character: column },
-        end: { line, character: column + length }
+        start: doc.positionAt( s ),
+        end: doc.positionAt( e )
       },
       source: 'pearl-lsp',
       tags
     });
   }
 
-  function addDiagnosticErrorPos(message, diagUri, line, column, length) {
-    addDiagnostic(DiagnosticSeverity.Error, message, diagUri, line, column, length);
+  function addDiagnosticErrorPos(message, diagUri, startOffset, endOffset) {
+    addDiagnostic(DiagnosticSeverity.Error, message, diagUri, startOffset, endOffset);
   }
 
   function addDiagnosticError(message, token) {
-    addDiagnostic(DiagnosticSeverity.Error, message, token.uri, token.line, token.column, token.length);
+    addDiagnostic(DiagnosticSeverity.Error, message, token.uri, token.startOffset, token.endOffset);
   }
 
-  function addDiagnosticWarningPos(message, diagUri, line, column, length) {
-    addDiagnostic(DiagnosticSeverity.Warning, message, diagUri, line, column, length);
+  function addDiagnosticWarningPos(message, diagUri, startOffset, endOffset) {
+    addDiagnostic(DiagnosticSeverity.Warning, message, diagUri, startOffset, endOffset);
   }
 
   function addDiagnosticWarning(message, token) {
-    addDiagnostic(DiagnosticSeverity.Warning, message, token.uri, token.line, token.column, token.length);
+    addDiagnostic(DiagnosticSeverity.Warning, message, token.uri, token.startOffset, token.endOffset);
   }
 
-  function addDiagnosticHintPos(message, diagUri, line, column, length, tags) {
-    addDiagnostic(DiagnosticSeverity.Hint, message, diagUri, line, column, length, tags);
+  function addDiagnosticHintPos(message, diagUri, startOffset, endOffset, tags) {
+    addDiagnostic(DiagnosticSeverity.Hint, message, diagUri, startOffset, endOffset, tags);
   }
 
   function addDiagnosticHint(message, token, tags) {
-    addDiagnostic(DiagnosticSeverity.Hint, message, token.uri, token.line, token.column, token.length, tags);
+    addDiagnostic(DiagnosticSeverity.Hint, message, token.uri, token.startOffset, token.endOffset, tags);
   }
 
   const blockStack = [];
@@ -1012,10 +1018,8 @@ function analyze(uri, text, settings, options) {
    *         'symbol' | 'comment' | 'inactive' | 'error' | 'preproc',
    *   value: string,
    *   uri: string,
-   *   line: number,
-   *   column: number,
-   *   offset: number,
-   *   length: number
+   *   startOffset: number,
+   *   endOffset: number
    *   definition: identifier (optional)
    * }
    */
@@ -1109,13 +1113,13 @@ function analyze(uri, text, settings, options) {
   }
 
   function lookupSymbol(scopeStack, name, kind = '') {
-connection.console.log( `lookupSymbol ${name} as ${kind} from ${scopeStack.length-1} to 0` );
+//connection.console.log( `lookupSymbol ${name} as ${kind} from ${scopeStack.length-1} to 0` );
     for (let i = scopeStack.length - 1; i >= 0; i--) {
       const table = scopeStack[i];
       if ( !table)
         continue;
       if (table[name]){
-connection.console.log( `lookupSymbol name ${JSON.stringify(table[name])}` );
+//connection.console.log( `lookupSymbol name ${JSON.stringify(table[name])}` );
         if (kind === '' || table[name].typeDescription.typename === kind) {
           return table[name];
         }
@@ -1134,7 +1138,7 @@ connection.console.log( `lookupSymbol name ${JSON.stringify(table[name])}` );
     };
 */
       if (BUILTIN_PROCS[ name ]) {
-        connection.console.log( `lookupSymbol builtin PROC ${JSON.stringify(BUILTIN_PROCS[ name ])}` );
+//        connection.console.log( `lookupSymbol builtin PROC ${JSON.stringify(BUILTIN_PROCS[ name ])}` );
         return {
           builtin: BUILTIN_PROCS[ name ]
         };
@@ -1145,156 +1149,166 @@ connection.console.log( `lookupSymbol name ${JSON.stringify(table[name])}` );
   
   function tokenize(uri, text, preprocess = true) {
     const tokens = [];
-    const lineOffsets = [];
-    lineOffsets[ 0 ] = {
-      startOfLineOffset: 0,
-      startOfLineLine: 0,
-      startOfLineColumn: 0
-    };
+    const lineStartOffsets = [];
+    const lineEndOffsets = [];
+    let isLineStart = true;
+    lineStartOffsets.push( 0 );
+
     let offset = 0;
-    let line = 0;
-    let column = 0;
     const len = text.length;
 
-    function addToken(type, startOffset, startLine, startColumn, endOffset) {
-      if ( !Number.isInteger(startOffset) || startOffset < 0   ||
-          !Number.isInteger(startLine) || startLine < 0 ||
-          !Number.isInteger(startColumn) || startColumn < 0 ||
-          !Number.isInteger(endOffset) || endOffset < 0 ||
-          endOffset < startOffset
-        ) {
-        connection.console.log(`addToken ${startOffset}/${endOffset} ${startLine}:${startColumn}: ${type}`);
+    function addToken(type, startOffset, endOffset) {
+      if ( !Number.isInteger(startOffset) || startOffset < 0 ||
+           !Number.isInteger(endOffset) || endOffset < startOffset
+         ) {
+//        connection.console.log(`addToken ${startOffset}/${endOffset}: ${type}`);
         return null;
       }
       const token = {
         type,
         value: text.slice(startOffset, endOffset),
         uri,
-        line: startLine,
-        column: startColumn,
-        offset: startOffset,
-        length: endOffset - startOffset
+        startOffset,
+        endOffset
       };
       tokens.push( token );
       return token;
     }
 
-    // Zeilenanfang bestimmen (für Präprozessor)
-    let isLineStart = true;
+    function processEndOfLine(cc) {
+      // Zeilenende merken (vor aktuellem Umbruch ohne \r/\n)
+      const lineEndOffset = offset;
 
-    function advanceChar() {
-      const ch = text[offset];
-
-      if (ch === '\n' || ch === '\r') {
-      }
-      offset++;
-      if (ch === '\n') {
-        // Altes Zeilenende
-        lineOffsets[ line ].endOfLineOffset = offset - 1;
-        lineOffsets[ line ].endOfLineLine = line;
-        lineOffsets[ line ].endOfLineColumn = column;
-        line++;
-        column = 0;
-        // Neuer Zeilenanfang
-        lineOffsets[ line ] = {
-          startOfLineOffset: offset,
-          startOfLineLine: line,
-          startOfLineColumn: 0
-        };
-        isLineStart = true;
-      } else if (ch === '\r') {
-        // Altes Zeilenende
-        lineOffsets[ line ].endOfLineOffset = offset - 1;
-        lineOffsets[ line ].endOfLineLine = line;
-        lineOffsets[ line ].endOfLineColumn = column;
-        // CR/LF?
-        if (text[offset] === '\n') {
-          offset++;
+      // Newline \r
+      if (cc === 13 /* \r */) {
+        offset++;
+        if (offset < len && text.charCodeAt(offset) === 10 /* \n */) {
+          offset++; // CRLF
         }
-        line++;
-        column = 0;
-        // Neuer Zeilenanfang
-        lineOffsets[ line ] = {
-          startOfLineOffset: offset,
-          startOfLineLine: line,
-          startOfLineColumn: 0
-        };
-        isLineStart = true;
-      } else {
-        column++;
+      } else if (cc === 10 /* \n */) {
+        offset++; // LF
       }
+      else
+        return;   // Fehler: Irgendwas Anderes
+
+      lineEndOffsets.push(lineEndOffset);
+      // Nächste Zeilenanfang merken (nach \r oder \n)
+      lineStartOffsets.push(offset);
+
+      isLineStart = true;
     }
 
     function skipRestOfLine() {
-      while (offset < len && text[offset] !== '\n' && text[offset] !== '\r') {
-        advanceChar();
+      // bis zum Zeilenende (exklusiv) lesen
+      while (offset < len) {
+        const cc = text.charCodeAt(offset);
+        if (cc === 10 || cc === 13)
+          break; // \n oder \r
+        offset++;
       }
-      // Zeilenende noch normal verarbeiten:
-      const lineEndOffset = offset;
-      const lineEndColumn = column;
-      if (offset < len) {
-        advanceChar();
-      }
-      return {
-        offset: lineEndOffset,
-        column: lineEndColumn
-      };
+    }      
+
+    function isHexDigitCode(cc) {
+      // 0-9, A-F, a-f
+      return (cc >= 48 && cc <= 57) || (cc >= 65 && cc <= 70) || (cc >= 97 && cc <= 102);
     }
 
+    function scanQuotedString() {
+      offset++; // opening '
+
+      while (offset < len) {
+        const cc = text.charCodeAt(offset);
+
+        if (cc === 10 || cc === 13) {
+          return 'String über Zeilenende hinaus'; // Durch Zeilenende unterbrochen
+        }
+
+        if (cc === 39) {
+          // Escaped quote: ''
+          if (offset + 1 < len && text.charCodeAt(offset + 1) === 39) {
+            offset += 2;
+            continue;
+          }
+          // Beginn Controlsequenz: '\
+          if (offset + 1 < len && text.charCodeAt(offset + 1) === 92) {
+            offset += 2; // Auf erstes Hexzeichen
+            let hexCount = 0;
+            while (offset < len && isHexDigitCode(text.charCodeAt(offset))) {
+              offset++;
+              hexCount++;
+            }
+
+            if (hexCount < 2 || (hexCount % 2) !== 0) {
+              return 'Steuersequenz ungerade oder zu kurz'; // ungerade oder zu kurz
+            }
+
+            // Ende bei \' 
+            if (offset + 1 < len && text.charCodeAt(offset) === 92 && text.charCodeAt(offset + 1) === 39) {
+              offset += 2;  // Auf nächstes Stringzeichen oder ' für Stringende
+              continue;
+            }
+          }
+          // echtes Ende
+          offset++;
+          return true;
+        }
+
+        offset++;
+      }
+
+      return 'EOF in String'; // EOF ohne closing '
+    }
+
+    // Lexer-Schleife
     while (offset < len) {
-      const ch = text[offset];
+      let cc = text.charCodeAt(offset);
 
-      // Whitespace
-      if (ch === ' ' || ch === '\t' || ch === '\f' || ch === '\v') {
-        advanceChar();
+      // Whitespace Space, Tab, FormFeed, Vertical Tab
+      if (cc === 32 || cc === '\t' || cc === 12 || cc === 11) {      
+        offset++;
         continue;
       }
 
-      // Zeilenumbrüche
-      if (ch === '\n' || ch === '\r') {
-        advanceChar();
+      // Zeilenumbrüche CR, LF, CR/LF
+      if (cc === 10 /* \n */ || cc === 13 /* \r */) {
+        processEndOfLine(cc);
         continue;
-      }
+      }      
 
       // Einzeiliger Kommentar: !
-      if (ch === '!') {
+      if (cc === 33) {
         const startOffset = offset;
-        const startLine = line;
-        const startColumn = column;
-
-        const lineEnd = skipRestOfLine()
-        addToken('comment', startOffset, startLine, startColumn, lineEnd.offset);
+        skipRestOfLine();
+        addToken('comment', startOffset, offset);
         continue;
       }
 
       // Mehrzeiliger Kommentar: /* ... */
-      if (ch === '/' && offset + 1 < len && text[offset + 1] === '*') {
+      if (cc === 47 && offset + 1 < len && text.charCodeAt(offset + 1) === 42) {        
         const startOffset = offset;
-        const startLine = line;
-        const startColumn = column;
         offset += 2;
-        column += 2;
+        let multiLine = false;
         while (offset < len) {
-          if (text[offset] === '*' && offset + 1 < len && text[offset + 1] === '/') {
+          cc = text.charCodeAt(offset);
+          if (cc === 42 && offset + 1 < len && text.charCodeAt(offset + 1) === 47) {  //  "*/" ?
             offset += 2;
-            column += 2;
+            isLineStart = false;
             break;
           }
-          advanceChar();
+          if (cc === 10 /* \n */ || cc === 13 /* \r */) {
+            processEndOfLine(cc);
+            multiLine = true;
+            continue;
+          }      
+          offset++;
         }
-        const token = addToken('comment', startOffset, startLine, startColumn, offset);
-        if ( startLine != line ) {
+        const token = addToken('comment', startOffset, offset);
+        if ( multiLine ) {
           foldingRanges.push({
-            startToken: token,
-            endToken: {
-              type: 'comment',
-              value: '',
-              uri,
-              line,
-              column: column - 2,
-              offset: offset - 2,
-              length: 0
-            },
+            startOffset,
+            startUri: uri,
+            endOffset: offset,
+            endUri: uri,
             kind: 'comment',
             collapsedText: '/* ... */'
           });
@@ -1303,22 +1317,15 @@ connection.console.log( `lookupSymbol name ${JSON.stringify(table[name])}` );
         continue;
       }
 
-      // Präprozessor
-      if (ch === '#' && preprocess && isLineStart) {    
+      // Präprozessor #command
+      if (cc === 35 && preprocess && isLineStart) {    
         // Prüfen, ob wir am (logischen) Zeilenanfang sind
         // (bisherige Whitespace vor '#' haben wir oben schon abgearbeitet,
-        // d.h. column==0 ist ein guter Indikator)
         const lineStartOffset = offset;
-        const lineStartLine = line;
-        const lineStartColumn = column;
 
         // ganze Zeile einlesen
-        let lineBuf = '';
-        let tmpOffset = offset;
-        while (tmpOffset < len && text[tmpOffset] !== '\n' && text[tmpOffset] !== '\r') {
-          lineBuf += text[tmpOffset];
-          tmpOffset++;
-        }
+        skipRestOfLine();
+        let lineBuf = text.slice(lineStartOffset, offset);
 
         const ifdefPattern = /^(\s*)((#ifn?def)\s+([A-Za-z_][A-Za-z0-9_]*))/.exec(lineBuf);
         if (ifdefPattern) {
@@ -1327,11 +1334,14 @@ connection.console.log( `lookupSymbol name ${JSON.stringify(table[name])}` );
           const ifdefCmd = ifdefPattern[3];
           const ifdefName = ifdefPattern[4];
 
-          const token = addToken('preproc', lineStartOffset + ifdefStart.length, lineStartLine, lineStartColumn + ifdefStart.length, lineStartOffset + ifdefStart.length + ifdefStmt.length);
+          const token = addToken('preproc', lineStartOffset + ifdefStart.length, lineStartOffset + ifdefStart.length + ifdefStmt.length);
           if (defineStack.length > 0 && !defineStack[defineStack.length - 1])
             addDiagnosticHint( 'inaktiv', token, [DiagnosticTag.Unnecessary]);
 
           const value = defines.has(ifdefName);
+          if (value) {
+            token.define = defines[ifdefName];
+          }
           const process = ifdefCmd === '#ifdef' ? value : !value;
           const stackProcess = defineStack.reduce(( prev, current ) => {
              return prev && current;
@@ -1341,8 +1351,7 @@ connection.console.log( `lookupSymbol name ${JSON.stringify(table[name])}` );
           preprocStack.push( token );
 
           // Die gesamte #ifdef-Zeile überspringen
-          const lineEnd = skipRestOfLine();
-          addToken('inactive', lineStartOffset + ifdefStmt.length, lineStartLine, lineStartColumn + ifdefStmt.length, lineEnd.offset);
+          addToken('inactive', lineStartOffset + ifdefStart.length + ifdefStmt.length, offset);
 
           continue;
         }
@@ -1352,7 +1361,7 @@ connection.console.log( `lookupSymbol name ${JSON.stringify(table[name])}` );
           const elseStart = elsePattern[1];
           const elseStmt = elsePattern[2];
 
-          const token = addToken('preproc', lineStartOffset + elseStart.length, lineStartLine, lineStartColumn + elseStart.length, lineStartOffset + elseStart.length + elseStmt.length);
+          const token = addToken('preproc', lineStartOffset + elseStart.length, lineStartOffset + elseStart.length + elseStmt.length);
 
           const elseValue = !defineStack.pop();
           const stackProcess = defineStack.reduce(( prev, current ) => {
@@ -1365,26 +1374,21 @@ connection.console.log( `lookupSymbol name ${JSON.stringify(table[name])}` );
 
           if ( preprocStack.length > 0 ) {
             const ifToken = preprocStack.pop();
-            foldingRanges.push({
-              startToken: ifToken,
-              endToken: {
-                type: 'preproz',
-                value: '',
-                uri,
-                line: line-1,
-                column: lineOffsets[line - 1].endOfLineColumn,
-                offset: lineOffsets[line - 1].endOfLineOffset,
-                length: 0
-              },
-              kind: 'preproz',
-              collapsedText: '...'
-            });
+            if ( lineEndOffsets.length > 0 ) {
+              foldingRanges.push({
+                startOffset: ifToken.startOffset,
+                startUri: ifToken.uri,
+                endOffset: token.startOffset,
+                endUri: token.uri,
+                kind: 'preproz',
+                collapsedText: '...'
+              });
+            }
           }
           preprocStack.push( token );
 
-          // Die gesamte #undef-Zeile überspringen
-          const lineEnd = skipRestOfLine();
-          addToken('inactive', lineStartOffset + elseStmt.length, lineStartLine, lineStartColumn + elseStmt.length, lineEnd.offset);
+          // Die gesamte #else-Zeile überspringen
+          addToken('inactive', lineStartOffset + elseStart.length + elseStmt.length, offset);
 
           continue;
         }
@@ -1394,35 +1398,30 @@ connection.console.log( `lookupSymbol name ${JSON.stringify(table[name])}` );
           const endifStart = endifPattern[1];
           const endifStmt = endifPattern[2];
 
-          const token = addToken('preproc', lineStartOffset + endifStart.length, lineStartLine, lineStartColumn + endifStart.length, lineStartOffset + endifStart.length + endifStmt.length);
+          const token = addToken('preproc', lineStartOffset + endifStart.length, lineStartOffset + endifStart.length + endifStmt.length);
 
           if ( defineStack.length > 1 )
             defineStack.pop();
 
           if ( preprocStack.length > 0 ) {
             const ifElseToken = preprocStack.pop();
-            foldingRanges.push({
-              startToken: ifElseToken,
-              endToken: {
-                type: 'preproz',
-                value: '',
-                uri,
-                line: line-1,
-                column: lineOffsets[line - 1].endOfLineColumn,
-                offset: lineOffsets[line - 1].endOfLineOffset,
-                length: 0
-              },
-              kind: 'preproz',
-              collapsedText: '...'
-            });
+            if ( lineEndOffsets.length > 0 ) {
+              foldingRanges.push({
+                startOffset: ifElseToken.startOffset,
+                startUri: ifElseToken.uri,
+                endOffset: token.startOffset,
+                endUri: token.uri,
+                kind: 'preproz',
+                collapsedText: '...'
+              });
+            }
           }
 
           if (defineStack.length > 0 && !defineStack[defineStack.length - 1])
             addDiagnosticHint( 'inaktiv', token, [DiagnosticTag.Unnecessary]);
 
           // Die gesamte #undef-Zeile überspringen
-          const lineEnd = skipRestOfLine();
-          addToken('inactive', lineStartOffset + endifStmt.length, lineStartLine, lineStartColumn + endifStmt.length, lineEnd.offset);
+          addToken('inactive', lineStartOffset + endifStart.length + endifStmt.length, offset);
 
           continue;
         }
@@ -1437,11 +1436,10 @@ connection.console.log( `lookupSymbol name ${JSON.stringify(table[name])}` );
             const includeStmt = includePattern[2];
             const includePath = includePattern[3];
 
-            const token = addToken('preproc', lineStartOffset + includeStart.length, lineStartLine, lineStartColumn + includeStart.length, lineStartOffset + includeStart.length + includeStmt.length);
+            const token = addToken('preproc', lineStartOffset + includeStart.length, lineStartOffset + includeStart.length + includeStmt.length);
 
             // Die gesamte #include-Zeile überspringen
-            const lineEnd = skipRestOfLine();
-            addToken('inactive', lineStartOffset + includeStmt.length, lineStartLine, lineStartColumn + includeStmt.length, lineEnd.offset);
+            addToken('inactive', lineStartOffset + includeStart.length + includeStmt.length, offset);
 
             // in #include Makros ersetzen
             let finalIncludePath = includePath.replace(/([A-Za-z_][A-Za-z0-9_]*)/g, (define) => {
@@ -1483,7 +1481,7 @@ connection.console.log( `lookupSymbol name ${JSON.stringify(table[name])}` );
             const defineName = definePattern[3];
             const defineValue = definePattern[4] || '';
 
-            const token = addToken('preproc', lineStartOffset + defineStart.length, lineStartLine, lineStartColumn + defineStart.length, lineStartOffset + defineStart.length + defineStmt.length);
+            const token = addToken('preproc', lineStartOffset + defineStart.length, lineStartOffset + defineStart.length + defineStmt.length);
             if (defines.has(defineName)) {
               addDiagnosticError(`Makro ${defineName} bereits definiert.`, token);
             }
@@ -1491,9 +1489,11 @@ connection.console.log( `lookupSymbol name ${JSON.stringify(table[name])}` );
               defines.set(defineName, { value: defineValue, define: defineStmt });
             }
 
+            if (defineStack.length > 0 && !defineStack[defineStack.length - 1])
+              addDiagnosticHint( 'inaktiv', token, [DiagnosticTag.Unnecessary]);
+
             // Die gesamte #define-Zeile überspringen
-            const lineEnd = skipRestOfLine();
-            addToken('inactive', lineStartOffset + defineStmt.length, lineStartLine, lineStartColumn + defineStmt.length, lineEnd.offset);
+            addToken('inactive', lineStartOffset + defineStart.length + defineStmt.length, offset);
 
             continue;
           }
@@ -1504,15 +1504,17 @@ connection.console.log( `lookupSymbol name ${JSON.stringify(table[name])}` );
             const undefStmt = undefPattern[2];
             const undefName = undefPattern[3];
 
-            const token = addToken('preproc', lineStartOffset + undefStart.length, lineStartLine, lineStartColumn + undefStart.length, lineStartOffset + undefStart.length + undefStmt.length);
-            if (!defines.has(undefName)) {
+            const token = addToken('preproc', lineStartOffset + undefStart.length, lineStartOffset + undefStart.length + undefStmt.length);
+            if (defines.has(undefName)) {
+              token.define = defines[undefName];
+            }
+            else {
               addDiagnosticWarning(`Makro ${undefName} nicht definiert.`, token);
             }
             defines.delete( undefName );
 
             // Die gesamte #undef-Zeile überspringen
-            const lineEnd = skipRestOfLine();
-            addToken('inactive', lineStartOffset + undefStmt.length, lineStartLine, lineStartColumn + undefStmt.length, lineEnd.offset);
+            addToken('inactive', lineStartOffset + undefStart.length + undefStmt.length, offset);
 
             continue;
           }
@@ -1522,25 +1524,19 @@ connection.console.log( `lookupSymbol name ${JSON.stringify(table[name])}` );
             const unknownStart = unknownPattern[1];
             const unknownStmt = unknownPattern[2];
 
-            const token = addToken('error', lineStartOffset + unknownStart.length, lineStartLine, lineStartColumn + unknownStart.length, lineStartOffset + unknownStart.length + unknownStmt.length);
+            const token = addToken('error', lineStartOffset + unknownStart.length, lineStartOffset + unknownStart.length + unknownStmt.length);
             addDiagnosticError(`Unbekannter Präprozessorbefehl ${unknownStmt}`, token);
 
             // Die gesamte Zeile überspringen
-            const lineEnd = skipRestOfLine();
-            addToken('inactive', lineStartOffset + unknownStmt.length, lineStartLine, lineStartColumn + unknownStmt.length, lineEnd.offset);
+            addToken('inactive', lineStartOffset + unknownStart.length + unknownStmt.length, offset);
 
             continue;
           }
         }
         else {
-          const lineStartOffset = offset;
-          const lineStartLine = line;
-
           // Die gesamte Zeile überspringen
-          const lineEnd = skipRestOfLine();
-          addToken('inactive', lineStartOffset, lineStartLine, 0, lineEnd.offset);
-
-          const token = addToken('inactive', lineStartOffset, lineStartLine, 0, lineEnd.offset);
+          skipRestOfLine();
+          const token = addToken('inactive', lineStartOffset, offset);
           addDiagnosticHint( 'inaktiv', token, [DiagnosticTag.Unnecessary]);
 
           continue;
@@ -1552,120 +1548,156 @@ connection.console.log( `lookupSymbol name ${JSON.stringify(table[name])}` );
       // ifdef/ifndef-Block aktiv?
       if (!defineStack[defineStack.length - 1]) {
         const lineStartOffset = offset;
-        const lineStartLine = line;
 
         // Die gesamte Zeile überspringen
-        const lineEnd = skipRestOfLine();
-        const token = addToken('inactive', lineStartOffset, lineStartLine, 0, lineEnd.offset);
+        skipRestOfLine();
+        const token = addToken('inactive', lineStartOffset, offset);
         addDiagnosticHint( 'inaktiv', token, [DiagnosticTag.Unnecessary]);
 
         continue;
       }
 
-      // String / Bitstring: '...'
-      if (ch === '\'') {
+      // String- oder Bitstring-Literal:  ' ... '  optional gefolgt von B / B1..B4
+      if (cc === 39) {
         const startOffset = offset;
-        const startLine = line;
-        const startColumn = column;
-        offset++;
-        column++;
-        while (offset < len && text[offset] !== '\'') {
-          if (text[offset] === '\n' || text[offset] === '\r') {
-            // Unterbrochener String – wir beenden trotzdem
-            break;
-          }
-          advanceChar();
+
+        let res = scanQuotedString();
+        if ( typeof res === 'string' ) {
+          // Fehlermeldung
+          const token = addToken('error', startOffset, offset);
+          addDiagnosticError( res, token);
+          continue;
         }
-        if (offset < len && text[offset] === '\'') {
-          offset++;
-          column++;
-        }
-        // Optionales B/B1..B4
+
+        // Optionales Suffix: B oder B1..B4
         let type = 'string';
-        if (offset < len && text[offset] === 'B') {
-          let tmpOffset = offset;
-          let tmpColumn = column;
-          tmpOffset++;
-          tmpColumn++;
-          if (tmpOffset < len && /[1-4]/.test(text[tmpOffset])) {
-            tmpOffset++;
-            tmpColumn++;
+        if (offset < len && text.charCodeAt(offset) === 66) {
+          const stringEndOffset = offset;
+          offset++;
+
+          // optional 1..4 direkt hinter B
+          let bitFormat = 1;
+          if (offset < len) {
+            const d = text.charCodeAt(offset);
+            if (d >= 49 && d <= 52) {
+              offset++;
+              bitFormat = d - 48;
+            }
+            else if ( d==48 || d >= 53 && d <=57) {
+              // Fehlermeldung
+              const token = addToken('error', startOffset, offset);
+              addDiagnosticError( 'Ungültiges BIT-Format 1', token);
+              continue;
+            }
           }
-          offset = tmpOffset;
-          column = tmpColumn;
+
+          let maxDigit;
+          switch (bitFormat) {
+            case 1: maxDigit = 1; break;
+            case 2: maxDigit = 3; break;
+            case 3: maxDigit = 7; break;
+            case 4: maxDigit = 9; break;
+          }
+
+          const value = text.slice( startOffset + 1, stringEndOffset -1 );
+          for (let i = 0; i < value.length; i++) {
+            const c = value.charCodeAt(i);
+
+            // '0'..'9'?
+            if (c >= 48 && c <= 57) {
+              const d = c - 48;
+              if (d <= maxDigit) continue;
+              const token = addToken('error', startOffset, offset);
+              addDiagnosticError( 'Ungültiges BIT-Format', token);
+              continue;
+            }
+
+            // Bei B4 zusätzlich 'A'..'F' (und optional 'a'..'f')
+            if (bitFormat === 4) {
+              // 'A'..'F'
+              if (c >= 65 && c <= 70) continue;
+              const token = addToken('error', startOffset, offset);
+              addDiagnosticError( 'Ungültiges BIT-Format', token);
+              continue;
+            }
+
+            // sonst ungültig
+              const token = addToken('error', startOffset, offset);
+              addDiagnosticError( 'Ungültiges BIT-Format', token);
+              continue;
+          }
           type = 'bitstring';
         }
-        addToken(type, startOffset, startLine, startColumn, offset);
+
+        addToken(type, startOffset, offset);
         continue;
       }
 
       // Zahl: grob – Hauptsache sie wird nicht als Identifier erkannt
-      if (/[0-9]/.test(ch) || (ch === '.' && offset + 1 < len && /[0-9]/.test(text[offset + 1]))) {
+      if ( cc >= 48 && cc <= 57 || (cc === 46 && offset + 1 < len && text.charCodeAt(offset+1)>=48 && text.charCodeAt(offset+1)<= 57 )) {
         const startOffset = offset;
-        const startLine = line;
-        const startColumn = column;
 
         // Integer/Fraction
-        if (ch === '.') {
+        if (cc === '.') {
           offset++;
-          column++;
+          cc = text.charCodeAt(offset);
         }
-        while (offset < len && /[0-9]/.test(text[offset])) {
+        while (offset < len && cc >= 48 && cc <= 57) {
           offset++;
-          column++;
+          cc = text.charCodeAt(offset);
         }
         // optionaler Dezimalpunkt + weitere Digits
         if (offset < len && text[offset] === '.') {
           offset++;
-          column++;
           while (offset < len && /[0-9]/.test(text[offset])) {
             offset++;
-            column++;
           }
         }
         // optionaler Exponent
         if (offset < len && /[Ee]/.test(text[offset])) {
           offset++;
-          column++;
           if (offset < len && (text[offset] === '+' || text[offset] === '-')) {
             offset++;
-            column++;
           }
           while (offset < len && /[0-9]/.test(text[offset])) {
             offset++;
-            column++;
           }
         }
         // optionale Länge (z.B. (31))
         if (offset < len && text[offset] === '(') {
           offset++;
-          column++;
           while (offset < len && /[0-9]/.test(text[offset])) {
             offset++;
-            column++;
           }
           if (offset < len && text[offset] === ')') {
             offset++;
-            column++;
           }
         }
 
-        addToken('number', startOffset, startLine, startColumn, offset);
+        addToken('number', startOffset, offset);
         continue;
       }
 
       // Identifier / Keyword
-      if (/[A-Za-z]/.test(ch)) {
+
+      if (  (cc >= 65 && cc <= 90)     // A-Z
+         || (cc >= 97 && cc <= 122)    // a-z
+         ) {
         const startOffset = offset;
-        const startLine = line;
-        const startColumn = column;
         offset++;
-        column++;
-        while (offset < len && /[A-Za-z0-9_]/.test(text[offset])) {
+        while (offset < len) {
+          const cc = text.charCodeAt(offset);
+          if ( !(  (cc >= 48 && cc <= 57)    // 0-9
+                || (cc >= 65 && cc <= 90)    // A-Z
+                || (cc >= 97 && cc <= 122)   // a-z
+                || (cc === 95            )   // _
+                )
+             )
+            break;
           offset++;
-          column++;
         }
-        let value = text.slice(startOffset, offset);
+        const endOffset = offset;
+        let value = text.slice(startOffset, endOffset);
 
         if (defines.has(value)) {
           /*
@@ -1674,16 +1706,14 @@ connection.console.log( `lookupSymbol name ${JSON.stringify(table[name])}` );
           */
           const define = defines.get(value);
           const defineValue = define.value ? define.value : '';
-          addToken('preproc', startOffset, startLine, startColumn, offset);
+          addToken('preproc', startOffset, endOffset);
           tokens[ tokens.length - 1].define = defineValue;
           const defineTokenizeData = tokenize(uri, defineValue, false);  // Ersetzungstext tokenisieren, aber nicht rekursiv durch den Präprozessor laufen
           const defineTokens = defineTokenizeData.tokens;
           // Tokenposition korrigieren
           defineTokens.map( t => { 
-            t.line = startLine;
-            t.offset = startOffset;
-            t.column = startColumn;
-            t.length = offset - startOffset;
+            t.startOffset = startOffset;
+            t.endOffset = endOffset;
           });
           
           // In Ergebnis einfügen
@@ -1698,7 +1728,7 @@ connection.console.log( `lookupSymbol name ${JSON.stringify(table[name])}` );
           type = 'operator';
         else if (TYPE_KEYWORDS.includes(value))
           type = 'type';
-        addToken(type, startOffset, startLine, startColumn, offset);
+        addToken(type, startOffset, endOffset);
         if ( type === 'keyword' ) {
           if (value === 'SYSTEM') {
             if (section === 'problem')
@@ -1715,143 +1745,124 @@ connection.console.log( `lookupSymbol name ${JSON.stringify(table[name])}` );
       // Symbol
       {
         const startOffset = offset;
-        const startLine = line;
-        const startColumn = column;
 
         // DATION-Richtungsoperatoren im SYSTEM-Teil
         if (section === 'system') {
           // Dreier-Operator: "<->"
-          if (text[offset] === '<' && offset + 2 < len &&
-              text[offset + 1] === '-' && text[offset + 2] === '>') {
-            const startOffset = offset;
-            const startLine = line;
-            const startColumn = column;
+          if (cc === 60 && offset + 2 < len &&
+              text.charCodeAt(offset + 1) === 45 && text.charCodeAt(offset + 2) === 62) {
             offset += 3;
-            column += 3;
-            addToken('operator', startOffset, startLine, startColumn, offset);
+            addToken('operator', startOffset, offset);
             continue;
           }
 
           // "<-" (z.B. Eingabe)
-          if (text[offset] === '<' && offset + 1 < len && text[offset + 1] === '-') {
-            const startOffset = offset;
-            const startLine = line;
-            const startColumn = column;
+          if (cc === 60 && offset + 1 < len && text.charCodeAt(offset + 1) === 45) {
             offset += 2;
-            column += 2;
-            addToken('operator', startOffset, startLine, startColumn, offset);
+            addToken('operator', startOffset, offset);
             continue;
           }
 
           // "->" (z.B. Ausgabe)
-          if (text[offset] === '-' && offset + 1 < len && text[offset + 1] === '>') {
-            const startOffset = offset;
-            const startLine = line;
-            const startColumn = column;
+          if (cc === 45 && offset + 1 < len && text.charCodeAt(offset + 1) === 62) {
             offset += 2;
-            column += 2;
-            addToken('operator', startOffset, startLine, startColumn, offset);
+            addToken('operator', startOffset, offset);
             continue;
           }
         }
 
         // : := 
-        if (ch === ':') {
+        if (cc === 58) {
           offset++;
-          column++;
-          if (offset < len && text[offset] === '=') {
+          if (offset < len && text.charCodeAt(offset) === 61) {
             offset++;
-            column++;
           }
-          addToken('symbol', startOffset, startLine, startColumn, offset);
+          addToken('symbol', startOffset, offset);
           continue;
         }
         // = == 
-        if (ch === '=') {
+        if (cc === 61) {
           offset++;
-          column++;
-          if (offset < len && text[offset] === '=') {
+          if (offset < len && text.charCodeAt(offset) === 61) {
             offset++;
-            column++;
           }
-          addToken('operator', startOffset, startLine, startColumn, offset);
+          addToken('operator', startOffset, offset);
           continue;
         }
         // < <= <> 
-        if (ch === '<') {
+        if (cc === 60) {
           offset++;
-          column++;
-          if (offset < len && (text[offset] === '=' || text[offset] === '>') ) {
+          if (offset < len && (text.charCodeAt(offset) === 61 || text.charCodeAt(offset) === 62) ) {
             offset++;
-            column++;
           }
-          addToken('operator', startOffset, startLine, startColumn, offset);
+          addToken('operator', startOffset, offset);
           continue;
         }
         // > >= >< 
-        if (ch === '>') {
+        if (cc === 62) {
           offset++;
-          column++;
-          if (offset < len && (text[offset] === '=' || text[offset] === '<') ) {
+          if (offset < len && (text.charCodeAt(offset) === 61 || text.charCodeAt(offset) === 60) ) {
             offset++;
-            column++;
           }
-          addToken('operator', startOffset, startLine, startColumn, offset);
+          const endOffset = offset;
+          addToken('operator', startOffset, endOffset);
           continue;
         }
         // / // /= 
-        if (ch === '/') {
+        if (cc === 47) {
           offset++;
-          column++;
-          if (offset < len && (text[offset] === '/' || text[offset] === '=') ) {
+          if (offset < len && (text.charCodeAt(offset) === 47 || text.charCodeAt(offset) === 61) ) {
             offset++;
-            column++;
           }
-          addToken('operator', startOffset, startLine, startColumn, offset);
+          addToken('operator', startOffset, offset);
           continue;
         }
         // * ** 
-        if (ch === '*') {
+        if (cc === 42) {
           offset++;
-          column++;
-          if (offset < len && text[offset] === '*') {
+          if (offset < len && text.charCodeAt(offset) === 42) {
             offset++;
-            column++;
           }
-          addToken('operator', startOffset, startLine, startColumn, offset);
+          addToken('operator', startOffset, offset);
           continue;
         }
         // + -
-        if (ch === '+' | ch === '-') {
+        if (cc === 43 | cc === 45) {
           offset++;
-          column++;
-          addToken('operator', startOffset, startLine, startColumn, offset);
+          addToken('operator', startOffset, offset);
           continue;
         }
-        // + - ( ) [ ] ; , .
-        if (ch === '(' || ch === ')' || ch === '[' || ch === ']' || ch === ';' || ch === ',' || ch === '.' ) {
+        // ( ) [ ] ; , .
+        if (cc === 40 || cc === 41 || cc === 91 || cc === 93 || cc === 59 || cc === 44 || cc === 46 ) {
           offset++;
-          column++;
-          addToken('symbol', startOffset, startLine, startColumn, offset);
+          addToken('symbol', startOffset, offset);
           continue;
         }
         // unerlaubtes Zeichen
-        offset++;
-        column++;
-        addToken('error', startOffset, startLine, startColumn, offset);
-        continue;
+        {
+          offset++;
+          addToken('error', startOffset, offset);
+          continue;
+        }
       }
+    }
+
+    // Letzte Zeile korrigieren, falls Datei nicht mit Newline endet
+    if (lineEndOffsets.length < lineStartOffsets.length) {
+      lineEndOffsets.push(len); // Zeilenende ist Dateiende
     }
 
     return {
       tokens,
-      lineOffsets
+      lineStartOffsets,
+      lineEndOffsets
     };
   }
 
   const tokenizeData = tokenize(uri, text);
   const tokens = tokenizeData.tokens;
-  const lineOffsets = tokenizeData.lineOffsets;
+  const lineStartOffsets = tokenizeData.lineStartOffsets;
+  const lineEndOffsets = tokenizeData.lineEndOffsets;
 
   /*
   * Typangabe mit Attributen parsen
@@ -2054,10 +2065,10 @@ connection.console.log( `lookupSymbol name ${JSON.stringify(table[name])}` );
   };
 
   function markUnusedVariables() {
-connection.console.log(`markUnusedVariables: length ${scopeStack.length}`);
+//connection.console.log(`markUnusedVariables: length ${scopeStack.length}`);
     if ( scopeStack.length > 0 ) {
       const currentScope = scopeStack[ scopeStack.length - 1];
-connection.console.log(`markUnusedVariables: currentScope: ${JSON.stringify(currentScope)}`);
+//connection.console.log(`markUnusedVariables: currentScope: ${JSON.stringify(currentScope)}`);
       Object.values(currentScope).filter(identifier => !identifier.used && !( identifier.typeDescription && identifier.typeDescription.global) ).forEach(identifier => {
         addDiagnosticWarning(`Bezeichner ${identifier.nameToken.value} nicht verwendet.`, identifier.nameToken);
         addDiagnosticHint( 'inaktiv', identifier.nameToken, [DiagnosticTag.Unnecessary]);
@@ -2176,14 +2187,14 @@ connection.console.log(`markUnusedVariables: currentScope: ${JSON.stringify(curr
         markUnusedVariables();
 
         if (scopeStack.length > 1) scopeStack.pop();
-        let endToken = structuredClone(t);
-        endToken.line = t.line - 1;
-        endToken.column = lineOffsets[t.line-1].endOfLineColumn;
-        endToken.offset = lineOffsets[t.line-1].endOfLineOffset;
+       
         foldingRanges.push({
-          startToken: startToken.token,
-          endToken,
-          kind: 'region'
+          startOffset: startToken.token.startOffset,
+          startUri: startToken.token.uri,
+          endOffset: t.startOffset,
+          endUri: t.uri,
+          kind: 'region',
+          collapsedText: '...'
         });
       }
       continue;
@@ -2197,14 +2208,13 @@ connection.console.log(`markUnusedVariables: currentScope: ${JSON.stringify(curr
         addDiagnosticError('Unerwartetes ELSE ohne passenden Block (IF).', t);
       } else {
         const startToken = blockStack.pop();
-        let endToken = structuredClone(t);
-        endToken.line = t.line - 1;
-        endToken.column = lineOffsets[t.line-1].endOfLineColumn;
-        endToken.offset = lineOffsets[t.line-1].endOfLineOffset;
         foldingRanges.push({
-          startToken: startToken.token,
-          endToken,
-          kind: 'region'
+          startOffset: startToken.token.startOffset,
+          startUri: startToken.token.uri,
+          endOffset: t.startOffset,
+          endUri: t.uri,
+          kind: 'region',
+          collapsedText: '...'
         });
         blockStack.push({ keyword: kw, token: t });
       }
@@ -2219,16 +2229,14 @@ connection.console.log(`markUnusedVariables: currentScope: ${JSON.stringify(curr
         addDiagnosticError('Unerwartetes FIN ohne passenden Block (IF/CASE).', t);
       } else {
         const startToken = blockStack.pop();
-        let endToken = structuredClone(t);
-        endToken.line = t.line - 1;
-        endToken.column = lineOffsets[t.line-1].endOfLineColumn;
-        endToken.offset = lineOffsets[t.line-1].endOfLineOffset;
-connection.console.log( `FIN für ${startToken.token.value} von ${startToken.token.line}`);
         foldingRanges.push({
-          startToken: startToken.token,
-          endToken,
-          kind: 'region'
-        })
+          startOffset: startToken.token.startOffset,
+          startUri: startToken.token.uri,
+          endOffset: t.startOffset,
+          endUri: t.uri,
+          kind: 'region',
+          collapsedText: '...'
+        });
       }
       continue;
     }
@@ -2244,15 +2252,14 @@ connection.console.log( `FIN für ${startToken.token.value} von ${startToken.tok
         const startToken = blockStack.pop();
         markUnusedVariables();
         if (scopeStack.length > 1) scopeStack.pop();
-        let endToken = structuredClone(t);
-        endToken.line = t.line - 1;
-        endToken.column = lineOffsets[t.line-1].endOfLineColumn;
-        endToken.offset = lineOffsets[t.line-1].endOfLineOffset;
         foldingRanges.push({
-          startToken: startToken.token,
-          endToken,
-          kind: 'region'
-        })
+          startOffset: startToken.token.startOffset,
+          startUri: startToken.token.uri,
+          endOffset: t.startOffset,
+          endUri: t.uri,
+          kind: 'region',
+          collapsedText: '...'
+        });
       }
       continue;
     }
@@ -2505,9 +2512,7 @@ logIdentifier( identifier, `TYPE level: ${scopeStack.length - 1}` );
       const label = findNextCodeToken(tokens, i);
       const semicolon = findNextCodeToken(tokens, label.index);
       const nextSemicolon = findNextSemicolonToken(tokens, i);
-connection.console.log( `GOTO ${JSON.stringify( label )} ${JSON.stringify( semicolon )} ${JSON.stringify( nextSemicolon )}`);
       if (label && label.token.type === 'identifier') {
-        const gotoLabel = label;
         gotoList.push( label.token );
       }
       else {
@@ -2666,7 +2671,7 @@ connection.console.log( `GOTO ${JSON.stringify( label )} ${JSON.stringify( semic
 
   // unbenutze globale Variablen suchen
   if (!modendFound) {
-    connection.console.log( 'globale unbenutzte Variablen: -------');
+//    connection.console.log( 'globale unbenutzte Variablen: -------');
     markUnusedVariables();
   }
 
@@ -2674,19 +2679,13 @@ connection.console.log( `GOTO ${JSON.stringify( label )} ${JSON.stringify( semic
   for (const open of blockStack) {
     const t = open.token;
     const endKw = BLOCK_END_MAP[open.keyword] || 'END';
-    diagnostics.push({
-      severity: DiagnosticSeverity.Warning,
-      message: `Block '${open.keyword}' wird nicht geschlossen. Erwartet ${endKw}.`,
-      range: {
-        start: { line: t.line, character: t.column },
-        end: { line: t.line, character: t.column + t.length }
-      },
-      source: 'pearl-lsp'
-    });
+    addDiagnosticError(`Block '${open.keyword}' wird nicht geschlossen. Erwartet ${endKw}.`,t );
   }
 
   return {
     tokens,
+    lineStartOffsets,
+    lineEndOffsets,
     diagnostics,
     scopeStack,
     foldingRanges
@@ -2755,8 +2754,10 @@ connection.onHover((params) => {
   const fullTokens = analysis.tokens;
   if ( !fullTokens ) return null;
 
-  const pos = params.position;
-  const targetToken = findTokenAt(fullTokens, params.textDocument.uri, pos.line, pos.character);
+  const doc = documents.get(params.textDocument.uri);
+  if (!doc) return null;
+
+  const targetToken = findTokenAt(fullTokens, params.textDocument.uri, doc.offsetAt(params.position));
   if (!targetToken) return null;
 
   // Test----
@@ -2826,17 +2827,17 @@ connection.onHover((params) => {
 
 connection.onDefinition((params) => {
 
-  const doc = documents.get(params.textDocument.uri);
+  const uri = params.textDocument.uri;
+  const doc = documents.get(uri);
   if (!doc) return null;
 
-  const analysis = documentTokenCache.get( params.textDocument.uri );    // Aus dem Cache holen
+  const analysis = documentTokenCache.get( uri );    // Aus dem Cache holen
   if ( !analysis ) return null;
 
   const fullTokens = analysis.tokens;
   if ( !fullTokens ) return null;
 
-  const pos = params.position;
-  const targetToken = findTokenAt(fullTokens, params.textDocument.uri, pos.line, pos.character);
+  const targetToken = findTokenAt(fullTokens, uri, doc.offsetAt(params.position));
   if (!targetToken) return null;
 
   // Kein GoTo in Kommentaren, Strings, Bitstrings, Zahlen, keyword
@@ -2850,11 +2851,17 @@ connection.onDefinition((params) => {
 
   if (definition) {
     const nameToken = definition.nameToken;
+    const definitionDoc = documents.get(nameToken.uri);
+    if (!definitionDoc) return null;
+
+    const startPos = definitionDoc.positionAt( nameToken.startOffset );
+    const endPos = definitionDoc.positionAt( nameToken.endOffset );
+
     return {
       uri: nameToken.uri,
       range: {
-        start: { line: nameToken.line, character: nameToken.column },
-        end: { line: nameToken.line, character: nameToken.column + nameToken.length }
+        start: startPos,
+        end: endPos
       }
     };
   }
@@ -2874,21 +2881,32 @@ connection.onFoldingRanges((params) => {
   }
   
   const analysis = documentTokenCache.get( uri );    // Aus dem Cache holen
-  if ( !analysis ) return null;
+  if ( !analysis ) return [];
 
   const foldingRanges = analysis.foldingRanges;
-  if ( !foldingRanges ) return null;
+  if ( !foldingRanges ) return [];
 
   // Nur Tokens aus *diesem* Dokument berücksichtigen
-  const localRanges = foldingRanges.filter(t => t.startToken.uri === uri && t.endToken.uri === uri);
+  const localRanges = foldingRanges.filter(t => t.startUri === uri && t.endUri === uri);
 
+  const lineEndOffsets = analysis.lineEndOffsets || [];
   const ranges = [];
   for (const r of localRanges) {
+    const startPos = doc.positionAt( r.startOffset );
+    const endPos = doc.positionAt( r.endOffset );
+
+    if ( startPos.line >= endPos.line || endPos.line == 0 )
+      continue;
+
+    // Folding endet in der vorhergenden Zeile
+    const endOffsetPrevLine = lineEndOffsets[ endPos.line - 1 ];
+    const endPosPrevLine = doc.positionAt( endOffsetPrevLine )
+
     ranges.push({
-      startLine: r.startToken.line,
-      startCharacter: r.startToken.column,
-      endLine: r.endToken.line,
-      endCharacter: r.endToken.column,
+      startLine: startPos.line,
+      startCharacter: startPos.character,
+      endLine: endPosPrevLine.line,
+      endCharacter: endPosPrevLine.character,
       kind: r.kind,
       collapsedText: r.collapsedText || null
     });
