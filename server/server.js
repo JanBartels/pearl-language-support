@@ -167,7 +167,6 @@ function getAnyWorkspaceRoot() {
 
 
 const connection = createConnection(ProposedFeatures.all);
-const documents = new TextDocuments(TextDocument);
 
 /*
 namespace – Namespaces, Module, Packages
@@ -337,10 +336,6 @@ function getDocumentSettings(resource) {
 
 const fs = require('fs');
 
-// key: absoluter Pfad
-// value: { mtimeMs, text }
-const includeFileCache = new Map();
-
 function filePathFromUri(uri) {
  if (uri.startsWith('file://')) {
     try {
@@ -356,36 +351,80 @@ function uriFromFilePath(absPath) {
   return pathToFileURL(absPath).toString();
 }
 
-function loadFileTextCached(absPath) {
-  try {
-    const stat = fs.statSync(absPath);
-    const mtimeMs = stat.mtimeMs;
+class DocumentRegistry {
+  constructor(documents) {
+    // TextDocuments<TextDocument>
+    this.documents = documents;
 
-    const entry = includeFileCache.get(absPath);
-    if (entry && entry.mtimeMs === mtimeMs) {
-      // Cache liefern
-      return {
-        text: entry.text,
-        error: undefined
-      };
+    // Map<fsPath, { mtimeMs, doc }>
+    this.includeCache = new Map();
+  }
+
+  /**
+   * Liefert ein TextDocument zu einer URI
+   * (offen oder included)
+   */
+  get(uri) {
+    // 1. Offenes Dokument?
+    const openDoc = this.documents.get(uri);
+    if (openDoc) {
+      return openDoc;
     }
 
-    // Datei liefern
-    const text = fs.readFileSync(absPath, 'utf8');
-    includeFileCache.set(absPath, { mtimeMs, text, error: undefined });
+    // 2. Vom Dateisystem laden
+    return this._loadFromFileSystem(uri);
+  }
+
+  _loadFromFileSystem(uri) {
+    let fsPath;
+    try {
+      fsPath = filePathFromUri(uri);
+      const stat = fs.statSync(fsPath);
+      const mtimeMs = stat.mtimeMs;
+
+      const cached = this.includeCache.get(fsPath);
+      if (cached && cached.mtimeMs === mtimeMs) {
+        return cached.doc;
+      }
+
+      const text = fs.readFileSync(fsPath, 'utf8');
+      const doc = TextDocument.create(uri, 'pearl', 0, text);
+
+      this.includeCache.set(fsPath, { mtimeMs, doc });
+      return doc;
+    } catch (e) {
+      if (fsPath) {
+        this.includeCache.delete(fsPath);
+      }
+      return null;
+    }
+  }
+
+  invalidateUri(uri) {
+    const fsPath = filePathFromUri(uri);
+    this.includeCache.delete(fsPath);
+  }
+
+  /**
+   * Optional: Include-Cache komplett leeren
+   */
+  invalidateAllIncludes() {
+    this.includeCache.clear();
+  }
+
+  /**
+   * Debug-Hilfe
+   */
+  stats() {
     return {
-      text,
-      error: undefined
-    };
-  } catch (e) {
-    // Fehler liefern
-    includeFileCache.delete(absPath);
-    return {
-      text: '',
-      error: e.message
+      openDocuments: this.documents.all().length,
+      cachedIncludes: this.includeCache.size
     };
   }
 }
+
+const documents = new TextDocuments(TextDocument);
+const documentRegistry = new DocumentRegistry(documents);
 
 // ------------------------------
 // PEARL-spezifische Daten
@@ -943,7 +982,7 @@ function analyze(uri, text, settings, options) {
       return;
     }
 
-    const doc = documents.get(diagUri);
+    const doc = documentRegistry.get(diagUri);
     if (!doc) return;
 
     // Bei evtl. Lexer-Fehlern Offsets begrenzen
@@ -1451,19 +1490,20 @@ function analyze(uri, text, settings, options) {
               return define;
             });
 
-            const parentPath = getWorkingDirectoryForDocument(uri, settings);            
-            const absPath = path.resolve(parentPath, finalIncludePath);
             if (includeStack.length < 100) { // maximale Include-Tiefe erreicht?
-              const incText = loadFileTextCached(absPath);
-              if (incText.error) {
-                // Dateifehler
-                addDiagnosticError(`#include: ${incText.error}`, token);
+              const parentPath = getWorkingDirectoryForDocument(uri, settings);            
+              const absPath = path.resolve(parentPath, finalIncludePath);
+
+              const includeUri = uriFromFilePath(absPath);
+              const includeDoc = documentRegistry.get(includeUri);
+
+              if (!includeDoc) {
+                addDiagnosticError(`#include: Datei ${finalIncludePath} nicht lesbar`, token);
               } else {
                 includeStack.push(absPath);
-                const childUri = uriFromFilePath(absPath);
 
                 // Rekursiv tokenisieren; section-Status durchreichen
-                const incTokenizeData = tokenize(childUri, incText.text, true);
+                const incTokenizeData = tokenize(includeDoc.uri, includeDoc.getText(), true);
                 includeStack.pop();
 
                 // In Ergebnis einfügen
@@ -1483,7 +1523,7 @@ function analyze(uri, text, settings, options) {
 
             const token = addToken('preproc', lineStartOffset + defineStart.length, lineStartOffset + defineStart.length + defineStmt.length);
             if (defines.has(defineName)) {
-              addDiagnosticError(`Makro ${defineName} bereits definiert.`, token);
+              addDiagnosticWarning(`Makro ${defineName} bereits definiert.`, token);
             }
             else {
               defines.set(defineName, { value: defineValue, define: defineStmt });
@@ -2097,6 +2137,7 @@ function analyze(uri, text, settings, options) {
             if ( scopeStack.length >= 2 ) {
               const currentScope = scopeStack[1];
               const identifier = createIdentifier(t, [], false, false, false, '@LABEL', false, false);
+logIdentifier( identifier, `@LABEL level: ${scopeStack.length - 1}` );
               currentScope[t.value] = identifier;   // PROC/TASK ist immer globaler Scope
             }
             else {
@@ -2354,7 +2395,7 @@ logIdentifier( dclName, `DCL level: ${scopeStack.length - 1}` );
         const typeName = typeIdentifier.token.value;
 
         const currentScope = scopeStack[scopeStack.length - 1];
-        const typeTokens = [ typ.token, typ.token, t ];
+        const typeTokens = [ typ.token, t ];
         const identifier = createIdentifier( typeIdentifier.token, typeTokens, false, false, false, 'TYPE', false, false );
         const typeDescription = parseTypeDescription(tokens, typeName.index, semicolon.index);        
 //        identifier.typeDescription = typeDescription;
@@ -2391,7 +2432,7 @@ logIdentifier( identifier, `TYPE level: ${scopeStack.length - 1}` );
           const typeTokens = [ prev2.token, prev.token, t ];
           const identifier = createIdentifier( prev2.token, typeTokens, false, false, false, kind, false, false );
           identifier.used = ( kw === 'TASK' );    // immer setzen, weil TASK nach außen sichtbar ist.
-//logIdentifier( identifier, `${kind} level: ${scopeStack.length - 1}` );
+logIdentifier( identifier, `${kind} level: ${scopeStack.length - 1}` );
           currentScope[labelName] = identifier;   // PROC/TASK ist immer globaler Scope
 
           // Blockstart
@@ -2754,7 +2795,7 @@ connection.onHover((params) => {
   const fullTokens = analysis.tokens;
   if ( !fullTokens ) return null;
 
-  const doc = documents.get(params.textDocument.uri);
+  const doc = documentRegistry.get(params.textDocument.uri);
   if (!doc) return null;
 
   const targetToken = findTokenAt(fullTokens, params.textDocument.uri, doc.offsetAt(params.position));
@@ -2773,7 +2814,7 @@ connection.onHover((params) => {
     return {
       contents: {
         kind: 'markdown',
-        value: `Token: ${targetToken.type}: **${targetToken.value}** at offset **${targetToken.offset}** defined at ${targetToken.definition.nameToken.offset} as ${JSON.stringify( targetToken.definition.typeDescription)}`
+        value: `Token: ${targetToken.type}: **${targetToken.value}** at offset **${targetToken.startOffset}** defined at ${targetToken.definition.nameToken.startOffset} in ${targetToken.definition.nameToken.uri} as ${JSON.stringify( targetToken.definition.typeDescription)}`
       }
     };
   }
@@ -2789,7 +2830,7 @@ connection.onHover((params) => {
     return {
       contents: {
         kind: 'markdown',
-        value: `Token: ${targetToken.type}: **${targetToken.value}** at offset **${targetToken.offset}**: ${JSON.stringify(targetToken)}`
+        value: `Token: ${targetToken.type}: **${targetToken.value}** at offset **${targetToken.startOffset}**: ${JSON.stringify(targetToken)}`
       }
     };
   }
@@ -2828,7 +2869,7 @@ connection.onHover((params) => {
 connection.onDefinition((params) => {
 
   const uri = params.textDocument.uri;
-  const doc = documents.get(uri);
+  const doc = documentRegistry.get(uri);  
   if (!doc) return null;
 
   const analysis = documentTokenCache.get( uri );    // Aus dem Cache holen
@@ -2845,13 +2886,11 @@ connection.onDefinition((params) => {
     return null;
   }
 
-  const targetName = targetToken.value;
-  const targetOffset = targetToken.offset;
   const definition = targetToken.definition;
 
   if (definition) {
     const nameToken = definition.nameToken;
-    const definitionDoc = documents.get(nameToken.uri);
+    const definitionDoc = documentRegistry.get(nameToken.uri);
     if (!definitionDoc) return null;
 
     const startPos = definitionDoc.positionAt( nameToken.startOffset );
@@ -2875,7 +2914,7 @@ connection.onDefinition((params) => {
 
 connection.onFoldingRanges((params) => {
   const uri = params.textDocument.uri;
-  const doc = documents.get(uri);
+  const doc = documentRegistry.get(uri);
   if (!doc) {
     return [];
   }
@@ -2922,7 +2961,7 @@ connection.onFoldingRanges((params) => {
 connection.languages.semanticTokens.on((params) => {
 try {  
   const uri = params.textDocument.uri
-  const doc = documents.get(uri);
+  const doc = documentRegistry.get(uri);
   if (!doc) {
     return { data: [] };
   }
@@ -3081,7 +3120,15 @@ documents.onDidClose((event) => {
 });
 
 documents.onDidChangeContent((event) => {
+  documentTokenCache.delete(event.document.uri);
   validateTextDocument(event.document);
+});
+
+connection.onDidChangeWatchedFiles((event) => {
+  for (const change of event.changes) {
+    documentRegistry.invalidateUri(change.uri);
+    documentTokenCache.delete(change.uri);
+  }
 });
 
 // React to configuration changes
@@ -3095,6 +3142,7 @@ connection.onDidChangeConfiguration((event) => {
   }
 
   // Revalidate all open documents with the new settings
+  documentRegistry.invalidateAllIncludes();  
   documents.all().forEach((doc) => {
     validateTextDocument(doc);
   });

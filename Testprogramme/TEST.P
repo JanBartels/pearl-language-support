@@ -35,6 +35,13 @@ END;
 
 DCL bAktiv BIT;
 
+DCL (
+   Var1,
+#ifdef ghi
+   Var2,
+#endif
+   Var3
+) FIXED;   
 
 #ifndef InclDir
   #define InclDir "'/home/jan/pearl-lsp'"
