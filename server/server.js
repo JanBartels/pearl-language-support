@@ -2788,6 +2788,14 @@ connection.onCompletionResolve((item) => {
 // Hover
 // ------------------------------
 
+function escapeMarkdown(value) {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  const text = String(value);
+  return text.replace(/[\\`*_{}[\]()#+\-.!]/g, '\\$&');
+}
+
 connection.onHover((params) => {
   const analysis = documentTokenCache.get( params.textDocument.uri );    // Aus dem Cache holen
   if ( !analysis ) return null;
@@ -2806,7 +2814,7 @@ connection.onHover((params) => {
     return {
       contents: {
         kind: 'markdown',
-        value: `#define **${targetToken.value}** "${targetToken.define}"`
+        value: `#define **${escapeMarkdown(targetToken.value)}** "${escapeMarkdown(targetToken.define)}"`
       }
     };
   }
@@ -2814,7 +2822,7 @@ connection.onHover((params) => {
     return {
       contents: {
         kind: 'markdown',
-        value: `Token: ${targetToken.type}: **${targetToken.value}** at offset **${targetToken.startOffset}** defined at ${targetToken.definition.nameToken.startOffset} in ${targetToken.definition.nameToken.uri} as ${JSON.stringify( targetToken.definition.typeDescription)}`
+        value: `Token: ${escapeMarkdown(targetToken.type)}: **${escapeMarkdown(targetToken.value)}** at offset **${escapeMarkdown(targetToken.startOffset)}** defined at ${escapeMarkdown(targetToken.definition.nameToken.startOffset)} in ${escapeMarkdown(targetToken.definition.nameToken.uri)} as ${escapeMarkdown(JSON.stringify( targetToken.definition.typeDescription))}`
       }
     };
   }
@@ -2822,7 +2830,7 @@ connection.onHover((params) => {
     return {
       contents: {
         kind: 'markdown',
-        value: `**${targetToken.value}**: ${targetToken.builtin.signature}: *${targetToken.builtin.notes}*`
+        value: `**${escapeMarkdown(targetToken.value)}**: ${escapeMarkdown(targetToken.builtin.signature)}: *${escapeMarkdown(targetToken.builtin.notes)}*`
       }
     };
   }
@@ -2830,7 +2838,7 @@ connection.onHover((params) => {
     return {
       contents: {
         kind: 'markdown',
-        value: `Token: ${targetToken.type}: **${targetToken.value}** at offset **${targetToken.startOffset}**: ${JSON.stringify(targetToken)}`
+        value: `Token: ${escapeMarkdown(targetToken.type)}: **${escapeMarkdown(targetToken.value)}** at offset **${escapeMarkdown(targetToken.startOffset)}**: ${escapeMarkdown(JSON.stringify(targetToken))}`
       }
     };
   }
@@ -2845,7 +2853,7 @@ connection.onHover((params) => {
     return {
       contents: {
         kind: 'markdown',
-        value: `**${targetToken.value}** ist ein PEARL-Schlüsselwort.`
+        value: `**${escapeMarkdown(targetToken.value)}** ist ein PEARL-Schlüsselwort.`
       }
     };
   }
@@ -2854,7 +2862,7 @@ connection.onHover((params) => {
     return {
       contents: {
         kind: 'markdown',
-        value: `**${targetToken.value}** ist ein Identifier.`
+        value: `**${escapeMarkdown(targetToken.value)}** ist ein Identifier.`
       }
     };
   }

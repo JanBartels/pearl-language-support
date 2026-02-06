@@ -33,6 +33,9 @@ END;
 #include testinc.h
 #include "testinc.h"
 
+#define CS "''\C2A9\''"
+DCL cs CHAR(2) INIT(CS);
+
 DCL bAktiv BIT;
 
 DCL (
