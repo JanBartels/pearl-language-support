@@ -1081,16 +1081,7 @@ function analyze(uri, text, settings, options) {
   function findNextCodeToken(tokens, index) {
     for (let i = index + 1; i < tokens.length; i++) {
       const t = tokens[i];
-      if (t.type === 'comment' || t.type === 'inactive') continue;
-      return { token: t, index: i };
-    }
-    return null;
-  }
-
-  function skipComments(tokens, index) {
-    for (let i = index; i < tokens.length; i++) {
-      const t = tokens[i];
-      if (t.type === 'comment' || t.type === 'inactive') continue;
+      if (t.type === 'comment' || t.type === 'inactive' || t.type ==='preproc') continue;
       return { token: t, index: i };
     }
     return null;
@@ -1127,7 +1118,7 @@ function analyze(uri, text, settings, options) {
     stack.push( openToken );
     for (let i = index + 1; i < tokens.length; i++) {
       const t = tokens[i];
-      if (t.type === 'comment' || t.type === 'inactive') continue;
+      if (t.type === 'comment' || t.type === 'inactive' || t.type ==='preproc') continue;
       if (t.type === 'symbol') {
         if (t.value === '(' || t.value === '[') {
           stack.push(t);
@@ -1754,6 +1745,7 @@ function analyze(uri, text, settings, options) {
           defineTokens.map( t => { 
             t.startOffset = startOffset;
             t.endOffset = endOffset;
+            t.isMacro = true;
           });
           
           // In Ergebnis einfügen
@@ -2035,7 +2027,8 @@ function analyze(uri, text, settings, options) {
 
     for (let j = startIndex; j <= endIndex; j++) {
 
-      const nextToken = skipComments(tokens, j);
+      const nextToken = findNextCodeToken(tokens, j);
+connection.console.log( `parseSpcDclTokens: ${JSON.stringify(nextToken)}`);
       j = nextToken.index;
       const t = nextToken.token;
 
@@ -2310,7 +2303,7 @@ logIdentifier( identifier, `@LABEL level: ${scopeStack.length - 1}` );
       const semicolon = findNextSemicolonToken(tokens, i);
       if ( semicolon ) {
         let endIndex = semicolon.index;
-        const parsedSpc = parseSpcDclTokens(tokens, i + 1, endIndex - 1);
+        const parsedSpc = parseSpcDclTokens(tokens, i, endIndex - 1);
 
         const currentScope = scopeStack[scopeStack.length - 1];
         for (const dclName of parsedSpc) {
@@ -2333,7 +2326,7 @@ logIdentifier( dclName, `DCL level: ${scopeStack.length - 1}` );
       const semicolon = findNextSemicolonToken(tokens, i);
       if ( semicolon ) {
         let endIndex = semicolon.index;
-        const parsedSpc = parseSpcDclTokens(tokens, i + 1, endIndex - 1);
+        const parsedSpc = parseSpcDclTokens(tokens, i, endIndex - 1);
 
         const currentScope = scopeStack[scopeStack.length - 1];
         for (const spcName of parsedSpc) {
@@ -2441,11 +2434,12 @@ logIdentifier( identifier, `${kind} level: ${scopeStack.length - 1}` );
 
           // PROC-Parameter aus Header (Text von PROC bis zum nächsten ')')
           if (kind === 'PROC' || kind === 'PROCEDURE') {
+connection.console.log( `PROC ${prev2.token.value} ---------`);
             let nextTok = findNextCodeToken(tokens, i);
             if (nextTok && nextTok.token.type === 'symbol' && nextTok.token.value === '(') {
               const closeParen = findMatchingParenToken(tokens, nextTok.index );
               if ( closeParen ) {
-                const parsedParam = parseSpcDclTokens(tokens, nextTok.index + 1, closeParen.index - 1);
+                const parsedParam = parseSpcDclTokens(tokens, nextTok.index, closeParen.index - 1);
                 const currentScope = scopeStack[scopeStack.length - 1];
                 for (const paramName of parsedParam) {
 //logIdentifier( paramName, `Param level: ${scopeStack.length - 1}` );
@@ -2463,6 +2457,7 @@ logIdentifier( identifier, `${kind} level: ${scopeStack.length - 1}` );
                       if ( closeParen ) {
                         const nextTok = findNextCodeToken(tokens, i = openIndex);
                         const typeDescription = parseTypeDescription(tokens, nextTok.index, closeParen.index);
+                        identifier.returnType = typeDescription;
                         i = closeParen.index;
                       }
                       else {
@@ -2636,9 +2631,24 @@ logIdentifier( identifier, `${kind} level: ${scopeStack.length - 1}` );
       const semicolon = findNextCodeToken(tokens, sema.index);
       const nextSemicolon = findNextSemicolonToken(tokens, i);
 
-      if (value && value.token.type !== 'number') {
-        addDiagnosticError(`SEMASET Preset-Wert ist ungültig.`, value.token);
-      }
+      if ( value ) {
+/*      
+        return {
+          contents: {
+            kind: 'markdown',
+            value: `#define **${escapeMarkdown(targetToken.value)}** "${escapeMarkdown(targetToken.define)}"`
+          }
+*/
+
+        connection.console.log( `${JSON.stringify( value )}`);
+        connection.console.log( `${JSON.stringify( comma )}`);
+        if (value.token.type !== 'number') {
+          addDiagnosticError(`SEMASET Preset-Wert ist ungültig.`, value.token);
+        }
+
+      };
+
+
       if (comma && comma.token.type !== 'symbol' && comma.token.value !== ',') {
         addDiagnosticError(`SEMASET Komma erwartet.`,comma.token);
       }
@@ -3013,7 +3023,7 @@ try {
     semanticTokens.push(lineDelta, charDelta, length, typeIndex, modifierBits);
   }  
 
-  const sortedTokens = tokens.filter(t => t.uri === uri && (t.type !== 'comment' && t.type !== 'inactive')).sort((a, b) =>
+  const sortedTokens = tokens.filter(t => t.uri === uri && (t.type !== 'comment' && t.type !== 'inactive' && !t.isMacro )).sort((a, b) =>
     a.line === b.line
       ? a.column - b.column
       : a.line - b.line

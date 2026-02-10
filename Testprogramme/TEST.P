@@ -104,17 +104,22 @@ DCL UnusedGlobalVarGlobal FIXED GLOBAL;
 DCL Var FIXED;  ! Verwendung per Makro defVar
 #define defVar "Var"
 
-#define defVarName "Var2"
+#define defVarName "VarMacro"
 DCL defVarName FIXED;
 
 DCL MyTestStruct TestStruct;
 
 DCL InitializedFloat FLOAT INIT(5.0);
 
+#define BUFSIZE "50"
+DCL BufSema SEMA;
+
 somethingGlobal: PROC RETURNS( FIXED ) GLOBAL;
 DCL MyArr(2) FIXED;
 DCL SpecialChar CHAR(20);
 
+   SEMASET BUFSIZE, BufSema;
+   
    ! Modes bei OPEN/CAN
    OPEN A1 BY IDF('HUHU'),OLD;
    CLOSE A1 BY CAN;
@@ -138,6 +143,9 @@ DCL SpecialChar CHAR(20);
    ! Strukturelemente
    MyTestStruct.Element1 = 42;
    RETURN 1;
+END;
+
+something2: PROC( D DATION INOUT ALPHIC IDENT, A FIXED, B FLOAT) RETURNS( FIXED );
 END;
 
 something: PROC( D DATION INOUT ALPHIC IDENT, A FIXED, B FLOAT);
@@ -173,6 +181,7 @@ AlreadyDefinedLabel:
 IF x = 0 THEN     ! Operator = ist Fehler!
    ! Kommentar
    CALL something( A1, 5,12.3 );
+   x = something2( A1, 5,12.3 );
    something( A1, 5,12.3 );
    CALL somethingUndefined;
    retVal = somethingREF( 5 );
