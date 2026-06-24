@@ -1,4 +1,5 @@
-// https://github.com/microsoft/vscode/wiki/Semantic-Highlighting-Overview/887dec50de3282c23983130f72e2f94a8e7e5368
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Jan Bartels
 
 /*
  * Copyright (C) 2025, 2026 Jan Bartels
@@ -17,7 +18,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-const {
+// https://github.com/microsoft/vscode/wiki/Semantic-Highlighting-Overview/887dec50de3282c23983130f72e2f94a8e7e5368
+
+import {
   createConnection,
   TextDocuments,
   ProposedFeatures,
@@ -28,238 +31,49 @@ const {
   CompletionItemKind,
   DiagnosticSeverity,
   DiagnosticTag
-} = require('vscode-languageserver/node');
+} from 'vscode-languageserver/node';
 
-const { fileURLToPath, pathToFileURL } = require('url');
-
-const { TextDocument } = require('vscode-languageserver-textdocument');
-
-const path = require('path');
-
-// Workspace-Unterstützung
-let workspaceFolders = null;
-let legacyRootUri = null;
-
-/**
- * Muss einmal im onInitialize-Handler aufgerufen werden.
- * Kümmert sich um workspaceFolders / rootUri / rootPath.
- */
-function initWorkspaceState(params){
-  // workspaceFolders vom Client übernehmen:
-  //  - null     => kein Workspace (typisch: nur Datei geöffnet)
-  //  - []       => Workspace ohne Ordner
-  //  - [...]/n>0=> normaler (auch multi-root) Workspace
-  workspaceFolders = params.workspaceFolders ?? null;
-
-  // Fallback für ältere Clients:
-  if (!workspaceFolders || workspaceFolders.length === 0) {
-    if (params.rootUri) {
-      legacyRootUri = params.rootUri;
-    } else if (params.rootPath) {
-      // rootPath ist deprecated, aber immer noch verbreitet
-      legacyRootUri = pathToFileURL(params.rootPath).toString();
-    } else {
-      legacyRootUri = null;
-    }
-  } else {
-    legacyRootUri = null;
-  }
-}
-
-/**
- * Muss im workspace/didChangeWorkspaceFolders-Handler aufgerufen werden.
- */
-function updateWorkspaceFolders(event) {
-  if (workspaceFolders === null) {
-    workspaceFolders = [];
-  }
-
-  // Entfernte Folders rauswerfen
-  const removedUris = new Set(event.removed.map(f => f.uri));
-  workspaceFolders = workspaceFolders.filter(f => !removedUris.has(f.uri));
-
-  // Hinzugefügte Folders anhängen
-  workspaceFolders.push(...event.added);
-}
-
-/**
- * Liefert das passende WorkspaceFolder-Objekt zu einem Dokument-URI,
- * oder undefined wenn es keinen passenden Workspace-Folder gibt.
- */
-function getWorkspaceFolderForUri(docUri) {
-
-  if (!workspaceFolders || workspaceFolders.length === 0) return undefined;
-
-  const doc = docUri;
-
-  // Längstes passendes Prefix wählen (wichtig bei Multi-Root)
-  let best;
-  let bestLen = -1;
-
-  for (const folder of workspaceFolders) {
-    let folderUri = folder.uri;
-    if (!folderUri.endsWith('/')) {
-      folderUri += '/';
-    }
-
-    if (doc.startsWith(folderUri) && folderUri.length > bestLen) {
-      best = folder;
-      bestLen = folderUri.length;
-    }
-  }
-
-  return best;
-}
-
-/**
- * Liefert ein sinnvolles "Working Directory" für ein Dokument:
- *
- * Priorität:
- *  1) Passender Workspace-Folder (Multi-Root-fähig)
- *  2) legacy rootUri / rootPath (ältere Clients)
- *  3) Ordner der Datei selbst (Open-File-Modus)
- *
- * Gibt undefined zurück, wenn gar nichts ableitbar ist (sollte praktisch
- * nur ohne docUri und ohne Workspace passieren).
- */
-function getWorkingDirectoryForDocument(docUri, settings) {
-  if ( settings.workingDirMode === 'file' && docUri) {
-    const fsPath = filePathFromUri(docUri);
-    return path.dirname(fsPath);
-  }
-  // 1) Passenden Workspace-Folder zu dieser Datei suchen
-  if (docUri) {
-    const folder = getWorkspaceFolderForUri(docUri);
-    if (folder) {
-       return filePathFromUri(folder.uri);
-    }
-  }
-
-  // 2) Fallback: legacy rootUri / rootPath
-  if (legacyRootUri) {
-    return filePathFromUri(legacyRootUri);
-  }
-
-  // 3) Open-File-Fall: einfach den Ordner der Datei nehmen
-  if (docUri) {
-    const fsPath = filePathFromUri(docUri);
-    return path.dirname(fsPath);
-  }
-
-  // Kein Hinweis, was sinnvoll wäre
-  return undefined;
-}
-
-/**
- * Optional: Gibt irgendein "Workspace Root" zurück, z.B. für globale Scans.
- *  - Bei Multi-Root einfach der erste Folder
- *  - Sonst legacy root
- */
-function getAnyWorkspaceRoot() {
-  if (workspaceFolders && workspaceFolders.length > 0) {
-    return filePathFromUri(workspaceFolders[0].uri);
-  }
-  if (legacyRootUri) {
-    return filePathFromUri(legacyRootUri);
-  }
-  return undefined;
-}
-
+import { fileURLToPath, pathToFileURL } from 'url';
+import { TextDocument } from 'vscode-languageserver-textdocument';
+import * as path from 'path';
+import { DocumentRegistry } from './utility/documentRegistry';
+import { filePathFromUri, uriFromFilePath } from './utility/uriUtils';
+import { WorkspaceManager } from './utility/workspace';
+import { PearlSettings, defaultSettings } from './settings/pearlSettings';
+import { SettingsManager } from './settings/settingsManager';
+import { Validator } from './validation/validator';
+import { ConnectionLogger } from './utility/logging/connectionLogger';
+import { SemanticTokenService } from './semanticTokens/semanticTokenService';
+import { TokenLegend } from './semanticTokens/tokenLegend';
 
 const connection = createConnection(ProposedFeatures.all);
 
-/*
-namespace – Namespaces, Module, Packages
-type – generische oder sonstige Typen, die nicht besser zuordenbar sind (Fallback)
-class – Klassen
-enum – Enums
-interface – Interfaces
-struct – Structs
-typeParameter – Typparameter (z. B. T in List<T>)
-parameter – Funktions-/Methodenparameter
-variable – lokale Variablen, ggf. auch globale, je nach Sprache
-property – Eigenschaften / Felder eines Typs
-enumMember – einzelne Enum-Werte
-event – Events
-function – Funktionen (nicht-methodisch, z. B. freie Funktionen)
-method – Methoden an Klassen/Interfaces/Structs
-macro – Makros (z. B. C- oder Rust-Makros)
-keyword – Sprach-Schlüsselwörter
-modifier – Sprach-Modifier wie public, private, static etc. (als Token-Typ, nicht zu verwechseln mit Token-Modifiers)
-comment – Kommentare
-string – String-Literale
-number – numerische Literale
-regexp – Regex-Literale
-operator – Operatoren (z. B. +, ==)
-decorator – Dekoratoren / Attribute (z. B. Component)
-label – Sprunglabels
-*/
+const logger = new ConnectionLogger(connection);
 
-const semanticTokenTypes = [
-  'type',       // generische oder sonstige Typen, die nicht besser zuordenbar sind (Fallback)
-  'variable',   // DCL-Variablen, SPC-Variablen
-  'parameter',  // PROC-Parameter
-  'function',   // PROC / ENTRY
-  'class',      // TASK (oder "class"-ähnlich)
-  'property',   // SEMA, BOLT
-  'label',      // Sprungmarken MyLabel:
-  'operator',   // Operatoren (z. B. +, ==)  
-  'string',     // String-Literale
-  'number'      // numerische Literale
-];
+const workspaceManager = new WorkspaceManager();
+const settingsManager = new SettingsManager(connection);
 
-/*
-declaration – die Stelle, an der etwas deklariert wird
-definition – die Stelle, an der etwas definiert/implementiert wird (falls getrennt von der Deklaration)
-readonly – schreibgeschütztes Symbol (z. B. const)
-static – statisches Element
-deprecated – veraltetes Symbol
-abstract – abstraktes Symbol
-async – asynchrones Symbol (z. B. async function)
-modification – Stelle, an der ein Wert verändert wird (Assignment, ++ usw.)
-documentation – Dokumentationskommentar o. Ä.
-defaultLibrary – Symbol stammt aus der Standardbibliothek / Runtime
-*/
+const documents = new TextDocuments(TextDocument);
+const documentRegistry = new DocumentRegistry(documents);
 
-const semanticTokenModifiers = [
-  'declaration', // an der Deklarationsstelle
-  'readonly'
-];
+const validator = new Validator(
+  workspaceManager,
+  documentRegistry,
+  logger
+);
 
+const tokenLegend = new TokenLegend();
+const semanticTokenService = new SemanticTokenService(
+  documentRegistry,
+  logger,
+  tokenLegend
+);
 
-// ---- Settings handling ----
-
-let hasConfigurationCapability = false;
-
-// Default settings (fallback if client does not support workspace/configuration)
-const defaultSettings = {
-  maxNumberOfProblems: 100,
-  traceServer: 'off',
-  workingDirMode: 'file'
-};
-
-let globalSettings = defaultSettings;
-
-// Per-document settings cache: uri -> Promise<settings>
-/** @type {Map<string, Promise<any>>} */
-const documentSettings = new Map();
-
-let hasWorkspaceFolderCapability = false;
-
-connection.onInitialize((params) => {
+connection.onInitialize((params: InitializeParams) => {
 //  connection.console.log(`onInialize: ${JSON.stringify(params, null, 2)}`);
 
-  hasWorkspaceFolderCapability = !!(
-    params.capabilities.workspace && params.capabilities.workspace.workspaceFolders
-  );
-  initWorkspaceState(params);
-
-  const capabilities = params.capabilities;
-
-  hasConfigurationCapability = !!(
-    capabilities.workspace &&
-    capabilities.workspace.configuration
-  );
+  workspaceManager.initialize(params);
+  settingsManager.registerConfigurationListener();
   
   return {
     capabilities: {
@@ -275,11 +89,7 @@ connection.onInitialize((params) => {
       definitionProvider: true,
       foldingRangeProvider: true,
       semanticTokensProvider: {
-        legend: {
-            // set your tokens here
-            tokenTypes: semanticTokenTypes, 
-            tokenModifiers: semanticTokenModifiers
-        },        
+        legend: tokenLegend.getLegend(),
         full: true,     // wir liefern das ganze Dokument
         range: false    // Range-Unterstützung erstmal nicht
       }
@@ -288,143 +98,13 @@ connection.onInitialize((params) => {
 });
 
 connection.onInitialized(() => {
-  if (hasConfigurationCapability) {
-
-    // Register for WorkspaceFolders change notifications
-    if (hasWorkspaceFolderCapability) {
-      connection.workspace.onDidChangeWorkspaceFolders(event => {
-        connection.console.log( `workspaceFolders changed: ${JSON.stringify(event, null, 2)}`);
-        updateWorkspaceFolders(event);
-      });
-    }    
-
-    // Register for configuration change notifications
-    connection.client.register(
-      DidChangeConfigurationNotification.type,
-      undefined
-    );
-  }
+  workspaceManager.registerWorkspaceFolderListener(connection);
+  settingsManager.registerConfigurationListener();
 });
-
-/**
- * Get settings for a single document.
- * @param {string} resource document URI
- * @returns {Promise<any>}
- */
-function getDocumentSettings(resource) {
-  if (!hasConfigurationCapability) {
-    // Client does not support workspace/configuration,
-    // use global settings as fallback.
-    return Promise.resolve(globalSettings);
-  }
-
-  let result = documentSettings.get(resource);
-  if (!result) {
-    // Section must match your settings namespace: "pearl"
-    result = connection.workspace.getConfiguration({
-      scopeUri: resource,
-      section: 'pearl'
-    });
-    documentSettings.set(resource, result);
-  }
-  return result;
-}
 
 // ------------------------------
 // Präprozessor-spezifische Daten
 // ------------------------------
-
-const fs = require('fs');
-
-function filePathFromUri(uri) {
- if (uri.startsWith('file://')) {
-    try {
-      return fileURLToPath(uri);
-    } catch {
-      // Fallback: lieber irgendwas zurückgeben als crashen
-    }
-  }
-  return uri;
-}
-
-function uriFromFilePath(absPath) {
-  return pathToFileURL(absPath).toString();
-}
-
-class DocumentRegistry {
-  constructor(documents) {
-    // TextDocuments<TextDocument>
-    this.documents = documents;
-
-    // Map<fsPath, { mtimeMs, doc }>
-    this.includeCache = new Map();
-  }
-
-  /**
-   * Liefert ein TextDocument zu einer URI
-   * (offen oder included)
-   */
-  get(uri) {
-    // 1. Offenes Dokument?
-    const openDoc = this.documents.get(uri);
-    if (openDoc) {
-      return openDoc;
-    }
-
-    // 2. Vom Dateisystem laden
-    return this._loadFromFileSystem(uri);
-  }
-
-  _loadFromFileSystem(uri) {
-    let fsPath;
-    try {
-      fsPath = filePathFromUri(uri);
-      const stat = fs.statSync(fsPath);
-      const mtimeMs = stat.mtimeMs;
-
-      const cached = this.includeCache.get(fsPath);
-      if (cached && cached.mtimeMs === mtimeMs) {
-        return cached.doc;
-      }
-
-      const text = fs.readFileSync(fsPath, 'utf8');
-      const doc = TextDocument.create(uri, 'pearl', 0, text);
-
-      this.includeCache.set(fsPath, { mtimeMs, doc });
-      return doc;
-    } catch (e) {
-      if (fsPath) {
-        this.includeCache.delete(fsPath);
-      }
-      return null;
-    }
-  }
-
-  invalidateUri(uri) {
-    const fsPath = filePathFromUri(uri);
-    this.includeCache.delete(fsPath);
-  }
-
-  /**
-   * Optional: Include-Cache komplett leeren
-   */
-  invalidateAllIncludes() {
-    this.includeCache.clear();
-  }
-
-  /**
-   * Debug-Hilfe
-   */
-  stats() {
-    return {
-      openDocuments: this.documents.all().length,
-      cachedIncludes: this.includeCache.size
-    };
-  }
-}
-
-const documents = new TextDocuments(TextDocument);
-const documentRegistry = new DocumentRegistry(documents);
 
 // ------------------------------
 // PEARL-spezifische Daten
@@ -1482,7 +1162,8 @@ function analyze(uri, text, settings, options) {
             });
 
             if (includeStack.length < 100) { // maximale Include-Tiefe erreicht?
-              const parentPath = getWorkingDirectoryForDocument(uri, settings);            
+              const parentPath =  workspaceManager.getWorkingDirectoryForDocument( uri, settings.workingDirMode )
+                               ?? process.cwd();
               const absPath = path.resolve(parentPath, finalIncludePath);
 
               const includeUri = uriFromFilePath(absPath);
@@ -2747,19 +2428,6 @@ connection.console.log( `PROC ${prev2.token.value} ---------`);
 // Diagnostics
 // ------------------------------
 
-async function validateTextDocument(textDocument) {
-  const settings = await getDocumentSettings(textDocument.uri);
-  
-connection.console.log('[pearl] settings = ' + JSON.stringify(settings));
-
-  const text = textDocument.getText();
-  const analysis = analyze(textDocument.uri, text, settings, {});
-  documentTokenCache.set( textDocument.uri, analysis );    // für onDefinition & Co. cachen
-  connection.sendDiagnostics({
-    uri: textDocument.uri,
-    diagnostics: analysis.diagnostics
-  });
-}
 
 // ------------------------------
 // Hilfsfunktionen für DCL/SPC
@@ -2976,170 +2644,54 @@ connection.onFoldingRanges((params) => {
 // Semantische Tokens
 // ------------------------------
 
-connection.languages.semanticTokens.on((params) => {
-try {  
-  const uri = params.textDocument.uri
-  const doc = documentRegistry.get(uri);
-  if (!doc) {
-    return { data: [] };
-  }
-
-  const analysis = documentTokenCache.get(uri);    // Aus dem Cache holen
-  if (!analysis) {
-    return { data: [] };
-  }
-
-  const tokens = analysis.tokens;
-  if (!tokens) {
-    return { data: [] };
-  }
-
-  const semanticTokens = [];
-  let prevLine = 0;
-  let prevChar = 0;
-
-  function encodeToken(line, char, length, typeName, modifiers) {
-    const lineDelta = line - prevLine;
-    const charDelta = lineDelta === 0 ? char - prevChar : char;
-    prevLine = line;
-    prevChar = char;
-
-    const typeIndex = semanticTokenTypes.indexOf(typeName);
-    if (typeIndex < 0) {
-      return; // unbekannter Typ -> ignorieren
-    }
-
-    let modifierBits = 0;
-    if (modifiers && modifiers.length) {
-      for (const m of modifiers) {
-        const idx = semanticTokenModifiers.indexOf(m);
-        if (idx >= 0) {
-          modifierBits |= 1 << idx;
-        }
-      }
-    }
-
-//connection.console.log( `Semantic Token: ${[line, char, length, typeName, modifiers]} -> ${[lineDelta, charDelta, length, typeIndex, modifierBits]}`);
-    semanticTokens.push(lineDelta, charDelta, length, typeIndex, modifierBits);
-  }  
-
-  const sortedTokens = tokens.filter(t => t.uri === uri && (t.type !== 'comment' && t.type !== 'inactive' && !t.isMacro )).sort((a, b) =>
-    a.line === b.line
-      ? a.column - b.column
-      : a.line - b.line
-  );
-
-  for (const t of sortedTokens) {
-//connection.console.log( `${t.type} ~${t.value}~ ${t.line} ${t.column} ${t.uri}`);
-
-      /**
-       * Tokenstruktur:
-       * {
-       *   type: 'keyword' | 'identifier' | 'number' | 'string' | 'bitstring' | 'operator' |
-       *         'symbol' | 'comment' | 'inactive' | 'error' | 'preproc',
-       *   value: string,
-       *   uri: string,
-       *   line: number,
-       *   column: number,
-       *   offset: number,
-       *   length: number
-       *   definition: identifier (optional)
-       * }
-       */
-
-
-    if (t.type === 'identifier') {
-      let typeName = 'variable';
-      let mods = [];
-
-/*      
-      const sym = lookupSymbol(scopeStack, t.value);
-      if (!sym) {
-        continue;
-      }
-
-      switch( sym.typeDescription.typename ) {
-        case 'PROC':
-        case 'PROCEDURE':
-        case 'ENTRY':
-          typeName = 'function';
-          mods.push('declaration');
-          break;
-
-        case 'TASK':
-          typeName = 'class';
-          mods.push('declaration');
-          break;
-
-        case 'SEMA':
-        case 'BOLT':
-          typeName = 'property';
-          mods.push('declaration');
-          break;
-
-        default:
-          typeName = 'variable';
-          break;
-      }
-*/
-      encodeToken(t.line, t.column, t.length, typeName, mods);
-      continue;
-    }
-
-    if (t.type === 'type') {
-      encodeToken(t.line, t.column, t.length, 'type', []);
-      continue;
-    }
-
-    if (t.type === 'operator') {
-      encodeToken(t.line, t.column, t.length, 'operator', []);
-      continue;
-    }
-
-    if (t.type === 'number') {
-      encodeToken(t.line, t.column, t.length, 'number', []);
-      continue;
-    }
-   
-    if (t.type === 'string') {
-      encodeToken(t.line, t.column, t.length, 'string', []);
-      continue;
-    }
-
-    if (t.type === 'bitstring') {
-      encodeToken(t.line, t.column, t.length, 'string', []);
-      continue;
-    }
-  }
-//  connection.console.log( `semanticTokens: ${semanticTokens}`);
-  return { data: semanticTokens };
-}
-catch(e) {
-  connection.console.log( `exception: ${e.message}`);
-  connection.console.log( `${e.stack}`);
-  return { data: [] };  
-}
+connection.languages.semanticTokens.on(async (params) => {
+  return semanticTokenService.handleFull(params);
 });
-
 
 // ------------------------------
 // Events & Start
 // ------------------------------
 
+async function validateAndPublish(document: TextDocument): Promise<void> {
+  try {
+    const settings = await settingsManager.getDocumentSettings(document.uri);
+
+    const diagnostics = await validator.validate(document, settings);
+
+    connection.sendDiagnostics({
+      uri: document.uri,
+      diagnostics
+    });
+  } catch (err) {
+    logger.error(`Validation error: ${String(err)}`);
+  }
+}
+
 documents.onDidOpen((event) => {
-  const doc = event.document;
-  validateTextDocument(event.document);
+  const doc: TextDocument = event.document;
+  void validateAndPublish(doc);
 });
 
 documents.onDidClose((event) => {
-  connection.console.log( `onDidClose ${event.document.uri}` );
-  documentTokenCache.delete(event.document.uri);  // Dokument aus Cache kegeln
-  documentSettings.delete(event.document.uri);  
+  const doc: TextDocument = event.document;
+  logger.info( `onDidClose ${doc.uri}` );
+
+  semanticTokenService.clear(doc.uri);  
+  settingsManager.clearDocument(doc.uri);
+
+  // Diagnostics im Client entfernen
+  connection.sendDiagnostics({
+    uri: doc.uri,
+    diagnostics: []
+  });  
 });
 
 documents.onDidChangeContent((event) => {
-  documentTokenCache.delete(event.document.uri);
-  validateTextDocument(event.document);
+  const doc: TextDocument = event.document;
+
+  semanticTokenService.invalidate(doc.uri);
+
+  void validateAndPublish(doc);
 });
 
 connection.onDidChangeWatchedFiles((event) => {
@@ -3151,18 +2703,12 @@ connection.onDidChangeWatchedFiles((event) => {
 
 // React to configuration changes
 connection.onDidChangeConfiguration((event) => {
-  if (hasConfigurationCapability) {
-    // Reset all cached document settings
-    documentSettings.clear();
-  } else {
-    // Use global settings from `settings.json`
-    globalSettings = (event.settings.pearl || defaultSettings);
-  }
+  settingsManager.handleConfigurationChange(event.settings);
 
   // Revalidate all open documents with the new settings
-  documentRegistry.invalidateAllIncludes();  
+  validator.handleConfigurationChanged();
   documents.all().forEach((doc) => {
-    validateTextDocument(doc);
+    void validateAndPublish(doc);
   });
 });
 

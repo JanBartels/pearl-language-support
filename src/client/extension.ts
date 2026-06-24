@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Jan Bartels
+
 /*
  * Copyright (C) 2025, 2026 Jan Bartels
  *
@@ -15,18 +18,23 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-const path = require('path');
-const vscode = require('vscode');
-const { LanguageClient, TransportKind } = require('vscode-languageclient/node');
+import * as path from 'path';
+import * as vscode from 'vscode';
+import {
+  LanguageClient,
+  TransportKind,
+  LanguageClientOptions,
+  ServerOptions
+} from 'vscode-languageclient/node';
 
-let client;
+let client: LanguageClient | undefined;
 
-function activate(context) {
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const serverModule = context.asAbsolutePath(
-    path.join('server', 'server.js')
+    path.join('dist', 'server', 'server.js')
   );
 
-  const serverOptions = {
+  const serverOptions: ServerOptions = {
     run: {
       module: serverModule,
       transport: TransportKind.ipc
@@ -38,7 +46,7 @@ function activate(context) {
     }
   };
 
-  const clientOptions = {
+  const clientOptions: LanguageClientOptions = {
     documentSelector: [{ scheme: 'file', language: 'pearl' }],
     synchronize: {
       fileEvents: vscode.workspace.createFileSystemWatcher('**/*.{p,P}')
@@ -53,15 +61,13 @@ function activate(context) {
     clientOptions
   );
 
-  client.start();
+  await client.start();
+  context.subscriptions.push(client);
 }
 
-function deactivate() {
-  if (!client) return undefined;
+export function deactivate(): Thenable<void> | undefined {
+  if (!client) {
+    return undefined;
+  }
   return client.stop();
 }
-
-module.exports = {
-  activate,
-  deactivate
-};

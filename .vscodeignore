@@ -1,0 +1,48 @@
+# -----------------------------
+# TypeScript Source
+# -----------------------------
+src/**
+**/*.ts
+tsconfig.json
+tsconfig.*.json
+
+# -----------------------------
+# Development / Repo
+# -----------------------------
+.vscode/**
+..git/**
+.gitignore
+.gitattributes
+.editorconfig
+.eslintrc*
+.prettierrc*
+.prettierignore
+build.mjs
+
+# -----------------------------
+# Tests
+# -----------------------------
+test/**
+**/*.spec.*
+**/*.test.*
+Testprogramme/**
+
+# -----------------------------
+# Node / Build tooling
+# -----------------------------
+node_modules/**
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# -----------------------------
+# internal Documentation
+# -----------------------------
+manuals/**
+
+# -----------------------------
+# Misc
+# -----------------------------
+coverage/**
+*.log
+.DS_Store

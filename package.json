@@ -2,7 +2,7 @@
   "name": "pearl-language-support",
   "displayName": "PEARL Language Support",
   "description": "VS Code Extension mit Language Server für die Sprache PEARL",
-  "version": "0.0.9",
+  "version": "0.2.0",
   "publisher": "none",
   "author": {
     "name": "Jan Bartels"
@@ -15,8 +15,10 @@
   "engines": {
     "vscode": "^1.80.0"
   },
-  "categories": ["Programming Languages"],
-  "main": "./client/extension.js",
+  "categories": [
+    "Programming Languages"
+  ],
+  "main": "./dist/client/extension.js",
   "activationEvents": [
     "onLanguage:pearl"
   ],
@@ -24,8 +26,14 @@
     "languages": [
       {
         "id": "pearl",
-        "aliases": ["PEARL", "pearl"],
-        "extensions": [".p", ".P"],
+        "aliases": [
+          "PEARL",
+          "pearl"
+        ],
+        "extensions": [
+          ".p",
+          ".P"
+        ],
         "configuration": "./language-configuration.json"
       }
     ],
@@ -34,28 +42,32 @@
         "language": "pearl",
         "scopeName": "source.pearl",
         "path": "./syntaxes/pearl.tmLanguage.json"
-      }      
+      }
     ],
     "semanticTokenTypes": [
       {
-        "id": "testToken", 
+        "id": "testToken",
         "description": "A test token"
       }
     ],
     "semanticTokenModifiers": [
       {
-        "id": "inactive", 
+        "id": "inactive",
         "description": "Inaktiv (Präprozessor)"
       }
     ],
     "semanticTokenStyleDefaults": [
       {
         "selector": "testToken",
-        "scope": [ "entity.name.variable.special" ]
+        "scope": [
+          "entity.name.variable.special"
+        ]
       },
       {
         "selector": "comment.inactive",
-        "scope": [ "entity.name.variable.special.extra" ]
+        "scope": [
+          "entity.name.variable.special.extra"
+        ]
       }
     ],
     "configuration": {
@@ -71,7 +83,11 @@
         "pearl.trace.server": {
           "scope": "window",
           "type": "string",
-          "enum": ["off", "messages", "verbose"],
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
           "default": "off",
           "description": "Trace level for the PEARL language server."
         },
@@ -87,12 +103,15 @@
         "pearl.workingDirMode": {
           "scope": "window",
           "type": "string",
-          "enum": ["workspace", "file"],
+          "enum": [
+            "workspace",
+            "file"
+          ],
           "default": "file",
           "description": "Workingdirectory im Workspace-Root oder im Verzeichnis der Datei (für #include)"
         }
       }
-    },    
+    },
     "configurationDefaults": {
       "editor.semanticTokenColorCustomizations": {
         "rules": {
@@ -118,21 +137,31 @@
           "parameter": {
             "foreground": "#219cc4"
           },
-          "*": { 
-            "foreground": "#ff00ff" 
+          "*": {
+            "foreground": "#ff00ff"
           }
         }
       }
     }
   },
   "scripts": {
-    "compile": "echo \"no build step\"",
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "clean": "rm -rf dist",
     "test": "echo \"no tests\"",
-    "package": "vsce package"
+    "typecheck": "tsc --noEmit",    
+    "prepublish": "npm run build",
+    "package": "npm run typecheck && npm run build && vsce package"
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1",
     "vscode-languageserver": "^9.0.1",
     "vscode-languageserver-textdocument": "^1.0.11"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.3",
+    "@types/vscode": "^1.109.0",
+    "esbuild": "^0.27.3",
+    "typescript": "^5.9.3"
   }
 }
