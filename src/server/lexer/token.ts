@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { Location } from '../core';
-import { SourceFile } from '../source/sourceFile';
+import { DocumentRegistry } from '../utility/documentRegistry';
 
 export enum TokenKind {
 
@@ -74,8 +74,20 @@ export interface NumberToken extends Token {
 }
 
 export function tokenText(
-  token: Token,
-  sourceFile: SourceFile
+    token: Token,
+    registry: DocumentRegistry
 ): string {
-  return sourceFile.getText(token.location.span);
+
+    const document = registry.get(token.location.uri);
+
+    if (!document) {
+        throw new Error(
+            `Document not found: ${token.location.uri}`
+        );
+    }
+
+    return document.getText({
+        start: document.positionAt(token.location.span.start),
+        end: document.positionAt(token.location.span.end)
+    });
 }

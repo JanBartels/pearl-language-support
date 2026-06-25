@@ -7,6 +7,7 @@ import {
 } from 'vscode-languageserver/node';
 
 import { Problem } from '../core/problem';
+import { ProblemCollection } from '../core/problemCollection';
 import { Severity } from '../core/severity';
 import { DocumentRegistry } from '../utility/documentRegistry';
 import { SourceFile } from '../source/sourceFile';
@@ -35,13 +36,13 @@ export class DiagnosticMapper {
   }
 
   static mapAll(
-    problems: readonly Problem[],
+    problems: ProblemCollection,
     registry: DocumentRegistry
   ): Map<string, Diagnostic[]> {
 
     const result = new Map<string, Diagnostic[]>();
 
-    for (const problem of problems) {
+    for (const problem of problems.toArray()) {
 
       const uri = problem.location.uri;
 

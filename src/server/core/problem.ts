@@ -30,12 +30,44 @@ export class Problem {
     this.tags = options?.tags;
   }
 
-  static create(
+  private static create(
     location: Location,
     message: string,
     severity: Severity,
     options?: ProblemOptions
   ): Problem {
     return new Problem(location, message, severity, options);
+  }
+
+  static error(
+    location: Location,
+    message: string,
+    options?: ProblemOptions
+  ): Problem {
+    return new Problem(location, message, Severity.Error, options);
+  }
+
+  static warning(
+    location: Location,
+    message: string,
+    options?: ProblemOptions
+  ): Problem {
+    return new Problem(location, message, Severity.Warning, options);
+  }
+
+  static info(
+    location: Location,
+    message: string,
+    options?: ProblemOptions
+  ): Problem {
+    return new Problem(location, message, Severity.Info, options);
+  }
+
+  static hint(
+    location: Location,
+    message: string,
+    options?: ProblemOptions
+  ): Problem {
+    return new Problem(location, message, Severity.Hint, options);
   }
 }

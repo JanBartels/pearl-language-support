@@ -2,19 +2,19 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { FileAnalysis } from './fileAnalysis';
-import { Problem } from '../core/problem';
+import { ProblemCollection } from '../core/problemCollection';
 import { Severity } from '../core/severity';
 
 export class AnalysisResult {
 
   readonly rootUri: string;
   readonly files: ReadonlyMap<string, FileAnalysis>;
-  readonly problems: readonly Problem[];
+  readonly problems: ProblemCollection;
 
   private constructor(
     rootUri: string,
     files: ReadonlyMap<string, FileAnalysis>,
-    problems: readonly Problem[]
+    problems: ProblemCollection
   ) {
     this.rootUri = rootUri;
     this.files = files;
@@ -32,13 +32,16 @@ export class AnalysisResult {
       fileMap.set(file.uri, file);
     }
 
-    const allProblems = fileAnalyses.flatMap(f => f.problems);
+    const allProblems = new ProblemCollection();
+    for (const file of fileAnalyses) {
+      allProblems.addAll(file.problems);
+    }
 
     return new AnalysisResult(rootUri, fileMap, allProblems);
   }
 
   static empty(rootUri: string): AnalysisResult {
-    return new AnalysisResult(rootUri, new Map(), []);
+    return new AnalysisResult(rootUri, new Map(), new ProblemCollection());
   }
 
   getFile(uri: string): FileAnalysis | undefined {

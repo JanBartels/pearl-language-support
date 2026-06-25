@@ -2,19 +2,19 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { Token } from '../lexer/token';
-import { Problem } from '../core/problem';
+import { ProblemCollection } from '../core/problemCollection';
 import { Severity } from '../core/severity';
 
 export class FileAnalysis {
 
   readonly uri: string;
   readonly tokens: readonly Token[];
-  readonly problems: readonly Problem[];
+  readonly problems: ProblemCollection;
 
   private constructor(
     uri: string,
     tokens: readonly Token[],
-    problems: readonly Problem[]
+    problems: ProblemCollection
   ) {
     this.uri = uri;
     this.tokens = tokens;
@@ -24,13 +24,13 @@ export class FileAnalysis {
   static create(
     uri: string,
     tokens: readonly Token[],
-    problems: readonly Problem[]
+    problems: ProblemCollection
   ): FileAnalysis {
     return new FileAnalysis(uri, tokens, problems);
   }
 
   static empty(uri: string): FileAnalysis {
-    return new FileAnalysis(uri, [], []);
+    return new FileAnalysis(uri, [], new ProblemCollection());
   }
 
   hasErrors(): boolean {
