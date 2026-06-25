@@ -85,9 +85,9 @@ connection.onInitialize((params: InitializeParams) => {
         },
       },      
       completionProvider: { resolveProvider: true },
-      hoverProvider: true,
-      definitionProvider: true,
-      foldingRangeProvider: true,
+      hoverProvider: false,
+      definitionProvider: false,
+      foldingRangeProvider: false,
       semanticTokensProvider: {
         legend: tokenLegend.getLegend(),
         full: true,     // wir liefern das ganze Dokument

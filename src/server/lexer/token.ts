@@ -2,26 +2,56 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { Location } from '../core';
+import { SourceFile } from '../source/sourceFile';
 
 export enum TokenKind {
 
+  /** Ende der Eingabe */
   EOF,
+
+  /** Zeilenende (\n oder \r\n) */
   Newline,
 
-  Whitespace,
+  /** Kommentar bis zum Zeilenende */
   Comment,
 
+  /** Bezeichner (Schlüsselwörter werden zunächst ebenfalls als Identifier erkannt) */
   Identifier,
 
+  /** Numerisches Literal */
   NumberLiteral,
+
+  /** Zeichenkettenliteral */
   StringLiteral,
+
+  /** Bitliteral ('...'B, '...'B1 bis '...'B4) */
   BitLiteral,
 
+  /** Operator oder Trennzeichen */
   Operator,
-  Punctuation,
 
-  Hash,
-  PreprocessorDirective
+  /**
+   * Präprozessor- oder Compilerdirektive.
+   *
+   * Lexikalische Form:
+   *   #<kleinbuchstaben>
+   *   #<GROSSBUCHSTABEN>
+   *
+   * Beispiele:
+   *   #define
+   *   #ifdef
+   *   #DEFINE
+   *   #IF
+   *
+   * Die semantische Auswertung erfolgt erst im Präprozessor.
+   */
+  PreprocessorDirective,
+
+  /**
+   * Ungültige Direktive nach '#', z. B. gemischte Groß-/Kleinschreibung
+   * (#Define) oder eine andere ungültige Schreibweise.
+   */
+  InvalidDirective
 }
 
 export interface Token {
@@ -41,4 +71,11 @@ export interface Token {
 
 export interface NumberToken extends Token {
   readonly numericValue: number;
+}
+
+export function tokenText(
+  token: Token,
+  sourceFile: SourceFile
+): string {
+  return sourceFile.getText(token.location.span);
 }

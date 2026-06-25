@@ -20,6 +20,11 @@ export class Lexer {
 
     while (true) {
       const token = this.nextToken();
+      if (!token) {
+        throw new Error(
+          `nextToken() returned undefined at offset ${this.stream.offset}`
+        );
+      }      
       tokens.push(token);
 
       if (token.kind === TokenKind.EOF) {
@@ -45,12 +50,18 @@ export class Lexer {
 
     // Whitespace (space + tab)
     if (isWhitespace(ch)) {
-      return this.lexWhitespace();
+      this.skipWhitespace();
+      return this.nextToken();
     }
 
     // Comment starting with !
     if (ch === 33 /* ! */) {
       return this.lexLineComment();
+    }
+
+    // Preprocessor directive
+    if (ch === 35 /* # */) {
+      return this.lexPreprocessorDirective();
     }
 
     // Identifier
@@ -68,13 +79,8 @@ export class Lexer {
       return this.lexStringOrBitLiteral();
     }
 
-    // Hash (#)
-    if (ch === 35 /* # */) {
-      return this.lexHash();
-    }
-
     // Fallback: operator / punctuation (single char for now)
-    return this.lexOperatorOrPunctuation();
+    return this.lexOperator();
   }
 
   // -----------------------------
@@ -93,15 +99,11 @@ export class Lexer {
     return this.createTokenFromSpan(TokenKind.Newline, start);
   }
 
-  private lexWhitespace(): Token {
-
-    const start = this.stream.mark();
+  private skipWhitespace(): void {
 
     while (isWhitespace(this.stream.peek())) {
       this.stream.next();
     }
-
-    return this.createTokenFromSpan(TokenKind.Whitespace, start);
   }
 
   private lexLineComment(): Token {
@@ -185,15 +187,61 @@ export class Lexer {
     return this.createTokenFromSpan(TokenKind.StringLiteral, start);
   }
 
-  private lexHash(): Token {
+  private lexPreprocessorDirective(): Token {
 
     const start = this.stream.mark();
+
+    this.stream.next(); // '#'
+
+    const first = this.stream.peek();
+
+    if (!isLetter(first)) {
+      return this.createTokenFromSpan(
+        TokenKind.InvalidDirective,
+        start
+      );
+    }
+
+    const upper = isUppercase(first);
     this.stream.next();
 
-    return this.createTokenFromSpan(TokenKind.Hash, start);
+    while (true) {
+
+      const ch = this.stream.peek();
+
+      if (upper) {
+        if (!isUppercase(ch)) {
+          break;
+        }
+      } else {
+        if (!isLowercase(ch)) {
+          break;
+        }
+      }
+
+      this.stream.next();
+    }
+
+    // Gemischte Groß-/Kleinschreibung?
+    if (isLetter(this.stream.peek())) {
+
+      while (isLetter(this.stream.peek())) {
+        this.stream.next();
+      }
+
+      return this.createTokenFromSpan(
+        TokenKind.InvalidDirective,
+        start
+      );
+    }
+
+    return this.createTokenFromSpan(
+      TokenKind.PreprocessorDirective,
+      start
+    );
   }
 
-  private lexOperatorOrPunctuation(): Token {
+  private lexOperator(): Token {
 
     const start = this.stream.mark();
     this.stream.next();
@@ -258,4 +306,16 @@ function isIdentifierStart(ch: number): boolean {
 
 function isIdentifierPart(ch: number): boolean {
   return isIdentifierStart(ch) || isDigit(ch);
+}
+
+function isLetter(ch: number): boolean {
+  return isUppercase(ch) || isLowercase(ch);
+}
+
+function isUppercase(ch: number): boolean {
+  return ch >= 65 && ch <= 90;   // A-Z
+}
+
+function isLowercase(ch: number): boolean {
+  return ch >= 97 && ch <= 122;  // a-z
 }
