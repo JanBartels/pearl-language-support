@@ -38,6 +38,8 @@ export class Validator {
     this.logger.debug?.(`Analyzing ${document.uri}`);
     this.logger.debug?.('[pearl] settings = ' + JSON.stringify(settings));
 
+    const problems = new ProblemCollection();
+
     // ----------------------------
     // Lexer
     // ----------------------------
@@ -48,15 +50,13 @@ export class Validator {
     );
 
     const charStream = new CharStream(sourceFile);
-    const lexer = new Lexer(charStream, this.logger);
+    const lexer = new Lexer(charStream, problems, this.logger);
 
     const tokens = lexer.tokenize();
 
     // ----------------------------
     // FileAnalysis
     // ----------------------------
-
-    const problems = new ProblemCollection();
 
     const file = FileAnalysis.create(
       document.uri,

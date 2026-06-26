@@ -7,6 +7,8 @@ import { createToken } from './tokenFactory';
 import { Span } from '../core/span';
 import { Location } from '../core/location';
 
+import { ProblemCollection } from '../core/problemCollection';
+
 import { Logger } from '../utility/logging/logger';
 
 const DUMP_TOKENS = true;
@@ -17,6 +19,7 @@ export class Lexer {
 
   constructor(
     stream: CharStream,
+    private readonly problems: ProblemCollection,
     private readonly logger: Logger
   ) {
     this.stream = stream;
@@ -83,6 +86,10 @@ export class Lexer {
       return this.lexLineComment();
     }
 
+    if (ch === 47 /* / */ && this.stream.peek(1) === 42 /* * */) {
+      return this.lexBlockComment();
+    }
+
     // Preprocessor directive
     if (ch === 35 /* # */) {
       return this.lexPreprocessorDirective();
@@ -147,6 +154,46 @@ export class Lexer {
     return this.createTokenFromSpan(TokenKind.Comment, start);
   }
 
+  private lexBlockComment(): Token {
+
+    const start = this.stream.mark();
+
+    this.stream.next(); // /
+    this.stream.next(); // *
+
+    let terminated = false;
+
+    while (true) {
+
+      const ch = this.stream.peek();
+
+      if (ch === -1) {
+        break;              // TODO: unterminated comment
+      }
+
+      if (ch === 42 /* * */) {
+
+        this.stream.next();
+
+        if (this.stream.peek() === 47 /* / */) {
+          this.stream.next();
+          terminated = true;
+          break;
+        }
+
+        continue;
+      }
+
+      this.stream.next();
+    }
+
+    if (!terminated) {
+      this.problems.error(this.location(start),"Unterminated block comment.");
+    }
+
+    return this.createTokenFromSpan(TokenKind.Comment, start);
+  }
+
   private lexIdentifier(): Token {
 
     const start = this.stream.mark();
@@ -177,12 +224,18 @@ export class Lexer {
 
       this.stream.next(); // opening '
 
+      let terminated = false;
+
       while (true) {
 
           const ch = this.stream.peek();
 
           if (ch === -1) {
-              break; // unterminated string
+              break; // unterminated string (EOF)
+          }
+
+          if (ch === 10 || ch === 13) {
+            break; // unterminated string (end of line)
           }
 
           if (ch === 39 /* ' */) {
@@ -225,10 +278,15 @@ export class Lexer {
               }
 
               // Normal end of string
+              terminated = true;
               break;
           }
 
           this.stream.next();
+      }
+
+      if (!terminated) {
+        this.problems.error(this.location(start), "Unterminated string literal.");
       }
 
       const afterQuote = this.stream.peek();
@@ -249,6 +307,7 @@ export class Lexer {
 
       return this.createTokenFromSpan(TokenKind.StringLiteral, start);
   }
+
   private lexPreprocessorDirective(): Token {
 
     const start = this.stream.mark();
@@ -315,13 +374,10 @@ export class Lexer {
   // Token creation helpers
   // -----------------------------
 
-  private createZeroLengthToken(kind: TokenKind): Token {
-
-    const offset = this.stream.offset;
-
+  private location(start: number, end = this.stream.offset): Location {
     const span: Span = {
-      start: offset,
-      end: offset
+      start,
+      end
     };
 
     const location: Location = {
@@ -329,22 +385,15 @@ export class Lexer {
       span
     };
 
-    return createToken(kind, location);
+    return location;
+  }
+
+  private createZeroLengthToken(kind: TokenKind): Token {
+    return createToken(kind, this.location(this.stream.offset, this.stream.offset));
   }
 
   private createTokenFromSpan(kind: TokenKind, start: number): Token {
-
-    const span: Span = {
-      start,
-      end: this.stream.offset
-    };
-
-    const location: Location = {
-      uri: this.stream.uri,
-      span
-    };
-
-    return createToken(kind, location);
+    return createToken(kind, this.location(start));
   }
 }
 

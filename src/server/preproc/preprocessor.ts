@@ -15,7 +15,7 @@ type DirectiveHandler = () => void;
 
 export class Preprocessor implements TokenStream {
 
-    private currentToken: Token;
+    private currentToken!: Token;
     private readonly handlers = new Map<string, DirectiveHandler>();
 
     constructor(
@@ -37,28 +37,6 @@ export class Preprocessor implements TokenStream {
 
     tokenText(token: Token): string {
         return this.input.tokenText(token);
-    }
-
-    private reportError(
-        location: Location,
-        message: string,
-    ): void {
-
-        this.problems.error(
-            location,
-            message
-        );
-    }
-
-    private reportWarning(
-        location: Location,
-        message: string,
-    ): void {
-
-        this.problems.warning(
-                location,
-                message
-        );
     }
 
     current(): Token {
@@ -176,7 +154,7 @@ export class Preprocessor implements TokenStream {
         this.input.next();
 
         // Problem melden
-        this.reportError(
+        this.problems.error(
             directive.location,
             `Unknown preprocessor directive '${this.tokenText(directive)}'`
         );
