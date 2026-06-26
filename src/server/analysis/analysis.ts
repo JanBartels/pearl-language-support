@@ -5,9 +5,9 @@ import { Token } from '../lexer/token';
 import { ProblemCollection } from '../core/problemCollection';
 import { Severity } from '../core/severity';
 
-export class FileAnalysis {
+export class Analysis {
 
-  readonly uri: string;
+  readonly rootUri: string;
   readonly tokens: readonly Token[];
   readonly problems: ProblemCollection;
 
@@ -16,7 +16,7 @@ export class FileAnalysis {
     tokens: readonly Token[],
     problems: ProblemCollection
   ) {
-    this.uri = uri;
+    this.rootUri = uri;
     this.tokens = tokens;
     this.problems = problems;
   }
@@ -25,12 +25,12 @@ export class FileAnalysis {
     uri: string,
     tokens: readonly Token[],
     problems: ProblemCollection
-  ): FileAnalysis {
-    return new FileAnalysis(uri, tokens, problems);
+  ): Analysis {
+    return new Analysis(uri, tokens, problems);
   }
 
-  static empty(uri: string): FileAnalysis {
-    return new FileAnalysis(uri, [], new ProblemCollection());
+  static empty(uri: string): Analysis {
+    return new Analysis(uri, [], new ProblemCollection());
   }
 
   hasErrors(): boolean {

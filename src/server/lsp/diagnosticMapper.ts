@@ -70,11 +70,12 @@ function getSourceFile(
   const document = registry.get(uri);
 
   if (!document) {
-    // Fallback – sollte eigentlich nicht passieren
-    return new SourceFile(uri, '');
+    throw new Error(
+        `Document '${uri}' not found.`
+    );
   }
 
-  return new SourceFile(uri, document.getText());
+  return SourceFile.fromDocument(document);
 }
 
 function mapSeverity(severity: Severity): DiagnosticSeverity {

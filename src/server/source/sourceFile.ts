@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { Span } from '../core';
+import { TextDocument } from 'vscode-languageserver-textdocument';
 
 export class SourceFile {
 
@@ -15,6 +16,13 @@ export class SourceFile {
     this.text = text;
     const offsets = computeLineOffsets(text);
     this.lineOffsets = offsets as [number, ...number[]];
+  }
+
+  static fromDocument(document: TextDocument): SourceFile {
+    return new SourceFile(
+      document.uri,
+      document.getText()
+    );
   }
 
   get length(): number {

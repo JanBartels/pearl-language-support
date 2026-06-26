@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
-import { FileAnalysis } from './fileAnalysis';
+import { Analysis } from './analysis';
 import { ProblemCollection } from '../core/problemCollection';
 import { Severity } from '../core/severity';
 
 export class AnalysisResult {
 
   readonly rootUri: string;
-  readonly files: ReadonlyMap<string, FileAnalysis>;
+  readonly files: ReadonlyMap<string, Analysis>;
   readonly problems: ProblemCollection;
 
   private constructor(
     rootUri: string,
-    files: ReadonlyMap<string, FileAnalysis>,
+    files: ReadonlyMap<string, Analysis>,
     problems: ProblemCollection
   ) {
     this.rootUri = rootUri;
@@ -23,17 +23,17 @@ export class AnalysisResult {
 
   static create(
     rootUri: string,
-    fileAnalyses: readonly FileAnalysis[]
+    analyses: readonly Analysis[]
   ): AnalysisResult {
 
-    const fileMap = new Map<string, FileAnalysis>();
+    const fileMap = new Map<string, Analysis>();
 
-    for (const file of fileAnalyses) {
-      fileMap.set(file.uri, file);
+    for (const file of analyses) {
+      fileMap.set(file.rootUri, file);
     }
 
     const allProblems = new ProblemCollection();
-    for (const file of fileAnalyses) {
+    for (const file of analyses) {
       allProblems.addAll(file.problems);
     }
 
@@ -44,7 +44,7 @@ export class AnalysisResult {
     return new AnalysisResult(rootUri, new Map(), new ProblemCollection());
   }
 
-  getFile(uri: string): FileAnalysis | undefined {
+  getFile(uri: string): Analysis | undefined {
     return this.files.get(uri);
   }
 

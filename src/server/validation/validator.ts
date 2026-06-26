@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { AnalysisResult } from '../analysis/analysisResult';  
-import { FileAnalysis } from '../analysis/fileAnalysis';
+import { Analysis } from '../analysis/analysis';
 import { SourceFile } from '../source/sourceFile';
 import { CharStream } from '../lexer/charStream';
 import { Lexer } from '../lexer/lexer';
@@ -44,21 +44,17 @@ export class Validator {
     // Lexer
     // ----------------------------
 
-    const sourceFile = new SourceFile(
-      document.uri,
-      document.getText()
-    );
-
+    const sourceFile = SourceFile.fromDocument(document);
     const charStream = new CharStream(sourceFile);
     const lexer = new Lexer(charStream, problems, this.logger);
 
     const tokens = lexer.tokenize();
 
     // ----------------------------
-    // FileAnalysis
+    // Analysis
     // ----------------------------
 
-    const file = FileAnalysis.create(
+    const file = Analysis.create(
       document.uri,
       tokens,
       problems
@@ -87,6 +83,7 @@ export class Validator {
 
     const preprocessor = new Preprocessor(
       lexerStream,
+      sourceFile,
       context,
       problems,
       this.logger

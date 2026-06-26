@@ -4,7 +4,8 @@
 import { TextDocuments } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import * as fs from 'fs';
-import {filePathFromUri} from './uriUtils'
+import * as path from "path";
+import { filePathFromUri, uriFromFilePath } from './uriUtils'
 
 export class DocumentRegistry {
   private documents: TextDocuments<TextDocument>;
@@ -34,7 +35,7 @@ export class DocumentRegistry {
     let fsPath: string | undefined;
 
     try {
-      const fsPath = filePathFromUri(uri);
+      fsPath = filePathFromUri(uri);
       const stat = fs.statSync(fsPath);
       const mtimeMs = stat.mtimeMs;
 
@@ -54,6 +55,20 @@ export class DocumentRegistry {
       }
       return null;
     }
+  }
+
+  resolveInclude(sourceUri: string, includePath: string): TextDocument | null {
+
+      const sourcePath = filePathFromUri(sourceUri);
+
+      const includeFsPath = path.resolve(
+          path.dirname(sourcePath),
+          includePath
+      );
+
+      const includeUri = uriFromFilePath(includeFsPath);
+
+      return this.get(includeUri);
   }
 
   invalidateUri(uri: string): void {

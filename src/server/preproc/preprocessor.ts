@@ -21,12 +21,14 @@ type DirectiveHandler = () => void;
 
 export class Preprocessor implements TokenStream {
 
+    private static readonly MAX_INCLUDE_DEPTH = 100;
     private currentToken!: Token;
     private readonly handlers = new Map<string, DirectiveHandler>();
     private readonly expansions = new ExpansionStack();
 
     constructor(
         private readonly input: TokenStream,
+        private readonly sourceFile: SourceFile,
         private readonly context: PreprocessorContext,
         private readonly problems: ProblemCollection,
         private readonly logger: Logger
@@ -86,7 +88,9 @@ export class Preprocessor implements TokenStream {
 
             const expansion = this.expansions.peek();
             if (expansion) {
-
+this.logger.debug?.(
+        `Expansion stream = ${expansion.constructor.name}`
+    );
                 if (expansion.eof()) {
                     this.expansions.pop();
                     continue;
@@ -234,7 +238,7 @@ export class Preprocessor implements TokenStream {
         // Öffnendes " konsumieren
         this.input.next();
 
-        let replacement = "";
+        const replacementStart = this.input.current().location.span.start;
 
         while (!this.input.eof()) {
 
@@ -243,10 +247,19 @@ export class Preprocessor implements TokenStream {
 
             if (text === "\"") {
 
-                // Schließendes "
+                const replacement = this.sourceFile.getText({
+                    start: replacementStart,
+                    end: token.location.span.start
+                });
+
+                // Schließendes " konsumieren
                 this.input.next();
 
-                this.defineMacro(name, replacement, nameToken.location);
+                this.defineMacro(
+                    name,
+                    replacement,
+                    nameToken.location
+                );
 
                 // Rest der Zeile darf nur noch Kommentar/Newline sein.
                 if (!this.input.eof()) {
@@ -267,11 +280,8 @@ export class Preprocessor implements TokenStream {
                 return;
             }
 
-            replacement += text;
-
             this.input.next();
         }
-
         this.problems.error(
             start.location,
             "Unterminated macro replacement text."
@@ -299,8 +309,127 @@ export class Preprocessor implements TokenStream {
     }
     
     private handleInclude(): void {
-        // Direktive selbst konsumieren
+
+        // "#include" konsumieren
         this.input.next();
+
+        const location = this.input.current().location;
+
+        let path = "";
+        let quoted = false;
+
+        while (!this.input.eof()) {
+
+            const token = this.input.current();
+this.logger.debug?.(
+    `handleInclude ${TokenKind[token.kind]} "${this.input.tokenText(token)}"`
+);
+            switch (token.kind) {
+
+            case TokenKind.Newline:
+
+                if (quoted) {
+                    this.problems.error(
+                        location,
+                        "Unterminated include file name."
+                    );
+                } else if (path.length === 0) {
+                    this.problems.error(
+                        location,
+                        "Expected file name after #include."
+                    );
+                } else {
+                    this.includeFile(path, location);
+                }
+
+                return;
+
+            case TokenKind.Comment:
+
+                if (quoted) {
+                    this.problems.error(
+                        location,
+                        "Unterminated include file name."
+                    );
+                } else if (path.length === 0) {
+                    this.problems.error(
+                        location,
+                        "Expected file name after #include."
+                    );
+                } else {
+                    this.includeFile(path, location);
+                }
+
+                this.skipToNextLine();
+                return;
+            }
+
+            const text = this.input.tokenText(token);
+
+            // Doppelte Anführungszeichen dienen nur als Begrenzung.
+            if (text === "\"") {
+
+                quoted = !quoted;
+
+                this.input.next();
+                continue;
+            }
+
+            // Makronamen expandieren.
+            if (token.kind === TokenKind.Identifier) {
+
+                const replacement = this.context.macroTable.get(text);
+
+                if (replacement === undefined) {
+
+                    path += text;
+
+                } else if (replacement !== null) {
+
+                    // Stringkonstante im Include-Pfad entpacken.
+                    if (replacement.length >= 2 &&
+                        replacement.startsWith("'") &&
+                        replacement.endsWith("'")) {
+
+                        path += replacement.substring(
+                            1,
+                            replacement.length - 1
+                        );
+
+                    } else {
+
+                        path += replacement;
+                    }
+                }
+
+            } else {
+
+                path += text;
+            }
+
+            this.input.next();
+        }
+
+        // EOF
+
+        if (quoted) {
+
+            this.problems.error(
+                location,
+                "Unterminated include file name."
+            );
+
+        } else if (path.length === 0) {
+
+            this.problems.error(
+                location,
+                "Expected file name after #include."
+            );
+
+        } else {
+
+            this.includeFile(path, location);
+        }
     }
 
     private handleUndef(): void {
@@ -438,7 +567,69 @@ export class Preprocessor implements TokenStream {
             sourceFile
         );
 
+        if (this.expansions.size >= Preprocessor.MAX_INCLUDE_DEPTH) {
+            this.problems.error(macroToken.location, `Maximum macro depth (${Preprocessor.MAX_INCLUDE_DEPTH}) exceeded.`);
+            return;
+        }
+        const preprocessor = new Preprocessor(
+            stream,
+            sourceFile,
+            this.context,
+            this.problems,
+            this.logger
+        );
+
         // Auf den Expansionsstack legen
-        this.expansions.push(stream);
+        this.expansions.push(preprocessor);
+    }
+
+    private includeFile(includePath: string, location: Location): void {
+
+        this.logger.debug?.(
+            `#include ${includePath}`
+        );
+
+        const document =
+            this.context.documentRegistry.resolveInclude(
+                this.sourceFile.uri,
+                includePath
+            );
+
+        if (!document) {
+
+            this.problems.error(
+                location,
+                `#include: file '${includePath}' not found.`
+            );
+
+            return;
+        }
+
+        const sourceFile = SourceFile.fromDocument(document);
+
+        const lexer = new Lexer(
+            new CharStream(sourceFile),
+            this.problems,
+            this.logger
+        );
+
+        const stream = new LexerTokenStream(
+            lexer.tokenize(),
+            sourceFile
+        );
+
+        if (this.expansions.size >= Preprocessor.MAX_INCLUDE_DEPTH) {
+            this.problems.error(location, `Maximum include depth (${Preprocessor.MAX_INCLUDE_DEPTH}) exceeded.`);
+            return;
+        }
+        const preprocessor = new Preprocessor(
+            stream,
+            sourceFile,
+            this.context,
+            this.problems,
+            this.logger
+        );
+
+        this.expansions.push(preprocessor);
     }
 }
