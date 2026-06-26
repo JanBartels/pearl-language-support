@@ -3,6 +3,7 @@
 
 import { DocumentRegistry } from '../utility/documentRegistry';
 import { MacroTable } from './macroTable';
+import { ConditionalStack } from './conditionalStack';
 
 export class PreprocessorContext {
 
@@ -19,11 +20,10 @@ export class PreprocessorContext {
     readonly macroTable: MacroTable,
 
     /**
-     * Stack der aktuell expandierten Include-Dateien.
-     * Dient später zur Erkennung rekursiver Includes.
+     * Aktueller Makrozustand.
      */
-    readonly includeStack: readonly string[] = []
-
+    readonly conditionals: ConditionalStack
+    
   ) {}
 
 }

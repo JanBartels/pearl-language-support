@@ -21,6 +21,7 @@ import { PearlSettings } from '../settings/pearlSettings';
 import { WorkspaceManager } from '../utility/workspace';
 import { DocumentRegistry } from '../utility/documentRegistry';
 import { Logger } from '../utility/logging/logger';
+import { ConditionalStack } from '../preproc/conditionalStack';
 
 export class Validator {
 
@@ -76,7 +77,8 @@ export class Validator {
 
     const context = new PreprocessorContext(
       this.documentRegistry,
-      macroTable
+      macroTable,
+      new ConditionalStack()
     );
 
     const lexerStream = new LexerTokenStream(file.tokens, sourceFile);

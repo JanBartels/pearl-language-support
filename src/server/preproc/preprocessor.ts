@@ -88,9 +88,6 @@ export class Preprocessor implements TokenStream {
 
             const expansion = this.expansions.peek();
             if (expansion) {
-this.logger.debug?.(
-        `Expansion stream = ${expansion.constructor.name}`
-    );
                 if (expansion.eof()) {
                     this.expansions.pop();
                     continue;
@@ -107,15 +104,56 @@ this.logger.debug?.(
 
             const stream = this.currentStream();
             if (stream.eof()) {
+
+                if (stream === this.input) {
+                    while (!this.context.conditionals.isEmpty()) {
+                        this.problems.error(stream.current().location,"Missing #endif.");
+                        this.context.conditionals.leaveConditional();
+                    }
+                }                
                 this.currentToken = stream.current();
                 return;
             }
+            const token = stream.current();
 
             // ----------------------------------------------------
+            // Inaktiver Bereich?
+            // ----------------------------------------------------
+
+            if (!this.context.conditionals.isActive()) {
+
+                if (token.kind === TokenKind.PreprocessorDirective) {
+
+                    const directive = stream.tokenText(token).toLowerCase();
+
+                    switch (directive) {
+
+                    case "#ifdef":
+                    case "#ifndef":
+                    case "#else":
+                    case "#endif":
+                        this.handleDirective(token);
+                        break;
+
+                    default:
+                        this.skipToNextLine();
+                        break;
+                    }
+
+                } else {
+
+                    stream.next();
+
+                }
+
+                continue;
+            }
+
+            // ----------------------------------------------------
+            // Aktiver Bereich
             // Direktiven und Makroersetzungen bearbeiten
             // ----------------------------------------------------
 
-            const token = stream.current();
             if (stream === this.input) {
                 switch (token.kind) {
 
@@ -130,23 +168,23 @@ this.logger.debug?.(
                 case TokenKind.Identifier: {
 
                     const name = stream.tokenText(token);
-                    const replacement = this.context.macroTable.get(name);
 
-                    if (replacement === undefined) {
+                    if (!this.context.macroTable.has(name)) {
                         // Kein Makro → Identifier durchreichen.
                         this.currentToken = token;
                         stream.next();
                         return;
                     }
 
+                    const replacement = this.context.macroTable.get(name);
                     if (replacement === null) {
-                    // Makro ohne Ersetzungstext verschwindet einfach.
+                        // Makro ohne Ersetzungstext verschwindet einfach.
                         stream.next();
                         continue;
                     }
 
                     stream.next();
-                    this.expandMacro(token, replacement);
+                    this.expandMacro(token, replacement!);
                     continue;
                 }
                 }
@@ -289,23 +327,110 @@ this.logger.debug?.(
     }
 
     private handleElse(): void {
-        // Direktive selbst konsumieren
+
+        const token = this.input.current();
+
+        if (this.context.conditionals.isEmpty()) {
+
+            this.problems.error(
+                token.location,
+                "#else without matching #ifdef/#ifndef."
+            );
+
+            this.skipToNextLine();
+            return;
+        }
+
+        if (this.context.conditionals.hasElse()) {
+            this.problems.error(
+                token.location,
+                "Multiple #else directives."
+            );
+            this.skipToNextLine();
+            return;
+        }
+        
+        this.context.conditionals.handleElse();
+
         this.input.next();
+        this.skipToNextLine();
     }
-    
+
     private handleEndif(): void {
-        // Direktive selbst konsumieren
+
+        const token = this.input.current();
+
+        if (this.context.conditionals.isEmpty()) {
+
+            this.problems.error(
+                token.location,
+                "#endif without matching #ifdef/#ifndef."
+            );
+
+            this.skipToNextLine();
+            return;
+        }
+
+        this.context.conditionals.leaveConditional();
+
         this.input.next();
+        this.skipToNextLine();
     }
 
     private handleIfdef(): void {
-        // Direktive selbst konsumieren
+
+        const directive = this.input.current();
+
+        // #ifdef konsumieren
         this.input.next();
+
+        const token = this.input.current();
+
+        if (token.kind !== TokenKind.Identifier) {
+
+            this.problems.error(
+                token.location,
+                "Expected macro name after #ifdef."
+            );
+
+            this.skipToNextLine();
+            return;
+        }
+
+        const name = this.input.tokenText(token);
+
+        this.context.conditionals.enterIfdef(this.context.macroTable.has(name));
+
+        this.input.next();
+        this.skipToNextLine();
     }
-    
+
     private handleIfndef(): void {
-        // Direktive selbst konsumieren
+
+        const directive = this.input.current();
+
+        // #ifndef konsumieren
         this.input.next();
+
+        const token = this.input.current();
+
+        if (token.kind !== TokenKind.Identifier) {
+
+            this.problems.error(
+                token.location,
+                "Expected macro name after #ifndef."
+            );
+
+            this.skipToNextLine();
+            return;
+        }
+
+        const name = this.input.tokenText(token);
+
+        this.context.conditionals.enterIfndef(this.context.macroTable.has(name));
+
+        this.input.next();
+        this.skipToNextLine();
     }
     
     private handleInclude(): void {
@@ -321,9 +446,6 @@ this.logger.debug?.(
         while (!this.input.eof()) {
 
             const token = this.input.current();
-this.logger.debug?.(
-    `handleInclude ${TokenKind[token.kind]} "${this.input.tokenText(token)}"`
-);
             switch (token.kind) {
 
             case TokenKind.Newline:
