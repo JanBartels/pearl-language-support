@@ -15,6 +15,9 @@ export class LexerTokenStream implements TokenStream {
     ) {}
 
     tokenText(token: Token): string {
+        if (this.sourceFile.uri !== token.location.uri) {
+            throw new Error(`Token belongs to '${token.location.uri}', expected '${this.sourceFile.uri}'.`);
+        }      
         return this.sourceFile.getText(token.location.span);
     }
 
