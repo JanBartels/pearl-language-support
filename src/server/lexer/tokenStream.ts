@@ -26,6 +26,10 @@ export interface TokenStream {
      */
     eof(): boolean;
 
+    /**
+     * Gibt den Text des Tokens zurück
+     */
+    tokenText(token: Token): string;
 }
 
 export interface TokenMark {

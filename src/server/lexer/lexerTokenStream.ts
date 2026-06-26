@@ -3,14 +3,20 @@
 
 import { Token, TokenKind } from './token';
 import { TokenStream } from './tokenStream';
+import { SourceFile } from '../source/sourceFile';
 
 export class LexerTokenStream implements TokenStream {
 
     private index = 0;
 
     constructor(
-        private readonly tokens: readonly Token[]
+        private readonly tokens: readonly Token[],
+        private readonly sourceFile: SourceFile
     ) {}
+
+    tokenText(token: Token): string {
+        return this.sourceFile.getText(token.location.span);
+    }
 
     current(): Token {
         return this.peek();

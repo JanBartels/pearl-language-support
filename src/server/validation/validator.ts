@@ -7,7 +7,6 @@ import { SourceFile } from '../source/sourceFile';
 import { CharStream } from '../lexer/charStream';
 import { Lexer } from '../lexer/lexer';
 
-import { TokenKind, tokenText } from '../lexer/token'; // Debug
 import { ProblemCollection } from '../core/problemCollection';
 
 import { LexerTokenStream } from '../lexer/lexerTokenStream';
@@ -22,8 +21,6 @@ import { PearlSettings } from '../settings/pearlSettings';
 import { WorkspaceManager } from '../utility/workspace';
 import { DocumentRegistry } from '../utility/documentRegistry';
 import { Logger } from '../utility/logging/logger';
-
-const DUMP_TOKENS = true;
 
 export class Validator {
 
@@ -51,22 +48,9 @@ export class Validator {
     );
 
     const charStream = new CharStream(sourceFile);
-    const lexer = new Lexer(charStream);
+    const lexer = new Lexer(charStream, this.logger);
 
     const tokens = lexer.tokenize();
-
-    if (DUMP_TOKENS) {
-
-      this.logger.debug?.(`Lexer produced ${tokens.length} tokens`);
-
-      for (let i = 0; i < Math.min(tokens.length, 20); i++) {
-
-        const token = tokens[i]!;
-        const text = tokenText(token, this.documentRegistry);
-
-        this.logger.debug?.(`[${i}] ${TokenKind[token.kind]} "${text}" @${token.location.span.start}`);
-      }
-    }
 
     // ----------------------------
     // FileAnalysis
@@ -89,7 +73,7 @@ export class Validator {
       new MacroTable()
     );
 
-    const lexerStream = new LexerTokenStream(file.tokens);
+    const lexerStream = new LexerTokenStream(file.tokens, sourceFile);
 
     const preprocessor = new Preprocessor(
       lexerStream,

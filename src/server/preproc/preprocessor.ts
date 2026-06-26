@@ -6,7 +6,7 @@ import { Logger } from '../utility/logging/logger';
 import { ProblemCollection } from '../core/problemCollection';
 import { Location } from '../core/location';
 
-import { Token, TokenKind, tokenText } from '../lexer/token';
+import { Token, TokenKind } from '../lexer/token';
 import { TokenStream } from '../lexer/tokenStream';
 
 import { PreprocessorContext } from './preprocessorContext';
@@ -33,6 +33,10 @@ export class Preprocessor implements TokenStream {
         this.handlers.set("#undef", this.handleUndef.bind(this));
 
         this.currentToken = input.current();
+    }
+
+    tokenText(token: Token): string {
+        return this.input.tokenText(token);
     }
 
     private reportError(
@@ -109,7 +113,7 @@ export class Preprocessor implements TokenStream {
 
     private handleDirective(token: Token): void {
 
-        const text = tokenText(token, this.context.documentRegistry);
+        const text = this.tokenText(token);
 
         this.logger.debug?.(`Preprocessor directive: "${text}"`);
 
@@ -123,7 +127,7 @@ export class Preprocessor implements TokenStream {
 
     private handleInvalidDirective(token: Token): void {
 
-        const text = tokenText(token, this.context.documentRegistry);
+        const text = this.tokenText(token);
         this.logger.debug?.(`Invalid directive: "${text}"`);
         this.handleUnknownDirective();
         
@@ -174,10 +178,7 @@ export class Preprocessor implements TokenStream {
         // Problem melden
         this.reportError(
             directive.location,
-            `Unknown preprocessor directive '${tokenText(
-                directive,
-                this.context.documentRegistry
-            )}'`
+            `Unknown preprocessor directive '${this.tokenText(directive)}'`
         );
 
         // Rest der Zeile überspringen

@@ -2,17 +2,21 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { SourceFile } from '../source/sourceFile';
+import { Span } from '../core';
 
 export class CharStream {
 
   private readonly text: string;
   private readonly length: number;
-
   private pos = 0;
 
   constructor(private readonly source: SourceFile) {
     this.text = source.text;
     this.length = this.text.length;
+  }
+
+  getText(span?: Span): string {
+    return this.source.getText(span);
   }
 
   get uri(): string {

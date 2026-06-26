@@ -7,11 +7,18 @@ import { createToken } from './tokenFactory';
 import { Span } from '../core/span';
 import { Location } from '../core/location';
 
+import { Logger } from '../utility/logging/logger';
+
+const DUMP_TOKENS = true;
+
 export class Lexer {
 
   private readonly stream: CharStream;
 
-  constructor(stream: CharStream) {
+  constructor(
+    stream: CharStream,
+    private readonly logger: Logger
+  ) {
     this.stream = stream;
   }
 
@@ -32,7 +39,24 @@ export class Lexer {
       }
     }
 
+    if (DUMP_TOKENS) {
+
+      this.logger.debug?.(`Lexer produced ${tokens.length} tokens`);
+
+      for (let i = 0; i < Math.min(tokens.length, 20); i++) {
+
+        const token = tokens[i]!;
+        const text = this.tokenText(token);
+
+        this.logger.debug?.(`Lexer [${i}] ${TokenKind[token.kind]} "${text}" @${token.location.span.start}`);
+      }
+    }
+
     return tokens;
+  }
+
+  private tokenText(token: Token): string {
+    return this.stream.getText(token.location.span);
   }
 
   private nextToken(): Token {

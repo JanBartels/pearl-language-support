@@ -72,22 +72,3 @@ export interface Token {
 export interface NumberToken extends Token {
   readonly numericValue: number;
 }
-
-export function tokenText(
-    token: Token,
-    registry: DocumentRegistry
-): string {
-
-    const document = registry.get(token.location.uri);
-
-    if (!document) {
-        throw new Error(
-            `Document not found: ${token.location.uri}`
-        );
-    }
-
-    return document.getText({
-        start: document.positionAt(token.location.span.start),
-        end: document.positionAt(token.location.span.end)
-    });
-}
