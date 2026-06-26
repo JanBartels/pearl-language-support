@@ -32,7 +32,7 @@ export class Preprocessor implements TokenStream {
         this.handlers.set("#include", this.handleInclude.bind(this));
         this.handlers.set("#undef", this.handleUndef.bind(this));
 
-        this.currentToken = input.current();
+        this.next();
     }
 
     tokenText(token: Token): string {
