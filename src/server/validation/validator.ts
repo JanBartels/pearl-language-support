@@ -68,9 +68,19 @@ export class Validator {
     // Preprocessor + Parser
     // ----------------------------
 
+    const macroTable = new MacroTable();
+    // vordefinierte Macros anlegen
+    for (const [name, value] of Object.entries(settings.macros ?? {})) {
+
+        macroTable.define(
+            name,
+            value === "" ? null : value
+        );
+    }
+
     const context = new PreprocessorContext(
       this.documentRegistry,
-      new MacroTable()
+      macroTable
     );
 
     const lexerStream = new LexerTokenStream(file.tokens, sourceFile);
@@ -100,6 +110,7 @@ export class Validator {
       [file]
     );
   }
+  
   handleConfigurationChanged(): void {
     this.logger.debug?.('Configuration changed – invalidating include cache');
     this.documentRegistry.invalidateAllIncludes();

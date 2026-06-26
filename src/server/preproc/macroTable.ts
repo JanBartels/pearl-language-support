@@ -3,22 +3,26 @@
 
 export class MacroTable {
 
-  private readonly macros = new Map<string, string>();
+  private readonly macros = new Map<string, string|null>();
 
   has(name: string): boolean {
     return this.macros.has(name);
   }
 
-  get(name: string): string | undefined {
+  get(name: string): string | null | undefined {
     return this.macros.get(name);
   }
 
-  define(name: string, value: string): void {
+  define(name: string, value: string|null): boolean {
+    const redefined = this.macros.has(name);
     this.macros.set(name, value);
+    return redefined;
   }
 
-  undefine(name: string): void {
+  undefine(name: string): boolean {
+    const defined = this.macros.has(name);
     this.macros.delete(name);
+    return defined;
   }
 
   clear(): void {

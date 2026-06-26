@@ -8,11 +8,20 @@ export interface PearlSettings {
   maxNumberOfProblems: number;
   traceServer: TraceServerMode;
   workingDirMode: WorkingDirMode;
+  /**
+   * Vordefinierte Präprozessor-Makros.
+   *
+   * key   = Makroname
+   * value = Ersetzungstext
+   *         "" bedeutet Makro ohne Ersetzungstext (#define NAME)
+   */
+  macros: Record<string, string>;
 }
 
 // Default settings (fallback if client does not support workspace/configuration)
 export const defaultSettings: PearlSettings = {
   maxNumberOfProblems: 100,
   traceServer: 'off',
-  workingDirMode: 'file'
+  workingDirMode: 'file',
+  macros: {}
 }
