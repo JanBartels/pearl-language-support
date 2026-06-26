@@ -173,44 +173,82 @@ export class Lexer {
 
   private lexStringOrBitLiteral(): Token {
 
-    const start = this.stream.mark();
+      const start = this.stream.mark();
 
-    this.stream.next(); // opening '
+      this.stream.next(); // opening '
 
-    while (true) {
-      const ch = this.stream.peek();
+      while (true) {
 
-      if (ch === -1) {
-        break; // unterminated string
+          const ch = this.stream.peek();
+
+          if (ch === -1) {
+              break; // unterminated string
+          }
+
+          if (ch === 39 /* ' */) {
+
+              this.stream.next(); // consume '
+
+              const next = this.stream.peek();
+
+              // Escaped apostrophe: ''
+              if (next === 39 /* ' */) {
+                  this.stream.next();      // consume second '
+                  continue;
+              }
+
+              // Control sequence: '\
+              if (next === 92 /* \ */) {
+
+                  this.stream.next();      // consume opening '\
+
+                  // Scan until closing \'
+                  while (true) {
+
+                      const c = this.stream.peek();
+
+                      if (c === -1) {
+                          break;          // unterminated control sequence
+                      }
+
+                      this.stream.next();
+
+                      if (c === 92 /* \ */ &&
+                          this.stream.peek() === 39 /* ' */) {
+
+                          this.stream.next(); // consume closing '
+                          break;
+                      }
+                  }
+
+                  continue;
+              }
+
+              // Normal end of string
+              break;
+          }
+
+          this.stream.next();
       }
 
-      if (ch === 39 /* ' */) {
-        this.stream.next(); // consume closing '
-        break;
+      const afterQuote = this.stream.peek();
+
+      // Bit literal suffix: B or B1–B4 (no whitespace allowed)
+      if (afterQuote === 66 /* B */) {
+
+          this.stream.next(); // consume B
+
+          const next = this.stream.peek();
+
+          if (next >= 49 && next <= 52) {
+              this.stream.next();
+          }
+
+          return this.createTokenFromSpan(TokenKind.BitLiteral, start);
       }
 
-      this.stream.next();
-    }
-
-    const afterQuote = this.stream.peek();
-
-    // Bit literal suffix: B or B1–B4 (no whitespace allowed)
-    if (afterQuote === 66 /* B */) {
-
-      this.stream.next(); // consume B
-
-      const next = this.stream.peek();
-
-      if (next >= 49 && next <= 52) { // '1'..'4'
-        this.stream.next();
-      }
-
-      return this.createTokenFromSpan(TokenKind.BitLiteral, start);
-    }
-
-    return this.createTokenFromSpan(TokenKind.StringLiteral, start);
+      return this.createTokenFromSpan(TokenKind.StringLiteral, start);
   }
-
   private lexPreprocessorDirective(): Token {
 
     const start = this.stream.mark();
