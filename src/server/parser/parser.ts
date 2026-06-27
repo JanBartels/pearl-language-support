@@ -3,6 +3,11 @@
 
 import { TokenStream } from '../lexer/tokenStream';
 import { TokenKind } from '../lexer/token';
+import { ProblemCollection } from '../core/problemCollection';
+
+import { AstNode } from '../ast/astNode';
+import { TranslationUnitNode } from '../ast/translationUnitNode';
+
 import { Logger } from '../utility/logging/logger';
 
 const DUMP_TOKENS = true;
@@ -11,10 +16,11 @@ export class Parser {
 
   constructor(
     private readonly stream: TokenStream,
+    private readonly problems: ProblemCollection,
     private readonly logger: Logger
   ) {}
 
-  parse(): void {
+  parse(): AstNode {
 
     while (!this.stream.eof()) {
 
@@ -28,5 +34,7 @@ export class Parser {
 
       this.stream.next();
     }
+
+    return new TranslationUnitNode(this.stream.current().location);
   }
 }

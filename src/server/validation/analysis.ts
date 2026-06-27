@@ -4,12 +4,17 @@
 import { Token } from '../lexer/token';
 import { ProblemCollection } from '../core/problemCollection';
 import { Severity } from '../core/severity';
+import { AstNode } from '../ast/astNode';
+import { SemanticContext } from '../semantic/semanticContext';
 
 export class Analysis {
 
   readonly rootUri: string;
   readonly tokens: readonly Token[];
   readonly problems: ProblemCollection;
+
+  ast?: AstNode;
+  semanticContext?: SemanticContext;
 
   private constructor(
     uri: string,

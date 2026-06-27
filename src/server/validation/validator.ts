@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
-import { AnalysisResult } from '../analysis/analysisResult';  
-import { Analysis } from '../analysis/analysis';
+import { AnalysisResult } from './analysisResult';  
+import { Analysis } from './analysis';
 import { SourceFile } from '../source/sourceFile';
 import { CharStream } from '../lexer/charStream';
 import { Lexer } from '../lexer/lexer';
@@ -55,7 +55,7 @@ export class Validator {
     // Analysis
     // ----------------------------
 
-    const file = Analysis.create(
+    const analysis = Analysis.create(
       document.uri,
       tokens,
       problems
@@ -81,7 +81,7 @@ export class Validator {
       new ConditionalStack()
     );
 
-    const lexerStream = new LexerTokenStream(file.tokens, sourceFile);
+    const lexerStream = new LexerTokenStream(analysis.tokens, sourceFile);
 
     const preprocessor = new Preprocessor(
       lexerStream,
@@ -93,12 +93,14 @@ export class Validator {
 
     const parser = new Parser(
       preprocessor,
+      problems,
       this.logger
     );
 
-    parser.parse();
+    analysis.ast = parser.parse();
 
-    // ----------------------------
+    // Semantik kommt später
+    // analysis.semanticContext = semantic.analyze(ast);
 
     this.logger.debug?.(
       `Analysis finished: ${problems.size()} problems`
@@ -106,7 +108,7 @@ export class Validator {
 
     return AnalysisResult.create(
       document.uri,
-      [file]
+      [analysis]
     );
   }
   
