@@ -3,7 +3,7 @@
 
 import { Token, TokenKind } from './token';
 import { TokenStream } from './tokenStream';
-import { SourceFile } from '../source/sourceFile';
+import { Source } from '../source/source';
 
 export class LexerTokenStream implements TokenStream {
 
@@ -11,14 +11,14 @@ export class LexerTokenStream implements TokenStream {
 
     constructor(
         private readonly tokens: readonly Token[],
-        private readonly sourceFile: SourceFile
+        private readonly source: Source
     ) {}
 
     tokenText(token: Token): string {
-        if (this.sourceFile.uri !== token.location.uri) {
-            throw new Error(`Token belongs to '${token.location.uri}', expected '${this.sourceFile.uri}'.`);
+        if (this.source !== token.location.source) {
+            throw new Error('Token belongs to a different source.');
         }      
-        return this.sourceFile.getText(token.location.span);
+        return this.source.getText(token.location.span);
     }
 
     current(): Token {

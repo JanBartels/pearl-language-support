@@ -9,7 +9,9 @@ import { Location } from '../core/location';
 import { Token, TokenKind } from '../lexer/token';
 import { TokenStream } from '../lexer/tokenStream';
 
-import { SourceFile } from "../source/sourceFile";
+import { Source } from "../source/source";
+import { FileSource } from "../source/fileSource";
+import { MacroSource } from "../source/macroSource";
 import { CharStream } from "../lexer/charStream";
 import { Lexer } from "../lexer/lexer";
 import { LexerTokenStream } from "../lexer/lexerTokenStream";
@@ -28,7 +30,7 @@ export class Preprocessor implements TokenStream {
 
     constructor(
         private readonly input: TokenStream,
-        private readonly sourceFile: SourceFile,
+        private readonly source: Source,
         private readonly context: PreprocessorContext,
         private readonly problems: ProblemCollection,
         private readonly logger: Logger
@@ -282,7 +284,7 @@ export class Preprocessor implements TokenStream {
 
             if (text === "\"") {
 
-                const replacement = this.sourceFile.getText({
+                const replacement = this.source.getText({
                     start: replacementStart,
                     end: token.location.span.start
                 });
@@ -431,6 +433,15 @@ export class Preprocessor implements TokenStream {
     }
     
     private handleInclude(): void {
+
+        // #include braucht echte Datei für relative Adressierung im Dateisystem
+        if (!(this.source instanceof FileSource)) {
+            this.problems.error(
+                this.input.current().location,
+                "#include is not permitted while expanding a macro."
+            );
+            return;
+        }
 
         // "#include" konsumieren
         this.input.next();
@@ -662,13 +673,13 @@ export class Preprocessor implements TokenStream {
         // this.logger.debug?.(`Expand macro ${this.input.tokenText(macroToken)} -> "${replacement}"`);
 
         // Quelltext für den Makroersetzungstext erzeugen
-        const sourceFile = new SourceFile(
-            `<macro:${this.input.tokenText(macroToken)}>`,
+        const macroSource = new MacroSource(
+            macroToken.location,
             replacement
         );
 
         // Lexer darüber laufen lassen
-        const charStream = new CharStream(sourceFile);
+        const charStream = new CharStream(macroSource);
 
         const lexer = new Lexer(
             charStream,
@@ -681,7 +692,7 @@ export class Preprocessor implements TokenStream {
         // TokenStream erzeugen
         const stream = new LexerTokenStream(
             tokens,
-            sourceFile
+            macroSource
         );
 
         if (this.expansions.size >= Preprocessor.MAX_INCLUDE_DEPTH) {
@@ -690,7 +701,7 @@ export class Preprocessor implements TokenStream {
         }
         const preprocessor = new Preprocessor(
             stream,
-            sourceFile,
+            macroSource,
             this.context,
             this.problems,
             this.logger
@@ -706,7 +717,7 @@ export class Preprocessor implements TokenStream {
 
         const document =
             this.context.documentRegistry.resolveInclude(
-                this.sourceFile.uri,
+                this.source.uri,
                 includePath
             );
 
@@ -720,17 +731,17 @@ export class Preprocessor implements TokenStream {
             return;
         }
 
-        const sourceFile = SourceFile.fromDocument(document);
+        const fileSource = FileSource.fromDocument(document);
 
         const lexer = new Lexer(
-            new CharStream(sourceFile),
+            new CharStream(fileSource),
             this.problems,
             this.logger
         );
 
         const stream = new LexerTokenStream(
             lexer.tokenize(),
-            sourceFile
+            fileSource
         );
 
         if (this.expansions.size >= Preprocessor.MAX_INCLUDE_DEPTH) {
@@ -739,7 +750,7 @@ export class Preprocessor implements TokenStream {
         }
         const preprocessor = new Preprocessor(
             stream,
-            sourceFile,
+            fileSource,
             this.context,
             this.problems,
             this.logger

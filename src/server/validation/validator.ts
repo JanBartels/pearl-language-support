@@ -3,7 +3,7 @@
 
 import { AnalysisResult } from './analysisResult';  
 import { Analysis } from './analysis';
-import { SourceFile } from '../source/sourceFile';
+import { FileSource } from '../source/fileSource';
 import { CharStream } from '../lexer/charStream';
 import { Lexer } from '../lexer/lexer';
 
@@ -49,8 +49,8 @@ export class Validator {
     // Lexer
     // ----------------------------
 
-    const sourceFile = SourceFile.fromDocument(document);
-    const charStream = new CharStream(sourceFile);
+    const fileSource = FileSource.fromDocument(document);
+    const charStream = new CharStream(fileSource);
     const lexer = new Lexer(charStream, problems, this.logger);
 
     const tokens = lexer.tokenize();
@@ -85,11 +85,11 @@ export class Validator {
       new ConditionalStack()
     );
 
-    const lexerStream = new LexerTokenStream(analysis.tokens, sourceFile);
+    const lexerStream = new LexerTokenStream(analysis.tokens, fileSource);
 
     const preprocessor = new Preprocessor(
       lexerStream,
-      sourceFile,
+      fileSource,
       context,
       problems,
       this.logger
@@ -107,7 +107,7 @@ export class Validator {
         AstDumper.dump(analysis.ast)
       );
     }
-    
+
     // Semantik kommt später
     // analysis.semanticContext = semantic.analyze(ast);
 

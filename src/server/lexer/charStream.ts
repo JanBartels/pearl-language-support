@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
-import { SourceFile } from '../source/sourceFile';
+import { Source } from '../source/source';
 import { Span } from '../core';
 
 export class CharStream {
@@ -10,9 +10,13 @@ export class CharStream {
   private readonly length: number;
   private pos = 0;
 
-  constructor(private readonly source: SourceFile) {
+  constructor(private readonly source: Source) {
     this.text = source.text;
     this.length = this.text.length;
+  }
+
+  getSource(): Source {
+    return this.source;
   }
 
   getText(span?: Span): string {

@@ -2,40 +2,50 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { Span } from '../core';
+import { Position } from '../core/position';
+import { Source } from './source';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
-export class SourceFile {
+export class FileSource implements Source {
 
-  readonly uri: string;
-  readonly text: string;
+  readonly _uri: string;
+  readonly _text: string;
 
   private readonly lineOffsets: [number, ...number[]];  
 
   constructor(uri: string, text: string) {
-    this.uri = uri;
-    this.text = text;
+    this._uri = uri;
+    this._text = text;
     const offsets = computeLineOffsets(text);
     this.lineOffsets = offsets as [number, ...number[]];
   }
 
-  static fromDocument(document: TextDocument): SourceFile {
-    return new SourceFile(
+  static fromDocument(document: TextDocument): FileSource {
+    return new FileSource(
       document.uri,
       document.getText()
     );
   }
 
+  get uri(): string {
+      return this._uri;
+  }
+
+  get text(): string {
+      return this._text;
+  }
+
   get length(): number {
-    return this.text.length;
+      return this._text.length;
   }
 
   getText(span?: Span): string {
-    if (!span) return this.text;
-    return this.text.slice(span.start, span.end);
+    if (!span) return this._text;
+    return this._text.slice(span.start, span.end);
   }
 
-  positionAt(offset: number): { line: number; character: number } {
-    offset = clamp(offset, 0, this.text.length);
+  positionAt(offset: number): Position {
+    offset = clamp(offset, 0, this._text.length);
 
     let low = 0;
     let high = this.lineOffsets.length - 1;
@@ -62,7 +72,7 @@ export class SourceFile {
 
   offsetAt(line: number, character: number): number {
     if (line < 0 || line >= this.lineOffsets.length) {
-        return this.text.length;
+        return this._text.length;
     }
 
     const lineOffset = this.lineOffsets[line]!;
@@ -70,7 +80,7 @@ export class SourceFile {
     return clamp(
         lineOffset + character,
         0,
-        this.text.length
+        this._text.length
     );
   }
 }

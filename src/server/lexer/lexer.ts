@@ -551,7 +551,7 @@ export class Lexer {
     };
 
     const location: Location = {
-      uri: this.stream.uri,
+      source: this.stream.getSource(),
       span
     };
 

@@ -10,7 +10,7 @@ import { Problem } from '../core/problem';
 import { ProblemCollection } from '../core/problemCollection';
 import { Severity } from '../core/severity';
 import { DocumentRegistry } from '../utility/documentRegistry';
-import { SourceFile } from '../source/sourceFile';
+import { Source } from '../source/source';
 
 export class DiagnosticMapper {
 
@@ -19,12 +19,10 @@ export class DiagnosticMapper {
     registry: DocumentRegistry
   ): Diagnostic {
 
-    const { uri, span } = problem.location;
+    const { source, span } = problem.location;
 
-    const sourceFile = getSourceFile(uri, registry);
-
-    const start = sourceFile.positionAt(span.start);
-    const end = sourceFile.positionAt(span.end);
+    const start = source.positionAt(span.start);
+    const end = source.positionAt(span.end);
 
     return {
       range: { start, end },
@@ -44,7 +42,7 @@ export class DiagnosticMapper {
 
     for (const problem of problems.toArray()) {
 
-      const uri = problem.location.uri;
+      const uri = problem.location.source.uri;
 
       let diagnostics = result.get(uri);
 
@@ -60,22 +58,6 @@ export class DiagnosticMapper {
 
     return result;
   }
-}
-
-function getSourceFile(
-  uri: string,
-  registry: DocumentRegistry
-): SourceFile {
-
-  const document = registry.get(uri);
-
-  if (!document) {
-    throw new Error(
-        `Document '${uri}' not found.`
-    );
-  }
-
-  return SourceFile.fromDocument(document);
 }
 
 function mapSeverity(severity: Severity): DiagnosticSeverity {

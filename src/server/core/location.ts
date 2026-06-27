@@ -2,8 +2,9 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { Span } from './span';
+import { Source } from '../source/source';
 
 export interface Location {
-  uri: string;
-  span: Span;
+  readonly source: Source
+  readonly span: Span;
 }
