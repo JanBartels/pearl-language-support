@@ -12,7 +12,7 @@ export enum TokenKind {
   /** Zeilenende (\n oder \r\n) */
   Newline,
 
-  /** Kommentar bis zum Zeilenende */
+  /** Kommentar bis zum Zeilenende oder Blockkommentar */
   Comment,
 
   /** Bezeichner (Schlüsselwörter werden zunächst ebenfalls als Identifier erkannt) */

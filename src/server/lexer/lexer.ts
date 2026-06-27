@@ -11,7 +11,7 @@ import { ProblemCollection } from '../core/problemCollection';
 
 import { Logger } from '../utility/logging/logger';
 
-const DUMP_TOKENS = true;
+const DUMP_TOKENS = false;
 
 export class Lexer {
 

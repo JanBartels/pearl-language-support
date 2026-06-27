@@ -14,13 +14,21 @@ export abstract class AstNode {
         readonly location: Location,
     ) {}
 
-    protected adopt<T extends AstNode>(child: T): T {
+    adopt<T extends AstNode>(child: T): T {
         child.parent = this;
         return child;
     }
 
-    protected adoptAll<T extends AstNode>(children: readonly T[]): readonly T[] {
+    adoptAll<T extends AstNode>(children: readonly T[]): readonly T[] {
         return children.map(child => this.adopt(child));
+    }
+
+    public dumpLabel(): string {
+        return AstKind[this.kind];
+    }
+
+    public getChildren(): readonly AstNode[] {
+        return [];
     }
 
     resolveSymbols(context: SemanticContext): void {

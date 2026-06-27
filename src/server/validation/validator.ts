@@ -23,6 +23,10 @@ import { DocumentRegistry } from '../utility/documentRegistry';
 import { Logger } from '../utility/logging/logger';
 import { ConditionalStack } from '../preproc/conditionalStack';
 
+import { AstDumper } from '../ast/astDumper';
+
+const DUMP_AST: boolean = true;
+
 export class Validator {
 
   constructor(
@@ -98,7 +102,12 @@ export class Validator {
     );
 
     analysis.ast = parser.parse();
-
+    if ( DUMP_AST ) {
+      this.logger.debug?.(
+        AstDumper.dump(analysis.ast)
+      );
+    }
+    
     // Semantik kommt später
     // analysis.semanticContext = semantic.analyze(ast);
 

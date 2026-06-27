@@ -202,8 +202,6 @@ export class Preprocessor implements TokenStream {
 
         const text = this.tokenText(token);
 
-        this.logger.debug?.(`Preprocessor directive: "${text}"`);
-
         const handler = this.handlers.get(text);
         if (handler) {
             handler();
@@ -215,7 +213,6 @@ export class Preprocessor implements TokenStream {
     private handleInvalidDirective(token: Token): void {
 
         const text = this.tokenText(token);
-        this.logger.debug?.(`Invalid directive: "${text}"`);
         this.handleUnknownDirective();
         
         this.input.next();
@@ -642,7 +639,7 @@ export class Preprocessor implements TokenStream {
             this.problems.warning(location, `Macro '${name}' redefined.`);
         }
 
-        this.logger.debug?.(`#define ${name} "${replacement}"`);
+        // this.logger.debug?.(`#define ${name} "${replacement}"`);
     }
 
     private undefineMacro(
@@ -654,7 +651,7 @@ export class Preprocessor implements TokenStream {
             this.problems.warning(location, `Macro '${name}' is not defined.`);
         }
 
-        this.logger.debug?.(`#undef ${name}`);
+        // this.logger.debug?.(`#undef ${name}`);
     }
 
     private expandMacro(
@@ -662,9 +659,7 @@ export class Preprocessor implements TokenStream {
         replacement: string
     ): void {
 
-        this.logger.debug?.(
-            `Expand macro ${this.input.tokenText(macroToken)} -> "${replacement}"`
-        );
+        // this.logger.debug?.(`Expand macro ${this.input.tokenText(macroToken)} -> "${replacement}"`);
 
         // Quelltext für den Makroersetzungstext erzeugen
         const sourceFile = new SourceFile(
@@ -707,9 +702,7 @@ export class Preprocessor implements TokenStream {
 
     private includeFile(includePath: string, location: Location): void {
 
-        this.logger.debug?.(
-            `#include ${includePath}`
-        );
+        // this.logger.debug?.(`#include ${includePath}`);
 
         const document =
             this.context.documentRegistry.resolveInclude(

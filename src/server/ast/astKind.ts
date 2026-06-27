@@ -5,6 +5,9 @@ export enum AstKind {
 
     TranslationUnit,
     Module,
+    ModuleParameter,
+    SystemPart,
+    ProblemPart,
 
     TypeDeclaration,
     DclDeclaration,
