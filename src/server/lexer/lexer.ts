@@ -25,6 +25,40 @@ export class Lexer {
     this.stream = stream;
   }
 
+  // Achtung: Reihenfolge wichtig: Nach Länge sortieren!
+  private static readonly OPERATORS = [
+    // DATION-Richtung im SYSTEM-Teil
+    "<->",
+    "<-",
+    "->",
+
+    // Operatoren und sonstige Sonderzeichen
+    "//",
+    "**",
+    "==",
+    "/=",
+    "<=",
+    ">=",
+    "<>",
+    "><",
+
+    "[",
+    "]",
+    "(",
+    ")",
+    ",",
+    ".",
+    ";",
+    ":",
+    "+",
+    "-",
+    "*",
+    "/",
+    "=",
+    "<",
+    ">"
+  ] as const;
+
   tokenize(): Token[] {
     const tokens: Token[] = [];
 
@@ -101,8 +135,9 @@ export class Lexer {
     }
 
     // Number
-    if (isDigit(ch)) {
-      return this.lexNumber();
+    if (isDigit(ch) ||
+        (ch === 46 /* . */ && isDigit(this.stream.peek(1)))) {
+        return this.lexNumber();
     }
 
     // String / Bit literal
@@ -110,7 +145,12 @@ export class Lexer {
       return this.lexStringOrBitLiteral();
     }
 
-    // Fallback: operator / punctuation (single char for now)
+    // Hex literal ($...)
+    if (ch === 36 /* $ */) {
+        return this.lexHexLiteral();
+    }
+
+    // Fallback: operator / punctuation
     return this.lexOperator();
   }
 
@@ -209,13 +249,100 @@ export class Lexer {
 
   private lexNumber(): Token {
 
-    const start = this.stream.mark();
+      const start = this.stream.mark();
 
-    while (isDigit(this.stream.peek())) {
-      this.stream.next();
-    }
+      let hasDigitsBeforeDot = false;
+      let hasDot = false;
+      let hasDigitsAfterDot = false;
 
-    return this.createTokenFromSpan(TokenKind.NumberLiteral, start);
+      // Ganzzahlteil
+      while (isDigit(this.stream.peek())) {
+          hasDigitsBeforeDot = true;
+          this.stream.next();
+      }
+
+      // Nachkommateil
+      if (this.stream.peek() === 46 /* . */) {
+
+          hasDot = true;
+          this.stream.next();
+
+          while (isDigit(this.stream.peek())) {
+              hasDigitsAfterDot = true;
+              this.stream.next();
+          }
+      }
+
+      // Exponent
+      if (this.stream.peek() === 69 /* E */) {
+
+          const exponentStart = this.stream.mark();
+
+          this.stream.next();
+
+          if (this.stream.peek() === 43 /* + */ ||
+              this.stream.peek() === 45 /* - */) {
+
+              this.stream.next();
+          }
+
+          if (!isDigit(this.stream.peek())) {
+
+              this.problems.error(
+                  this.location(exponentStart),
+                  "Expected exponent."
+              );
+          }
+
+          while (isDigit(this.stream.peek())) {
+              this.stream.next();
+          }
+      }
+
+      // Mindestens vor oder nach dem Punkt müssen Ziffern stehen.
+      if (!hasDigitsBeforeDot && !hasDigitsAfterDot) {
+
+          this.problems.error(
+              this.location(start),
+              "Invalid number literal."
+          );
+      }
+
+      return this.createTokenFromSpan(TokenKind.NumberLiteral,start);
+  }
+
+  private lexHexLiteral(): Token {
+
+      const start = this.stream.mark();
+
+      this.stream.next(); // consume '$'
+
+      let hasDigits = false;
+
+      while (true) {
+
+          const ch = this.stream.peek();
+
+          if (isHexDigit(ch)) {
+              hasDigits = true;
+              this.stream.next();
+              continue;
+          }
+
+          break;
+      }
+
+      if (!hasDigits) {
+          this.problems.error(
+              this.location(start),
+              "Expected hexadecimal literal."
+          );
+      }
+
+      return this.createTokenFromSpan(
+          TokenKind.HexLiteral,
+          start
+      );
   }
 
   private lexStringOrBitLiteral(): Token {
@@ -364,12 +491,55 @@ export class Lexer {
 
   private lexOperator(): Token {
 
-    const start = this.stream.mark();
-    this.stream.next();
+      const start = this.stream.mark();
 
-    return this.createTokenFromSpan(TokenKind.Operator, start);
+      // Präprozessor-" gesondert behandeln
+      if (this.stream.peek() === 34 /* " */) {
+          this.stream.next();
+          return this.createTokenFromSpan(
+              TokenKind.PreprocessorOperator,
+              start
+          );
+      }
+
+      for (const op of Lexer.OPERATORS) {
+
+          let matches = true;
+
+          for (let i = 0; i < op.length; i++) {
+              if (this.stream.peek(i) !== op.charCodeAt(i)) {
+                  matches = false;
+                  break;
+              }
+          }
+
+          if (!matches) {
+              continue;
+          }
+
+          for (let i = 0; i < op.length; i++) {
+              this.stream.next();
+          }
+
+          return this.createTokenFromSpan(
+              TokenKind.Operator,
+              start
+          );
+      }
+
+      // Unbekanntes Zeichen
+      this.stream.next();
+
+      this.problems.error(
+          this.location(start),
+          `Unexpected character '${this.stream.getText({ start, end: start + 1 })}'.`
+      );
+
+      return this.createTokenFromSpan(
+          TokenKind.Operator,
+          start
+      );
   }
-
   // -----------------------------
   // Token creation helpers
   // -----------------------------
@@ -407,6 +577,12 @@ function isWhitespace(ch: number): boolean {
 
 function isDigit(ch: number): boolean {
   return ch >= 48 && ch <= 57;
+}
+
+function isHexDigit(ch: number): boolean {
+    return isDigit(ch)
+        || (ch >= 65 && ch <= 70)   // A-F
+        || (ch >= 97 && ch <= 102); // a-f
 }
 
 function isIdentifierStart(ch: number): boolean {

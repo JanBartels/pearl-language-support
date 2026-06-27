@@ -27,6 +27,9 @@ export enum TokenKind {
   /** Bitliteral ('...'B, '...'B1 bis '...'B4) */
   BitLiteral,
 
+  /** Hex Literal für SYSTEM-Teil*/
+  HexLiteral,
+
   /** Operator oder Trennzeichen */
   Operator,
 
@@ -46,6 +49,9 @@ export enum TokenKind {
    * Die semantische Auswertung erfolgt erst im Präprozessor.
    */
   PreprocessorDirective,
+
+  /** Trennzeichen für Präprozessor */
+  PreprocessorOperator,
 
   /**
    * Ungültige Direktive nach '#', z. B. gemischte Groß-/Kleinschreibung

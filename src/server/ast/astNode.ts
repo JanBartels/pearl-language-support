@@ -23,8 +23,6 @@ export abstract class AstNode {
         return children.map(child => this.adopt(child));
     }
 
-    abstract readonly children: readonly AstNode[];
-
     resolveSymbols(context: SemanticContext): void {
     }
 

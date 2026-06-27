@@ -7,9 +7,13 @@ import { AstKind } from './astKind';
 
 export class TranslationUnitNode extends AstNode {
 
-    readonly children: readonly AstNode[] = [];
+    readonly children: AstNode[] = [];
 
     constructor(location: Location) {
         super(AstKind.TranslationUnit, location);
     }
+
+    addChild(node: AstNode): void {
+        this.children.push(this.adopt(node));
+    }    
 }
