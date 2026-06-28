@@ -24,6 +24,10 @@ export class ModuleParser extends ParserBase {
             : "<error>";
 
         this.skipTrivia();
+        if (!identifier) {
+            this.synchronize([";"]);
+        }
+
         this.expectOperator(";");
 
         const module = new ModuleNode(
@@ -31,6 +35,11 @@ export class ModuleParser extends ParserBase {
             name
         );
 
+        this.synchronize([
+            "SYSTEM",
+            "PROBLEM",
+            "MODEND"
+        ]);
         const system = new SystemPartParser(this.context).parse();
         if (system) {
             module.systemPart = system;
@@ -44,7 +53,7 @@ export class ModuleParser extends ParserBase {
         }
 
         this.skipTrivia();
-        this.expectKeyword("MODEND");
+        const modend = this.expectKeyword("MODEND");
 
         this.skipTrivia();
         const debug = this.acceptIdentifier();
@@ -54,8 +63,14 @@ export class ModuleParser extends ParserBase {
                 "Expected 'DEBUG' or ';' after MODEND."
             );
         }
+
+        if (!modend) {
+            return module;  // Kein sinnvoller Sync-Point mehr.
+        }
+
         this.skipTrivia();
         this.expectOperator(";");
+        this.skipTrivia();
 
         return module;
     }

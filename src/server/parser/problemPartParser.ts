@@ -17,7 +17,12 @@ export class ProblemPartParser extends ParserBase {
             this.location()
         );
 
-        this.expectOperator(";");
+        this.skipTrivia();
+        if (!this.expectOperator(";")) {
+            this.synchronize([
+                "MODEND"
+            ]);
+        }
 
         while (!this.eof()) {
 

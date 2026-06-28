@@ -141,6 +141,7 @@ export abstract class ParserBase {
     protected get problems(): ProblemCollection {
         return this.context.problems;
     }
+
     /*
     ** Hilfsmethoden für den TokenStream
     */
@@ -451,5 +452,22 @@ export abstract class ParserBase {
         );
 
         return undefined;
+    }
+
+    /*
+    ** Hilfsmethoden für Recovery
+    */
+
+    protected synchronize(tokens: readonly string[]): void {
+
+        while (!this.eof()) {
+
+            if (this.isOperator(tokens) ||
+                this.isKeyword(tokens)) {
+                return;
+            }
+
+            this.next();
+        }
     }
 }

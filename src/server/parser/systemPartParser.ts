@@ -8,27 +8,33 @@ export class SystemPartParser extends ParserBase {
 
     parse(): SystemPartNode | undefined {
 
-    this.skipTrivia();
-    if (!this.acceptKeyword("SYSTEM")) {
-        return undefined;
-    }
-
-    const node = new SystemPartNode(
-        this.location()
-    );
-
-    this.expectOperator(";");
-
-    while (!this.eof()) {
-
-        if (this.isKeyword("PROBLEM") ||
-            this.isKeyword("MODEND")) {
-            break;
+        this.skipTrivia();
+        if (!this.acceptKeyword("SYSTEM")) {
+            return undefined;
         }
 
-        this.next();
-    }
+        const node = new SystemPartNode(
+            this.location()
+        );
 
-    return node;
-}
+        this.skipTrivia();
+        if (!this.expectOperator(";")) {
+            this.synchronize([
+                "PROBLEM",
+                "MODEND"
+            ]);
+        }
+
+        while (!this.eof()) {
+
+            if (this.isKeyword("PROBLEM") ||
+                this.isKeyword("MODEND")) {
+                break;
+            }
+
+            this.next();
+        }
+
+        return node;
+    }
 }
