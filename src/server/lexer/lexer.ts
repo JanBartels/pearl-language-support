@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
-import { CharStream } from './charStream';
 import { TokenKind, Token } from './token';
 import { createToken } from './tokenFactory';
 import { Span } from '../core/span';
 import { Location } from '../core/location';
+
+import { Source } from "../source/source";
 
 import { ProblemCollection } from '../core/problemCollection';
 
@@ -13,16 +14,67 @@ import { Logger } from '../utility/logging/logger';
 
 const DUMP_TOKENS = false;
 
+class CharStream {
+
+  private pos = 0;
+
+  constructor(private readonly source: Source) {
+  }
+
+  getSource(): Source {
+    return this.source;
+  }
+
+  getText(span?: Span): string {
+    return this.source.getText(span);
+  }
+
+  get uri(): string {
+    return this.source.uri;
+  }
+
+  get offset(): number {
+    return this.pos;
+  }
+
+  eof(): boolean {
+    return this.pos >= this.source.length;
+  }
+
+  peek(offset = 0): number {
+    const index = this.pos + offset;
+    if (index >= this.source.length) return -1;
+    return this.source.text.charCodeAt(index);
+  }
+
+  next(): number {
+    if (this.pos >= this.source.length) return -1;
+    return this.source.text.charCodeAt(this.pos++);
+  }
+
+  advance(count = 1): void {
+    this.pos = Math.min(this.pos + count, this.source.length);
+  }
+
+  mark(): number {
+    return this.pos;
+  }
+
+  reset(position: number): void {
+    this.pos = position;
+  }
+}
+
 export class Lexer {
 
   private readonly stream: CharStream;
 
   constructor(
-    stream: CharStream,
+    source: Source,
     private readonly problems: ProblemCollection,
     private readonly logger: Logger
   ) {
-    this.stream = stream;
+    this.stream = new CharStream(source);
   }
 
   // Achtung: Reihenfolge wichtig: Nach Länge sortieren!

@@ -4,12 +4,9 @@
 import { AnalysisResult } from './analysisResult';  
 import { Analysis } from './analysis';
 import { FileSource } from '../source/fileSource';
-import { CharStream } from '../lexer/charStream';
 import { Lexer } from '../lexer/lexer';
 
 import { ProblemCollection } from '../core/problemCollection';
-
-import { LexerTokenStream } from '../lexer/lexerTokenStream';
 
 import { Preprocessor } from '../preproc/preprocessor';
 import { PreprocessorContext } from '../preproc/preprocessorContext';
@@ -46,38 +43,30 @@ export class Validator {
     const problems = new ProblemCollection();
 
     // ----------------------------
-    // Lexer
-    // ----------------------------
-
-    const fileSource = FileSource.fromDocument(document);
-    const charStream = new CharStream(fileSource);
-    const lexer = new Lexer(charStream, problems, this.logger);
-
-    const tokens = lexer.tokenize();
-
-    // ----------------------------
-    // Analysis
-    // ----------------------------
-
-    const analysis = Analysis.create(
-      document.uri,
-      tokens,
-      problems
-    );
-
-    // ----------------------------
-    // Preprocessor + Parser
+    // vordefinierte Macros anlegen
     // ----------------------------
 
     const macroTable = new MacroTable();
-    // vordefinierte Macros anlegen
     for (const [name, value] of Object.entries(settings.macros ?? {})) {
-
         macroTable.define(
             name,
             value === "" ? null : value
         );
     }
+
+    // ----------------------------
+    // Lexer
+    // ----------------------------
+
+    const fileSource = FileSource.fromDocument(document);
+    
+    const lexer = new Lexer(fileSource, problems, this.logger);
+
+    const tokens = lexer.tokenize();
+
+    // ----------------------------
+    // Preprocessor + Parser
+    // ----------------------------
 
     const context = new PreprocessorContext(
       this.documentRegistry,
@@ -85,14 +74,12 @@ export class Validator {
       new ConditionalStack()
     );
 
-    const lexerStream = new LexerTokenStream(analysis.tokens, fileSource);
-
-    const preprocessor = new Preprocessor(
-      lexerStream,
-      fileSource,
-      context,
-      problems,
-      this.logger
+    const preprocessor = Preprocessor.create(
+        tokens,
+        fileSource,
+        context,
+        problems,
+        this.logger
     );
 
     const parser = new Parser(
@@ -101,23 +88,34 @@ export class Validator {
       this.logger
     );
 
-    analysis.ast = parser.parse();
+    const ast = parser.parse();
     if ( DUMP_AST ) {
       this.logger.debug?.(
-        AstDumper.dump(analysis.ast)
+        AstDumper.dump(ast)
       );
     }
 
     // Semantik kommt später
     // analysis.semanticContext = semantic.analyze(ast);
 
+    // ----------------------------
+    // Analysis
+    // ----------------------------
+
     this.logger.debug?.(
       `Analysis finished: ${problems.size()} problems`
     );
 
+    const analysis = new Analysis(
+        fileSource,
+        tokens,
+        ast,
+        problems
+    );
+
     return AnalysisResult.create(
-      document.uri,
-      [analysis]
+        analysis,
+        [analysis]
     );
   }
   

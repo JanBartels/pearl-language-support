@@ -1,48 +1,39 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
-import { Token } from '../lexer/token';
-import { ProblemCollection } from '../core/problemCollection';
-import { Severity } from '../core/severity';
-import { AstNode } from '../ast/astNode';
-import { SemanticContext } from '../semantic/semanticContext';
+import { Source } from "../source/source";
+import { Token } from "../lexer/token";
+import { ProblemCollection } from "../core/problemCollection";
+import { Severity } from "../core/severity";
+import { AstNode } from "../ast/astNode";
+import { SemanticContext } from "../semantic/semanticContext";
 
 export class Analysis {
 
-  readonly rootUri: string;
-  readonly tokens: readonly Token[];
-  readonly problems: ProblemCollection;
+    constructor(
 
-  ast?: AstNode;
-  semanticContext?: SemanticContext;
+        readonly source: Source,
 
-  private constructor(
-    uri: string,
-    tokens: readonly Token[],
-    problems: ProblemCollection
-  ) {
-    this.rootUri = uri;
-    this.tokens = tokens;
-    this.problems = problems;
-  }
+        readonly tokens: readonly Token[],
 
-  static create(
-    uri: string,
-    tokens: readonly Token[],
-    problems: ProblemCollection
-  ): Analysis {
-    return new Analysis(uri, tokens, problems);
-  }
+        readonly ast: AstNode,
 
-  static empty(uri: string): Analysis {
-    return new Analysis(uri, [], new ProblemCollection());
-  }
+        readonly problems: ProblemCollection,
 
-  hasErrors(): boolean {
-    return this.problems.some(p => p.severity === Severity.Error);
-  }  
+        readonly semanticContext?: SemanticContext
 
-  hasWarnings(): boolean {
-    return this.problems.some(p => p.severity === Severity.Warning);
-  }  
+    ) {
+    }
+
+    hasErrors(): boolean {
+        return this.problems.some(
+            p => p.severity === Severity.Error
+        );
+    }
+
+    hasWarnings(): boolean {
+        return this.problems.some(
+            p => p.severity === Severity.Warning
+        );
+    }
 }

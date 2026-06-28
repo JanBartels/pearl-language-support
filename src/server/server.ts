@@ -118,17 +118,16 @@ async function validateAndPublish(document: TextDocument): Promise<void> {
   try {
     const settings = await settingsManager.getDocumentSettings(document.uri);
 
-    const analysis = await validator.analyze(document, settings);
+    const result = await validator.analyze(document, settings);
 
-    const diagnosticsByUri = DiagnosticMapper.mapAll(analysis.problems, documentRegistry);
+    const diagnosticsByUri = DiagnosticMapper.mapAll(result.problems, documentRegistry);
 
     for (const [uri, diagnostics] of diagnosticsByUri) {
-      connection.sendDiagnostics({
-        uri,
-        diagnostics
-      });
+        connection.sendDiagnostics({
+            uri,
+            diagnostics
+        });
     }
-
   } catch (err) {
     logger.error(`Validation error in ${document.uri}: ${String(err)}`);
   }

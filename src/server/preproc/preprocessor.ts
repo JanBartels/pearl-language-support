@@ -12,12 +12,52 @@ import { TokenStream } from '../lexer/tokenStream';
 import { Source } from "../source/source";
 import { FileSource } from "../source/fileSource";
 import { MacroSource } from "../source/macroSource";
-import { CharStream } from "../lexer/charStream";
 import { Lexer } from "../lexer/lexer";
-import { LexerTokenStream } from "../lexer/lexerTokenStream";
 
 import { PreprocessorContext } from './preprocessorContext';
 import { ExpansionStack } from './expansionStack';
+
+class LexerTokenStream implements TokenStream {
+
+    private index = 0;
+
+    constructor(
+        private readonly tokens: readonly Token[],
+        private readonly source: Source
+    ) {}
+
+    tokenText(token: Token): string {
+        if (this.source !== token.location.source) {
+            throw new Error('Token belongs to a different source.');
+        }      
+        return this.source.getText(token.location.span);
+    }
+
+    current(): Token {
+        return this.peek();
+    }
+
+    peek(offset = 0): Token {
+
+        const index = Math.min(
+            this.index + offset,
+            this.tokens.length - 1
+        );
+
+        return this.tokens[index]!;
+    }
+
+    next(): void {
+
+        if (!this.eof()) {
+            this.index++;
+        }
+    }
+
+    eof(): boolean {
+        return this.current().kind === TokenKind.EOF;
+    }
+}
 
 type DirectiveHandler = () => void;
 
@@ -44,6 +84,27 @@ export class Preprocessor implements TokenStream {
         this.handlers.set("#undef", this.handleUndef.bind(this));
 
         this.next();
+    }
+
+    static create(
+        tokens: Token[],
+        source: Source,
+        context: PreprocessorContext,
+        problems: ProblemCollection,
+        logger: Logger
+    ): TokenStream {
+        const stream = new LexerTokenStream(
+            tokens,
+            source
+        );
+
+        return new Preprocessor(
+            stream,
+            source,
+            context,
+            problems,
+            logger
+        );
     }
 
     private currentStream(): TokenStream {
@@ -185,8 +246,8 @@ export class Preprocessor implements TokenStream {
                         continue;
                     }
 
-                    stream.next();
                     this.expandMacro(token, replacement!);
+                    stream.next();
                     continue;
                 }
                 }
@@ -672,35 +733,20 @@ export class Preprocessor implements TokenStream {
 
         // this.logger.debug?.(`Expand macro ${this.input.tokenText(macroToken)} -> "${replacement}"`);
 
+        if (this.expansions.size >= Preprocessor.MAX_INCLUDE_DEPTH) {
+            this.problems.error(macroToken.location, `Maximum macro depth (${Preprocessor.MAX_INCLUDE_DEPTH}) exceeded.`);
+            return;
+        }
+
         // Quelltext für den Makroersetzungstext erzeugen
         const macroSource = new MacroSource(
             macroToken.location,
             replacement
         );
 
-        // Lexer darüber laufen lassen
-        const charStream = new CharStream(macroSource);
-
-        const lexer = new Lexer(
-            charStream,
-            this.problems,
-            this.logger
-        );
-
-        const tokens = lexer.tokenize();
-
-        // TokenStream erzeugen
-        const stream = new LexerTokenStream(
-            tokens,
-            macroSource
-        );
-
-        if (this.expansions.size >= Preprocessor.MAX_INCLUDE_DEPTH) {
-            this.problems.error(macroToken.location, `Maximum macro depth (${Preprocessor.MAX_INCLUDE_DEPTH}) exceeded.`);
-            return;
-        }
-        const preprocessor = new Preprocessor(
-            stream,
+        const lexer = new Lexer(macroSource, this.problems, this.logger);
+        const preprocessor = Preprocessor.create(
+            lexer.tokenize(),
             macroSource,
             this.context,
             this.problems,
@@ -731,25 +777,15 @@ export class Preprocessor implements TokenStream {
             return;
         }
 
-        const fileSource = FileSource.fromDocument(document);
-
-        const lexer = new Lexer(
-            new CharStream(fileSource),
-            this.problems,
-            this.logger
-        );
-
-        const stream = new LexerTokenStream(
-            lexer.tokenize(),
-            fileSource
-        );
-
         if (this.expansions.size >= Preprocessor.MAX_INCLUDE_DEPTH) {
             this.problems.error(location, `Maximum include depth (${Preprocessor.MAX_INCLUDE_DEPTH}) exceeded.`);
             return;
         }
-        const preprocessor = new Preprocessor(
-            stream,
+
+        const fileSource = FileSource.fromDocument(document);
+        const lexer = new Lexer(fileSource, this.problems, this.logger);
+        const preprocessor = Preprocessor.create(
+            lexer.tokenize(),
             fileSource,
             this.context,
             this.problems,
