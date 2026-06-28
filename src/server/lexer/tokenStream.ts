@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { Token } from './token';
+import { Span } from '../core/span';
 
 export interface TokenStream {
 
@@ -30,6 +31,11 @@ export interface TokenStream {
      * Gibt den Text des Tokens zurück
      */
     tokenText(token: Token): string;
+
+    /**
+     * Gibt den Originaltext des Spans zurück
+     */
+    getText(span: Span): string;    
 }
 
 export interface TokenMark {

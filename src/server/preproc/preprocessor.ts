@@ -4,6 +4,7 @@
 import { Logger } from '../utility/logging/logger';
 
 import { ProblemCollection } from '../core/problemCollection';
+import { Span } from '../core/span';
 import { Location } from '../core/location';
 
 import { Token, TokenKind } from '../lexer/token';
@@ -31,6 +32,10 @@ class LexerTokenStream implements TokenStream {
             throw new Error('Token belongs to a different source.');
         }      
         return this.source.getText(token.location.span);
+    }
+
+    getText(span: Span): string {
+       return this.source.getText(span);
     }
 
     current(): Token {
@@ -115,6 +120,10 @@ export class Preprocessor implements TokenStream {
         return token.location.source.getText(token.location.span);
     }
 
+    getText(span: Span): string {
+        return this.source.getText(span);
+    }
+        
     current(): Token {
         return this.currentToken;
     }

@@ -6,7 +6,12 @@ export enum AstKind {
     TranslationUnit,
     Module,
     ModuleParameter,
+
     SystemPart,
+    AlphicDationSystemDeclaration,
+    BasicDationSystemDeclaration,
+    InterruptSystemDeclaration,
+    
     ProblemPart,
 
     TypeDeclaration,

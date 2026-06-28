@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { Token, TokenKind } from '../lexer/token';
+import { Span, extendSpan } from '../core/span';
 import { Location } from '../core/location';
 
 import { AstNode } from '../ast/astNode';
@@ -162,6 +163,10 @@ export abstract class ParserBase {
         return this.context.stream.tokenText(token);
     }
 
+    protected text(span: Span): string {
+       return this.context.stream.getText(span);
+    }
+
     protected location(token = this.current()): Location {
         return token.location;
     }
@@ -173,6 +178,18 @@ export abstract class ParserBase {
     /*
     ** Hilfsmethoden zum Parsen
     */
+
+    protected isAdjacent(
+        left: Token,
+        right: Token
+    ): boolean {
+
+        if (left.location.source !== right.location.source) {
+            return false;
+        }
+
+        return left.location.span.end === right.location.span.start;
+    }
 
     protected skipTrivia(): void {
 
@@ -381,6 +398,43 @@ export abstract class ParserBase {
         return undefined;
     }    
 
+    protected isHexLiteral(
+        token: Token = this.current()
+    ): boolean {
+
+        return this.tokenKind(token) === TokenKind.HexLiteral;
+    }
+
+    protected acceptHexLiteral(): Token | undefined {
+
+        const token = this.current();
+
+        if (!this.isHexLiteral(token)) {
+            return undefined;
+        }
+
+        this.next();
+
+        return token;
+    }
+
+    protected expectHexLiteral(): Token | undefined {
+
+        const token = this.current();
+
+        if (this.isHexLiteral(token)) {
+            this.next();
+            return token;
+        }
+
+        this.context.problems.error(
+            this.location(token),
+            'Expected hexadecimal literal.'
+        );
+
+        return undefined;
+    }
+
     protected isStringLiteral(
         token: Token = this.current()
     ): boolean {
@@ -452,6 +506,91 @@ export abstract class ParserBase {
         );
 
         return undefined;
+    }
+
+    /*
+    ** Hilfsparser
+    */
+
+    private static readonly HEX_PATTERN = /^[0-9A-F]+$/i;
+
+    protected isHexDigits(
+        token: Token = this.current()
+    ): boolean {
+
+        switch (this.tokenKind(token)) {
+
+        case TokenKind.NumberLiteral:
+        case TokenKind.Identifier:
+            return ParserBase.HEX_PATTERN.test(
+                this.tokenText(token)
+            );
+
+        default:
+            return false;
+        }
+    }
+
+    protected parseHexNumber(): string | undefined {
+
+        const first = this.current();
+
+        if (!this.isHexDigits(first)) {
+            this.context.problems.error(
+                this.location(first),
+                'Expected hexadecimal number.'
+            );
+            return undefined;
+        }
+
+        let last = first;
+        this.next();
+
+        while (!this.eof()) {
+
+            const token = this.current();
+
+            if (!this.isHexDigits(token)) {
+                break;
+            }
+
+            if (!this.isAdjacent(last, token)) {
+                this.context.problems.error(
+                    this.location(token),
+                    'Whitespace is not allowed in hexadecimal numbers.'
+                );
+                break;
+            }
+
+            last = token;
+            this.next();
+        }
+
+        return this.text(
+            extendSpan(
+                first.location.span,
+                last.location.span
+            )
+        );
+    }
+    protected parseDirection(): string {
+
+        this.skipTrivia();
+
+        if (this.acceptOperator('->')) {
+            return '->';
+        }
+
+        if (this.acceptOperator('<-')) {
+            return '<-';
+        }
+
+        if (this.acceptOperator('<->')) {
+            return '<->';
+        }
+
+        // Standardrichtung
+        return '<->';
     }
 
     /*

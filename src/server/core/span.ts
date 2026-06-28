@@ -24,3 +24,13 @@ export function spanLength(span: Span): number {
 export function spansOverlap(a: Span, b: Span): boolean {
   return a.start < b.end && b.start < a.end;
 }
+
+export function extendSpan(
+    a: Span,
+    b: Span
+): Span {
+    return createSpan(
+        Math.min(a.start, b.start),
+        Math.max(a.end, b.end)
+    );
+}

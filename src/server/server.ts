@@ -129,7 +129,12 @@ async function validateAndPublish(document: TextDocument): Promise<void> {
         });
     }
   } catch (err) {
-    logger.error(`Validation error in ${document.uri}: ${String(err)}`);
+    if (err instanceof Error) {
+        logger.error(`Validation error in ${document.uri}: ${err.message}`);
+        logger.error(err.stack ?? '<no stack>');
+    } else {
+        logger.error(`Validation error in ${document.uri}: ${String(err)}`);
+    }
   }
 }
 
