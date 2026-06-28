@@ -13,6 +13,7 @@ export class DocumentRegistry {
     string,
     { mtimeMs: number; doc: TextDocument }
   > = new Map();
+  private reportedDiagnosticUris = new Set<string>();
 
   constructor(documents: TextDocuments<TextDocument>) {
     this.documents = documents;
@@ -78,6 +79,18 @@ export class DocumentRegistry {
 
   invalidateAllIncludes(): void {
     this.includeCache.clear();
+  }
+
+  takeReportedDiagnosticUris(): Set<string> {
+
+      const result = new Set(this.reportedDiagnosticUris);
+      this.reportedDiagnosticUris.clear();
+
+      return result;
+  }
+
+  markDiagnosticsReported(uri: string): void {
+      this.reportedDiagnosticUris.add(uri);
   }
 
   stats(): { openDocuments: number; cachedIncludes: number } {

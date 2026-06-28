@@ -120,14 +120,27 @@ async function validateAndPublish(document: TextDocument): Promise<void> {
 
     const result = await validator.analyze(document, settings);
 
+    // aktuelle Diagnostics melden
+    const oldUris = documentRegistry.takeReportedDiagnosticUris();
     const diagnosticsByUri = DiagnosticMapper.mapAll(result.problems, documentRegistry);
-
     for (const [uri, diagnostics] of diagnosticsByUri) {
         connection.sendDiagnostics({
             uri,
             diagnostics
         });
+
+        // uri für gesendete Diagnostics merken
+        documentRegistry.markDiagnosticsReported(uri);
+        oldUris.delete(uri);
     }
+
+    // leere Diagnostics müssen (!) gesendet werden
+    for (const uri of oldUris) {
+        connection.sendDiagnostics({
+            uri,
+            diagnostics: []
+        });
+    }    
   } catch (err) {
     if (err instanceof Error) {
         logger.error(`Validation error in ${document.uri}: ${err.message}`);
