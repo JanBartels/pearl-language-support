@@ -112,8 +112,7 @@ export class Preprocessor implements TokenStream {
     }
 
     tokenText(token: Token): string {
-        const stream = this.currentStream();
-        return stream.tokenText(token);
+        return token.location.source.getText(token.location.span);
     }
 
     current(): Token {
@@ -138,7 +137,7 @@ export class Preprocessor implements TokenStream {
             return false;
         }
 
-        return this.input.eof();
+        return this.currentToken.kind === TokenKind.EOF;
     }
 
     next(): void {
