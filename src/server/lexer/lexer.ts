@@ -306,14 +306,21 @@ export class Lexer {
       let hasDigitsBeforeDot = false;
       let hasDot = false;
       let hasDigitsAfterDot = false;
+      let hasExponent = false;
 
+      // ------------------------------------------------------------
       // Ganzzahlteil
+      // ------------------------------------------------------------
+
       while (isDigit(this.stream.peek())) {
           hasDigitsBeforeDot = true;
           this.stream.next();
       }
 
+      // ------------------------------------------------------------
       // Nachkommateil
+      // ------------------------------------------------------------
+
       if (this.stream.peek() === 46 /* . */) {
 
           hasDot = true;
@@ -325,8 +332,13 @@ export class Lexer {
           }
       }
 
+      // ------------------------------------------------------------
       // Exponent
+      // ------------------------------------------------------------
+
       if (this.stream.peek() === 69 /* E */) {
+
+          hasExponent = true;
 
           const exponentStart = this.stream.mark();
 
@@ -344,14 +356,19 @@ export class Lexer {
                   this.location(exponentStart),
                   "Expected exponent."
               );
-          }
 
-          while (isDigit(this.stream.peek())) {
-              this.stream.next();
+          } else {
+
+              while (isDigit(this.stream.peek())) {
+                  this.stream.next();
+              }
           }
       }
 
+      // ------------------------------------------------------------
       // Mindestens vor oder nach dem Punkt müssen Ziffern stehen.
+      // ------------------------------------------------------------
+
       if (!hasDigitsBeforeDot && !hasDigitsAfterDot) {
 
           this.problems.error(
@@ -360,7 +377,69 @@ export class Lexer {
           );
       }
 
-      return this.createTokenFromSpan(TokenKind.NumberLiteral,start);
+      // ------------------------------------------------------------
+      // HexDigitSequence?
+      // Nur möglich, wenn kein '.' und kein Exponent vorkam.
+      // ------------------------------------------------------------
+
+      if (!hasDot && !hasExponent) {
+
+          let containsHexLetter = false;
+
+          while (true) {
+
+              const ch = this.stream.peek();
+
+              if (ch >= 65 /* A */ && ch <= 70 /* F */) {
+                  containsHexLetter = true;
+                  this.stream.next();
+                  continue;
+              }
+
+              break;
+          }
+
+          if (containsHexLetter) {
+
+              if (isIdentifierStart(this.stream.peek())) {
+
+                  this.problems.error(
+                      this.location(start),
+                      "Invalid hexadecimal digit sequence."
+                  );
+
+                  while (isIdentifierPart(this.stream.peek())) {
+                      this.stream.next();
+                  }
+              }
+
+              return this.createTokenFromSpan(
+                  TokenKind.HexDigitSequence,
+                  start
+              );
+          }
+      }
+
+      // ------------------------------------------------------------
+      // Ungültiges NumberLiteral?
+      // ------------------------------------------------------------
+
+      if (isIdentifierStart(this.stream.peek())) {
+
+          this.problems.error(
+              this.location(start),
+              "Invalid number literal."
+          );
+
+          while (isIdentifierPart(this.stream.peek())) {
+              this.stream.next();
+          }
+      }
+
+      return this.createTokenFromSpan(
+          TokenKind.NumberLiteral,
+          start
+      );
   }
 
   private lexHexLiteral(): Token {
@@ -389,6 +468,17 @@ export class Lexer {
               this.location(start),
               "Expected hexadecimal literal."
           );
+      }
+
+      if (isIdentifierStart(this.stream.peek()) ||
+          isDigit(this.stream.peek())) {
+
+          this.problems.error(
+              this.location(start),
+              "Invalid hexadecimal literal."
+          );
+
+          this.consumeMalformedIdentifierSuffix();
       }
 
       return this.createTokenFromSpan(
@@ -591,6 +681,7 @@ export class Lexer {
           TokenKind.Operator,
           start
       );
+     
   }
   // -----------------------------
   // Token creation helpers
@@ -617,6 +708,13 @@ export class Lexer {
   private createTokenFromSpan(kind: TokenKind, start: number): Token {
     return createToken(kind, this.location(start));
   }
+
+  private consumeMalformedIdentifierSuffix(): void {
+
+      while (isIdentifierPart(this.stream.peek())) {
+          this.stream.next();
+      }
+  }  
 }
 
 // --------------------------------

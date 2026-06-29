@@ -44,18 +44,16 @@ export class AlphicDationSystemObjectParser extends TailParser {
         // ------------------------------------------------------------
 
         const direction = this.parseDirection();
-        if (!direction) {
-            // Recovery folgt später.
-        }
 
-        this.skipTrivia();
-        this.expectOperator(';');
+        if (!this.expectSemicolon()) {
+            this.synchronize([';']);
+        }
 
         return new AlphicDationSystemDeclarationNode(
             location,
             name,
             systemName,
-            direction!,
+            direction ?? '<->',
             parameters.tfu,
             parameters.ne,
             parameters.mb,
@@ -126,89 +124,40 @@ export class AlphicDationSystemObjectParser extends TailParser {
         let mb: string | undefined;
         let ai: string | undefined;
 
-        this.skipTrivia();
-
-        if (!this.acceptOperator('(')) {
+        if (!this.acceptLeftParenthesis()) {
             return { tfu, ne, mb, ai };
         }
 
-        this.skipTrivia();
-
-        // ------------------------------------------------------------
-        // TFU
-        // ------------------------------------------------------------
-
         if (this.acceptKeyword('TFU')) {
-
-            this.skipTrivia();
-            this.expectOperator('=');
-
-            this.skipTrivia();
-            const number = this.expectNumberLiteral();
-            if (number) {
-                tfu = Number(this.tokenText(number));
-            }
-
-            this.skipTrivia();
-            if (this.acceptOperator(',')) {
-                this.skipTrivia();
-            }
+            tfu = this.parseIntegerParameter('TFU', 1, 32767);
+            this.acceptComma();
         }
-
-        // ------------------------------------------------------------
-        // NE
-        // ------------------------------------------------------------
 
         if (this.acceptKeyword('NE')) {
-
             ne = true;
-
-            this.skipTrivia();
-            if (this.acceptOperator(',')) {
-                this.skipTrivia();
-            }
+            this.acceptComma();
         }
-
-        // ------------------------------------------------------------
-        // MB
-        // ------------------------------------------------------------
 
         if (this.acceptKeyword('MB')) {
-
-            this.skipTrivia();
-            this.expectOperator('=');
-
-            this.skipTrivia();
-            const literal = this.expectHexLiteral();
-            if (literal) {
-                mb = this.tokenText(literal);
-            }
-
-            this.skipTrivia();
-            if (this.acceptOperator(',')) {
-                this.skipTrivia();
-            }
+            mb = this.parseHexParameter('MB', 2);
+            this.acceptComma();
         }
-
-        // ------------------------------------------------------------
-        // AI
-        // ------------------------------------------------------------
 
         if (this.acceptKeyword('AI')) {
-
-            this.skipTrivia();
-            this.expectOperator('=');
-
-            this.skipTrivia();
-            const literal = this.expectHexLiteral();
-            if (literal) {
-                ai = this.tokenText(literal);
-            }
-
-            this.skipTrivia();
+            ai = this.parseHexParameter('AI', 4);
         }
 
-        this.expectOperator(')');
+        if (this.isIdentifier()) {
+
+            this.problems.error(
+                this.location(),
+                `Unknown parameter '${this.tokenText()}'.`
+            );
+
+            this.synchronize([')']);
+        }
+
+        this.expectRightParenthesis();
 
         return {
             tfu,
@@ -217,4 +166,80 @@ export class AlphicDationSystemObjectParser extends TailParser {
             ai
         };
     }
+
+    private parseIntegerParameter(
+        name: string,
+        minimum: number,
+        maximum: number
+    ): number | undefined {
+
+        if (!this.expectEquals()) {
+            this.synchronizeParameter();
+            return undefined;
+        }
+
+        const literal = this.expectNumberLiteral(
+            `Expected integer value for ${name}.`
+        );
+        if (!literal) {
+            this.synchronizeParameter();
+            return undefined;
+        }
+
+        const value = Number(this.tokenText(literal));
+        if (!this.validateIntegerLiteral(
+            value,
+            minimum,
+            maximum,
+            name,
+            literal.location
+        )) {
+
+            return undefined;
+        }
+
+        return value;
+    }
+
+    private parseHexParameter(
+        name: string,
+        digits: number
+    ): string | undefined {
+
+        if (!this.expectEquals()) {
+            this.synchronizeParameter();
+            return undefined;
+        }
+
+        const literal = this.expectHexLiteral(
+            `Expected ${digits}-digit hexadecimal number as ${name}.`
+        );
+        if (!literal) {
+            this.synchronizeParameter();
+            return undefined;
+        }
+
+        const value = this.tokenText(literal);
+        if (!this.validateHexLiteralLength(
+            value,
+            digits,
+            name,
+            literal.location
+        )) {
+            return undefined;
+        }
+
+        return value;
+    }
+
+    private synchronizeParameter(): void {
+        this.synchronize([
+            ')',
+            ',',
+            ';',
+            '->',
+            '<-',
+            '<->'
+        ]);
+    }    
 }

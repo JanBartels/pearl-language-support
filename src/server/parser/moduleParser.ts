@@ -23,12 +23,11 @@ export class ModuleParser extends ParserBase {
             ? this.tokenText(identifier)
             : "<error>";
 
-        this.skipTrivia();
         if (!identifier) {
             this.synchronize([";"]);
         }
 
-        this.expectOperator(";");
+        this.expectSemicolon();
 
         const module = new ModuleNode(
             start,
@@ -54,6 +53,9 @@ export class ModuleParser extends ParserBase {
 
         this.skipTrivia();
         const modend = this.expectKeyword("MODEND");
+        if (!modend) {
+            return module;  // Kein sinnvoller Sync-Point mehr.
+        }
 
         this.skipTrivia();
         const debug = this.acceptIdentifier();
@@ -64,13 +66,7 @@ export class ModuleParser extends ParserBase {
             );
         }
 
-        if (!modend) {
-            return module;  // Kein sinnvoller Sync-Point mehr.
-        }
-
-        this.skipTrivia();
-        this.expectOperator(";");
-        this.skipTrivia();
+        this.expectSemicolon();
 
         return module;
     }

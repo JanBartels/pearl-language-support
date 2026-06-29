@@ -243,7 +243,8 @@ export abstract class ParserBase {
     }
 
     protected expectKeyword(
-        keywords: string | readonly string[]
+        keywords: string | readonly string[],
+        message?: string
     ): boolean {
 
         const token = this.current();
@@ -263,7 +264,7 @@ export abstract class ParserBase {
 
         this.context.problems.error(
             this.location(token),
-            `Expected ${expected}.`
+            message ?? `Expected ${expected}.`
         );
 
         return false;
@@ -298,7 +299,8 @@ export abstract class ParserBase {
     }
 
     protected expectOperator(
-        operators: string | readonly string[]
+        operators: string | readonly string[],
+        message?: string
     ): boolean {
 
         const token = this.current();
@@ -318,7 +320,7 @@ export abstract class ParserBase {
 
         this.context.problems.error(
             this.location(token),
-            `Expected ${expected}.`
+            message ?? `Expected ${expected}.`
         );
 
         return false;
@@ -345,7 +347,7 @@ export abstract class ParserBase {
         return token;
     }
 
-    protected expectIdentifier(): Token | undefined {
+    protected expectIdentifier(message?: string): Token | undefined {
 
         const token = this.current();
 
@@ -356,7 +358,7 @@ export abstract class ParserBase {
 
         this.context.problems.error(
             this.location(token),
-            "Expected identifier."
+            message ?? "Expected identifier."
         );
 
         return undefined;
@@ -381,7 +383,7 @@ export abstract class ParserBase {
         return token;
     }
 
-    protected expectNumberLiteral(): Token | undefined {
+    protected expectNumberLiteral(message?: string): Token | undefined {
 
         const token = this.current();
 
@@ -392,11 +394,42 @@ export abstract class ParserBase {
 
         this.context.problems.error(
             this.location(token),
-            "Expected number literal."
+            message ?? "Expected number literal."
         );
 
         return undefined;
     }    
+
+    protected validateIntegerLiteral(
+        value: number | undefined,
+        minimum: number,
+        maximum: number,
+        name: string,
+        location: Location
+    ): boolean {
+
+        if (value === undefined) {
+            return false;
+        }
+
+        if (!Number.isInteger(value)) {
+            this.problems.error(
+                location,
+                `${name} must be an integer.`
+            );
+            return false;
+        }
+
+        if (value < minimum || value > maximum) {
+            this.problems.error(
+                location,
+                `${name} must be in the range ${minimum}..${maximum}.`
+            );
+            return false;
+        }
+
+        return true;
+    }
 
     protected isHexLiteral(
         token: Token = this.current()
@@ -418,7 +451,7 @@ export abstract class ParserBase {
         return token;
     }
 
-    protected expectHexLiteral(): Token | undefined {
+    protected expectHexLiteral(message?: string): Token | undefined {
 
         const token = this.current();
 
@@ -429,10 +462,105 @@ export abstract class ParserBase {
 
         this.context.problems.error(
             this.location(token),
-            'Expected hexadecimal literal.'
+            message ?? 'Expected hexadecimal literal.'
         );
 
         return undefined;
+    }
+
+    protected validateHexLiteralLength(
+        literal: string | undefined,
+        digits: number,
+        name: string,
+        location: Location
+    ): boolean {
+
+        if (!literal) {
+            return false;
+        }
+
+        if (literal.length !== digits + 1) {
+            this.problems.error(
+                location,
+                `${name} requires exactly ${digits} hexadecimal digits.`
+            );
+            return false;
+        }
+
+        return true;
+    }
+
+    protected isHexDigitSequence(
+        token: Token = this.current()
+    ): boolean {
+
+        return this.tokenKind(token) === TokenKind.HexDigitSequence;
+    }
+
+    /**
+     * Akzeptiert eine Folge von Hexziffern ohne '$'-Präfix.
+     *
+     * Dieses Token ist kein reguläres PEARL-Literal, sondern wird ausschließlich
+     * für die historischen Hexzahlen in BU(...) und EV(...) verwendet.
+     */
+    protected acceptHexDigitSequence(): Token | undefined {
+
+        const token = this.current();
+
+        if (!this.isHexDigitSequence(token)) {
+            return undefined;
+        }
+
+        this.next();
+
+        return token;
+    }
+
+    /**
+     * Erwartet eine Folge von Hexziffern ohne '$'-Präfix.
+     *
+     * Dieses Token ist kein reguläres PEARL-Literal, sondern wird ausschließlich
+     * für die historischen Hexzahlen in BU(...) und EV(...) verwendet.
+     */
+    protected expectHexDigitSequence(
+        message?: string
+    ): Token | undefined {
+
+        const token = this.current();
+
+        if (this.isHexDigitSequence(token)) {
+            this.next();
+            return token;
+        }
+
+        this.context.problems.error(
+            this.location(token),
+            message ?? 'Expected hexadecimal digit sequence.'
+        );
+
+        return undefined;
+    }
+
+    protected validateHexDigitSequenceLength(
+        literal: string | undefined,
+        digits: number,
+        name: string,
+        location: Location
+    ): boolean {
+
+        if (!literal) {
+            return false;
+        }
+
+        if (literal.length !== digits) {
+            this.problems.error(
+                location,
+                `${name} must consist of ${digits} hexadecimal digits.`
+            );
+            return false;
+        }
+
+        return true;
     }
 
     protected isStringLiteral(
@@ -454,7 +582,7 @@ export abstract class ParserBase {
         return token;
     }
 
-    protected expectStringLiteral(): Token | undefined {
+    protected expectStringLiteral(message?: string): Token | undefined {
 
         const token = this.current();
 
@@ -465,7 +593,7 @@ export abstract class ParserBase {
 
         this.context.problems.error(
             this.location(token),
-            "Expected string literal."
+            message ?? "Expected string literal."
         );
 
         return undefined;
@@ -491,7 +619,7 @@ export abstract class ParserBase {
         return token;
     }
 
-    protected expectBitLiteral(): Token | undefined {
+    protected expectBitLiteral(message?: string): Token | undefined {
 
         const token = this.current();
 
@@ -502,7 +630,7 @@ export abstract class ParserBase {
 
         this.context.problems.error(
             this.location(token),
-            "Expected bit literal."
+            message ?? "Expected bit literal."
         );
 
         return undefined;
@@ -512,68 +640,252 @@ export abstract class ParserBase {
     ** Hilfsparser
     */
 
-    private static readonly HEX_PATTERN = /^[0-9A-F]+$/i;
+    protected acceptComma(): boolean {
 
-    protected isHexDigits(
-        token: Token = this.current()
+        this.skipTrivia();
+
+        const accepted = this.acceptOperator(',');
+
+        this.skipTrivia();
+
+        return accepted;
+    }
+
+    protected expectComma(
+        message?: string
     ): boolean {
 
-        switch (this.tokenKind(token)) {
+        this.skipTrivia();
 
-        case TokenKind.NumberLiteral:
-        case TokenKind.Identifier:
-            return ParserBase.HEX_PATTERN.test(
-                this.tokenText(token)
-            );
+        const ok = this.expectOperator(
+            ',',
+            message
+        ) !== undefined;
 
-        default:
-            return false;
-        }
+        this.skipTrivia();
+
+        return ok;
     }
 
-    protected parseHexNumber(): string | undefined {
+    protected acceptSemicolon(): boolean {
 
-        const first = this.current();
+        this.skipTrivia();
 
-        if (!this.isHexDigits(first)) {
-            this.context.problems.error(
-                this.location(first),
-                'Expected hexadecimal number.'
-            );
-            return undefined;
+        const accepted = this.acceptOperator(';');
+
+        this.skipTrivia();
+
+        return accepted;
+    }
+
+    protected expectSemicolon(
+        message?: string
+    ): boolean {
+
+        this.skipTrivia();
+
+        const ok = this.expectOperator(
+            ';',
+            message
+        ) !== undefined;
+
+        this.skipTrivia();
+
+        return ok;
+    }
+
+    protected acceptColon(): boolean {
+
+        this.skipTrivia();
+
+        const accepted = this.acceptOperator(':');
+
+        this.skipTrivia();
+
+        return accepted;
+    }
+
+    protected expectColon(
+        message?: string
+    ): boolean {
+
+        this.skipTrivia();
+
+        const ok = this.expectOperator(
+            ':',
+            message
+        ) !== undefined;
+
+        this.skipTrivia();
+
+        return ok;
+    }
+
+    protected acceptEquals(): boolean {
+
+        this.skipTrivia();
+
+        const accepted = this.acceptOperator('=');
+
+        this.skipTrivia();
+
+        return accepted;
+    }
+
+    protected expectEquals(
+        message?: string
+    ): boolean {
+
+        this.skipTrivia();
+
+        const ok = this.expectOperator(
+            '=',
+            message
+        ) !== undefined;
+
+        this.skipTrivia();
+
+        return ok;
+    }
+
+    protected acceptLeftParenthesis(): boolean {
+
+        this.skipTrivia();
+
+        const accepted = this.acceptOperator('(');
+
+        this.skipTrivia();
+
+        return accepted;
+    }
+
+    protected expectLeftParenthesis(
+        message?: string
+    ): boolean {
+
+        this.skipTrivia();
+
+        const ok = this.expectOperator(
+            '(',
+            message
+        ) !== undefined;
+
+        this.skipTrivia();
+
+        return ok;
+    }
+
+    protected acceptRightParenthesis(): boolean {
+
+        this.skipTrivia();
+
+        const accepted = this.acceptOperator(')');
+
+        this.skipTrivia();
+
+        return accepted;
+    }
+
+    protected expectRightParenthesis(
+        message?: string
+    ): boolean {
+
+        this.skipTrivia();
+
+        const ok = this.expectOperator(
+            ')',
+            message
+        ) !== undefined;
+
+        this.skipTrivia();
+
+        return ok;
+    }
+
+    protected acceptLeftBracket(): boolean {
+
+        this.skipTrivia();
+
+        const accepted = this.acceptOperator('[');
+
+        this.skipTrivia();
+
+        return accepted;
+    }
+
+    protected expectLeftBracket(
+        message?: string
+    ): boolean {
+
+        this.skipTrivia();
+
+        const ok = this.expectOperator(
+            '[',
+            message
+        ) !== undefined;
+
+        this.skipTrivia();
+
+        return ok;
+    }
+
+    protected acceptRightBracket(): boolean {
+
+        this.skipTrivia();
+
+        const accepted = this.acceptOperator(']');
+
+        this.skipTrivia();
+
+        return accepted;
+    }
+
+    protected expectRightBracket(
+        message?: string
+    ): boolean {
+
+        this.skipTrivia();
+
+        const ok = this.expectOperator(
+            ']',
+            message
+        ) !== undefined;
+
+        this.skipTrivia();
+
+        return ok;
+    }
+
+    /**
+     * Liest eine Hexzahl für BU(...) und EV(...).
+     *
+     * PEARL erlaubt an diesen Stellen Hexzahlen ohne '$'-Präfix.
+     * Daher werden sowohl NumberLiteral (nur Ziffern) als auch
+     * HexDigitSequence (enthält A...F) akzeptiert.
+     */
+    protected parseHexNumber(
+        message?: string
+    ): string | undefined {
+
+        const number = this.acceptNumberLiteral();
+        if (number) {
+            return this.tokenText(number);
         }
 
-        let last = first;
-        this.next();
-
-        while (!this.eof()) {
-
-            const token = this.current();
-
-            if (!this.isHexDigits(token)) {
-                break;
-            }
-
-            if (!this.isAdjacent(last, token)) {
-                this.context.problems.error(
-                    this.location(token),
-                    'Whitespace is not allowed in hexadecimal numbers.'
-                );
-                break;
-            }
-
-            last = token;
-            this.next();
+        const hex = this.acceptHexDigitSequence();
+        if (hex) {
+            return this.tokenText(hex);
         }
 
-        return this.text(
-            extendSpan(
-                first.location.span,
-                last.location.span
-            )
+        this.context.problems.error(
+            this.location(),
+            message ?? 'Expected hexadecimal number.'
         );
+
+        return undefined;
     }
-    protected parseDirection(): string {
+
+    protected parseDirection(): string | undefined {
 
         this.skipTrivia();
 
@@ -589,8 +901,7 @@ export abstract class ParserBase {
             return '<->';
         }
 
-        // Standardrichtung
-        return '<->';
+        return undefined;
     }
 
     /*

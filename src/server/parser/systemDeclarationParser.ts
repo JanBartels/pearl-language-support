@@ -45,13 +45,14 @@ export class SystemDeclarationParser extends ParserBase {
         }
         const name = this.tokenText(identifier);
 
-        this.skipTrivia();
-        if (this.acceptOperator(';')) {
+        if (this.acceptSemicolon()) {
             return new AlphicDationSystemDeclarationNode(identifier.location, name, name, '<->', undefined, false, undefined, undefined);
         }        
 
-        if (!this.expectOperator(':')) {
+        if (!this.expectOperator(':', "Expected ':' after system declaration name.")) {
             this.synchronize([';']);
+            this.acceptSemicolon();
+            return undefined;            
         }
 
         this.skipTrivia();

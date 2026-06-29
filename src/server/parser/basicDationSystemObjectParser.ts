@@ -24,33 +24,62 @@ export class BasicDationSystemObjectParser extends TailParser {
             return undefined;
         }
 
-        this.skipTrivia();
-        this.expectOperator('(');
+        this.expectLeftParenthesis();
 
         const address = this.parseHexNumber();
+        if (!address) {
+            this.synchronizeBUDeclaration();
+        }
 
         let access: Token | undefined;
 
-        this.skipTrivia();
-        if (this.acceptOperator(',')) {
-            this.skipTrivia();
+        if (this.acceptComma()) {
+
             access = this.expectNumberLiteral();
+            if (!access) {
+                this.synchronizeBUDeclaration();
+            } else {
+
+                const value = Number(this.tokenText(access));
+
+                this.validateIntegerLiteral(
+                    value,
+                    0,
+                    8,
+                    "BU access code",
+                    access.location
+                );
+            }
         }
 
-        this.skipTrivia();
-        this.expectOperator(')');
+        this.expectRightParenthesis();
 
         const direction = this.parseDirection();
+        if (!direction) {
+            this.problems.error(
+                this.location(),
+                "Expected transfer direction."
+            );
+            this.synchronizeBUDeclaration();
+        }
 
-        this.skipTrivia();
-        this.expectOperator(';');
-
+        this.expectSemicolon();
         return new BasicDationSystemDeclarationNode(
             location,
             name,
             address ? address : '',
             access ? Number(this.tokenText(access)) : undefined,
-            direction
+            direction ?? '->' // Default nur Dummy für AST-Vervollständigung im Fehlerfall
         );
     }
+
+    private synchronizeBUDeclaration(): void {
+        this.synchronize([
+            ')',
+            '->',
+            '<-',
+            '<->',
+            ';'
+        ]);
+    }    
 }

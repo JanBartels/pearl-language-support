@@ -27,8 +27,11 @@ export enum TokenKind {
   /** Bitliteral ('...'B, '...'B1 bis '...'B4) */
   BitLiteral,
 
-  /** Hex Literal für SYSTEM-Teil*/
+  /** Hex Literal für SYSTEM-Teil mit $ als Präfix */
   HexLiteral,
+
+  /** Folge von Hex Digits (kein PEARL-Literal!) */  
+  HexDigitSequence,
 
   /** Operator oder Trennzeichen */
   Operator,

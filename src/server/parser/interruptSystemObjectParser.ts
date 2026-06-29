@@ -23,25 +23,36 @@ export class InterruptSystemObjectParser extends TailParser {
             return undefined;
         }
 
-        this.skipTrivia();
-        this.expectOperator('(');
+        this.expectLeftParenthesis();
 
-        this.skipTrivia();
-        const maskToken = this.parseHexNumber();
-        const mask = maskToken
-            ? maskToken
-            : '00000000';
+        const mask = this.parseHexNumber();
+        if (!mask) {
+            this.synchronizeInterruptDeclaration();
+        } else {
+            this.validateHexDigitSequenceLength(
+                mask,
+                8,
+                "event mask",
+                this.location()
+            );
+        }        
 
-        this.skipTrivia();
-        this.expectOperator(')');
+        this.expectRightParenthesis();
 
-        this.skipTrivia();
-        this.expectOperator(';');
+        this.expectSemicolon();
 
         return new InterruptSystemDeclarationNode(
             location,
             name,
-            mask
+            mask ?? '00000000'
         );
     }
+
+    private synchronizeInterruptDeclaration(): void {
+
+        this.synchronize([
+            ')',
+            ';'
+        ]);
+    }    
 }

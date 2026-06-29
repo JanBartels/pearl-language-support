@@ -27,10 +27,9 @@ export class SystemPartParser extends ParserBase {
             this.location()
         );
 
-        this.skipTrivia();
-        if (!this.expectOperator(';')) {
+        if (!this.expectSemicolon()) {
             this.synchronize([
-                'ROBLEM',
+                'PROBLEM',
                 'MODEND'
             ]);
         }
@@ -50,7 +49,6 @@ export class SystemPartParser extends ParserBase {
                 continue;
             }
 
-            // Recovery kommt später.
             this.next();
         }
 
