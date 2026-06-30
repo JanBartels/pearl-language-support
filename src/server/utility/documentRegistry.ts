@@ -9,11 +9,17 @@ import { filePathFromUri, uriFromFilePath } from './uriUtils'
 
 export class DocumentRegistry {
   private documents: TextDocuments<TextDocument>;
+  // Filecaching anhand vom Timestamp auf der Platte
   private includeCache: Map<
     string,
     { mtimeMs: number; doc: TextDocument }
   > = new Map();
+  // Liste, für welche Dokumente Diagnosen gesendet worden sind
+  // Wenn keine Diagnose mehr ansteht, muss diese aktiv gelöscht werden
   private reportedDiagnosticUris = new Set<string>();
+  // Include-Graph für Re-Validierung bei Änderungen an untergeordneten #includes
+  private readonly includes = new Map<string, Set<string>>();
+  private readonly includedBy = new Map<string, Set<string>>();
 
   constructor(documents: TextDocuments<TextDocument>) {
     this.documents = documents;
@@ -73,12 +79,63 @@ export class DocumentRegistry {
   }
 
   invalidateUri(uri: string): void {
-    const fsPath = filePathFromUri(uri);
-    this.includeCache.delete(fsPath);
+
+    const visited = new Set<string>();
+    this.invalidateRecursive(uri, visited);
+  }
+
+  private invalidateRecursive(
+      uri: string,
+      visited: Set<string>
+  ): void {
+
+      if (visited.has(uri)) {
+          return;
+      }
+
+      visited.add(uri);
+
+      const fsPath = filePathFromUri(uri);
+      this.includeCache.delete(fsPath);
+
+      for (const parent of this.includedBy.get(uri) ?? []) {
+          this.invalidateRecursive(parent, visited);
+      }
   }
 
   invalidateAllIncludes(): void {
     this.includeCache.clear();
+  }
+
+  addInclude(source: string, include: string): void {
+
+      let set = this.includes.get(source);
+      if (!set) {
+          set = new Set();
+          this.includes.set(source, set);
+      }
+      set.add(include);
+
+      let reverse = this.includedBy.get(include);
+      if (!reverse) {
+          reverse = new Set();
+          this.includedBy.set(include, reverse);
+      }
+      reverse.add(source);
+  }
+
+  clearIncludes(source: string): void {
+
+      const includes = this.includes.get(source);
+      if (!includes) {
+          return;
+      }
+
+      for (const include of includes) {
+          this.includedBy.get(include)?.delete(source);
+      }
+
+      this.includes.delete(source);
   }
 
   takeReportedDiagnosticUris(): Set<string> {

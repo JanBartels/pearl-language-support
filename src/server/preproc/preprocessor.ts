@@ -785,6 +785,11 @@ export class Preprocessor implements TokenStream {
             return;
         }
 
+        this.context.documentRegistry.addInclude(
+            this.source.uri,
+            document.uri
+        );
+
         if (this.expansions.size >= Preprocessor.MAX_INCLUDE_DEPTH) {
             this.problems.error(location, `Maximum include depth (${Preprocessor.MAX_INCLUDE_DEPTH}) exceeded.`);
             return;
