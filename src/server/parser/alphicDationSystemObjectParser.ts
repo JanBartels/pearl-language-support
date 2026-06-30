@@ -9,8 +9,8 @@
 // -----------------------------------------------------------------------------
 
 import { Location } from '../core';
+import { SourceValue } from '../core/sourceValue';
 import { extendSpan } from '../core/span';
-import { TokenKind } from '../lexer/token';
 import { TailParser } from './tailParser';
 import { AlphicDationSystemDeclarationNode } from '../ast/alphicDationSystemDeclationNode';
 
@@ -18,7 +18,7 @@ export class AlphicDationSystemObjectParser extends TailParser {
 
     parseTail(
         location: Location,
-        name: string
+        name: SourceValue<string>
     ): AlphicDationSystemDeclarationNode | undefined {
 
         // ------------------------------------------------------------
@@ -53,7 +53,7 @@ export class AlphicDationSystemObjectParser extends TailParser {
             location,
             name,
             systemName,
-            direction ?? '<->',
+            direction ?? SourceValue.synthetic('<->'),
             parameters.tfu,
             parameters.ne,
             parameters.mb,
@@ -61,7 +61,7 @@ export class AlphicDationSystemObjectParser extends TailParser {
         );
     }
 
-    private parseSystemName(): string | undefined {
+    private parseSystemName(): SourceValue<string> | undefined {
 
         if (this.isOperator([
             '(',
@@ -107,22 +107,25 @@ export class AlphicDationSystemObjectParser extends TailParser {
             this.next();
         }
 
-        return this.text(
-            extendSpan(first.location.span, last.location.span)
+        const span = extendSpan(
+            first.location.span,
+            last.location.span
         );
+
+        return this.spanValue(span);
     }
 
     private parseParameterList(): {
-        tfu: number | undefined;
-        ne: boolean;
-        mb: string | undefined;
-        ai: string | undefined;
+        tfu: SourceValue<string> | undefined;
+        ne: SourceValue<boolean>;
+        mb: SourceValue<string> | undefined;
+        ai: SourceValue<string> | undefined;
     } {
 
-        let tfu: number | undefined;
-        let ne = false;
-        let mb: string | undefined;
-        let ai: string | undefined;
+        let tfu: SourceValue<string> | undefined;
+        let ne = new SourceValue(false);
+        let mb: SourceValue<string> | undefined;
+        let ai: SourceValue<string> | undefined;
 
         if (!this.acceptLeftParenthesis()) {
             return { tfu, ne, mb, ai };
@@ -133,8 +136,9 @@ export class AlphicDationSystemObjectParser extends TailParser {
             this.acceptComma();
         }
 
+        const neToken = this.current();
         if (this.acceptKeyword('NE')) {
-            ne = true;
+            ne = new SourceValue(true, neToken.location);
             this.acceptComma();
         }
 
@@ -171,65 +175,64 @@ export class AlphicDationSystemObjectParser extends TailParser {
         name: string,
         minimum: number,
         maximum: number
-    ): number | undefined {
+    ): SourceValue<string> | undefined {
 
         if (!this.expectEquals()) {
             this.synchronizeParameter();
             return undefined;
         }
 
-        const literal = this.expectNumberLiteral(
+        const token = this.expectNumberLiteral(
             `Expected integer value for ${name}.`
         );
-        if (!literal) {
+        if (!token) {
             this.synchronizeParameter();
             return undefined;
         }
 
-        const value = Number(this.tokenText(literal));
+        const literal = this.tokenValue(token);
+
         if (!this.validateIntegerLiteral(
-            value,
+            literal,
             minimum,
             maximum,
-            name,
-            literal.location
+            name
         )) {
-
             return undefined;
         }
 
-        return value;
+        return literal;
     }
 
     private parseHexParameter(
         name: string,
         digits: number
-    ): string | undefined {
+    ): SourceValue<string> | undefined {
 
         if (!this.expectEquals()) {
             this.synchronizeParameter();
             return undefined;
         }
 
-        const literal = this.expectHexLiteral(
+        const token = this.expectHexLiteral(
             `Expected ${digits}-digit hexadecimal number as ${name}.`
         );
-        if (!literal) {
+        if (!token) {
             this.synchronizeParameter();
             return undefined;
         }
 
-        const value = this.tokenText(literal);
+        const literal = this.tokenValue(token);
+
         if (!this.validateHexLiteralLength(
-            value,
+            literal,
             digits,
-            name,
-            literal.location
+            name
         )) {
             return undefined;
         }
 
-        return value;
+        return literal;
     }
 
     private synchronizeParameter(): void {

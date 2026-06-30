@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
+import { SourceValue } from '../core/sourceValue';
 import { ParserBase } from './parserBase';
 import { ModuleNode } from '../ast/moduleNode';
 import { SystemPartParser } from './systemPartParser';
@@ -20,8 +21,8 @@ export class ModuleParser extends ParserBase {
         this.skipTrivia();
         const identifier = this.expectIdentifier();
         const name = identifier
-            ? this.tokenText(identifier)
-            : "<error>";
+            ? this.tokenValue(identifier)
+            : SourceValue.synthetic("<error>");
 
         if (!identifier) {
             this.synchronize([";"]);

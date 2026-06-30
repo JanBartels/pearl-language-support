@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { Location } from '../core/location';
+import { SourceValue } from '../core/sourceValue';
 import { AstNode } from './astNode';
 import { AstKind } from './astKind';
 
@@ -10,7 +11,7 @@ import { ProblemPartNode } from './problemPartNode';
 
 export class ModuleNode extends AstNode {
 
-    readonly name: string;
+    readonly name: SourceValue<string>;
 
     systemPart?: SystemPartNode;
 
@@ -18,7 +19,7 @@ export class ModuleNode extends AstNode {
 
     constructor(
         location: Location,
-        name: string
+        name: SourceValue<string>
     ) {
         super(AstKind.Module, location);
 
@@ -26,7 +27,7 @@ export class ModuleNode extends AstNode {
     }
 
     public override dumpLabel(): string {
-       return `Module(${this.name})`;
+       return `Module(${this.name.value})`;
     }
 
     public override getChildren(): readonly AstNode[] {

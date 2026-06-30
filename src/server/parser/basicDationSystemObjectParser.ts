@@ -9,15 +9,15 @@
 // -----------------------------------------------------------------------------
 
 import { Location } from '../core';
+import { SourceValue } from '../core/sourceValue';
 import { TailParser } from './tailParser';
-import { Token } from '../lexer/token';
 import { BasicDationSystemDeclarationNode } from '../ast/basicDationSystemDeclationNode';
 
 export class BasicDationSystemObjectParser extends TailParser {
 
     parseTail(
         location: Location,
-        name: string
+        name: SourceValue<string>
     ): BasicDationSystemDeclarationNode | undefined {
 
         if (!this.acceptKeyword('BU')) {
@@ -31,30 +31,36 @@ export class BasicDationSystemObjectParser extends TailParser {
             this.synchronizeBUDeclaration();
         }
 
-        let access: Token | undefined;
+        let accessCode: SourceValue<string> | undefined;
 
         if (this.acceptComma()) {
 
-            access = this.expectNumberLiteral();
-            if (!access) {
+            const token = this.expectNumberLiteral();
+
+            if (!token) {
                 this.synchronizeBUDeclaration();
             } else {
 
-                const value = Number(this.tokenText(access));
+                const literal = new SourceValue(
+                    this.tokenText(token),
+                    token.location
+                );
 
-                this.validateIntegerLiteral(
-                    value,
+                if (this.validateIntegerLiteral(
+                    literal,
                     0,
                     8,
-                    "BU access code",
-                    access.location
-                );
+                    "BU access code"
+                )) {
+                    accessCode = literal;
+                }
             }
         }
 
         this.expectRightParenthesis();
 
         const direction = this.parseDirection();
+
         if (!direction) {
             this.problems.error(
                 this.location(),
@@ -64,16 +70,18 @@ export class BasicDationSystemObjectParser extends TailParser {
         }
 
         this.expectSemicolon();
+
         return new BasicDationSystemDeclarationNode(
             location,
             name,
-            address ? address : '',
-            access ? Number(this.tokenText(access)) : undefined,
-            direction ?? '->' // Default nur Dummy für AST-Vervollständigung im Fehlerfall
+            address ?? SourceValue.synthetic(""),
+            accessCode,
+            direction ?? SourceValue.synthetic("->")
         );
     }
 
     private synchronizeBUDeclaration(): void {
+
         this.synchronize([
             ')',
             '->',
@@ -81,5 +89,5 @@ export class BasicDationSystemObjectParser extends TailParser {
             '<->',
             ';'
         ]);
-    }    
+    }
 }

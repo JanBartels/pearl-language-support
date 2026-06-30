@@ -15,6 +15,7 @@
 //     | ':' DationSystemTail ;
 // -----------------------------------------------------------------------------
 
+import { SourceValue } from '../core/sourceValue';
 import { ParserBase } from './parserBase';
 import { ParserContext } from './parserContext';
 import { SystemDeclarationNode } from '../ast/systemDeclarationNode';
@@ -43,28 +44,46 @@ export class SystemDeclarationParser extends ParserBase {
         if (!identifier) {
             return undefined;
         }
-        const name = this.tokenText(identifier);
+
+        const location = this.location(identifier);
+        const name = this.tokenValue(identifier);
 
         if (this.acceptSemicolon()) {
-            return new AlphicDationSystemDeclarationNode(identifier.location, name, name, '<->', undefined, false, undefined, undefined);
-        }        
-
-        if (!this.expectOperator(':', "Expected ':' after system declaration name.")) {
-            this.synchronize([';']);
-            this.acceptSemicolon();
-            return undefined;            
+            return new AlphicDationSystemDeclarationNode(
+                location,
+                name,
+                name,
+                SourceValue.synthetic("<->"),
+                undefined,
+                SourceValue.synthetic(false),
+                undefined,
+                undefined
+            );
         }
 
-        this.skipTrivia();
+        if (!this.expectColon()) {
+            this.synchronize([';']);
+            this.acceptSemicolon();
+            return undefined;
+        }
 
         if (this.isKeyword('EV')) {
-            return this.interruptParser.parseTail(this.location(identifier), name);
+            return this.interruptParser.parseTail(
+                location,
+                name
+            );
         }
 
         if (this.isKeyword('BU')) {
-            return this.basicDationSystemObjectParser.parseTail(this.location(identifier), name);
+            return this.basicDationSystemObjectParser.parseTail(
+                location,
+                name
+            );
         }
 
-        return this.alphicDationParser.parseTail(this.location(identifier), name);
+        return this.alphicDationParser.parseTail(
+            location,
+            name
+        );
     }
 }

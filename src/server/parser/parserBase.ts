@@ -2,8 +2,9 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { Token, TokenKind } from '../lexer/token';
-import { Span, extendSpan } from '../core/span';
+import { Span } from '../core/span';
 import { Location } from '../core/location';
+import { SourceValue } from '../core/sourceValue';
 
 import { AstNode } from '../ast/astNode';
 
@@ -178,6 +179,37 @@ export abstract class ParserBase {
     /*
     ** Hilfsmethoden zum Parsen
     */
+
+    protected sourceValue<T>(
+        value: T,
+        location?: Location
+    ): SourceValue<T> {
+
+        return new SourceValue(value, location);
+    }
+
+    protected tokenValue(
+        token: Token
+    ): SourceValue<string> {
+
+        return new SourceValue(
+            this.tokenText(token),
+            this.location(token)
+        );
+    }
+
+    protected spanValue(
+        span: Span
+    ): SourceValue<string> {
+
+        return this.sourceValue(
+            this.text(span),
+            {
+                source: this.location().source,
+                span
+            }
+        );
+    }    
 
     protected isAdjacent(
         left: Token,
@@ -401,20 +433,21 @@ export abstract class ParserBase {
     }    
 
     protected validateIntegerLiteral(
-        value: number | undefined,
+        literal: SourceValue<string> | undefined,
         minimum: number,
         maximum: number,
-        name: string,
-        location: Location
+        name: string
     ): boolean {
 
-        if (value === undefined) {
+        if (!literal) {
             return false;
         }
 
+        const value = Number(literal.value);
+
         if (!Number.isInteger(value)) {
             this.problems.error(
-                location,
+                literal.location!,
                 `${name} must be an integer.`
             );
             return false;
@@ -422,7 +455,7 @@ export abstract class ParserBase {
 
         if (value < minimum || value > maximum) {
             this.problems.error(
-                location,
+                literal.location!,
                 `${name} must be in the range ${minimum}..${maximum}.`
             );
             return false;
@@ -469,19 +502,18 @@ export abstract class ParserBase {
     }
 
     protected validateHexLiteralLength(
-        literal: string | undefined,
+        literal: SourceValue<string> | undefined,
         digits: number,
-        name: string,
-        location: Location
+        name: string
     ): boolean {
 
         if (!literal) {
             return false;
         }
 
-        if (literal.length !== digits + 1) {
+        if (literal.value.length !== digits + 1) {
             this.problems.error(
-                location,
+                literal.location!,
                 `${name} requires exactly ${digits} hexadecimal digits.`
             );
             return false;
@@ -542,19 +574,18 @@ export abstract class ParserBase {
     }
 
     protected validateHexDigitSequenceLength(
-        literal: string | undefined,
+        literal: SourceValue<string> | undefined,
         digits: number,
-        name: string,
-        location: Location
+        name: string
     ): boolean {
 
         if (!literal) {
             return false;
         }
 
-        if (literal.length !== digits) {
+        if (literal.value.length !== digits) {
             this.problems.error(
-                location,
+                literal.location!,
                 `${name} must consist of ${digits} hexadecimal digits.`
             );
             return false;
@@ -865,16 +896,16 @@ export abstract class ParserBase {
      */
     protected parseHexNumber(
         message?: string
-    ): string | undefined {
+    ): SourceValue<string> | undefined {
 
         const number = this.acceptNumberLiteral();
         if (number) {
-            return this.tokenText(number);
+            return this.tokenValue(number);
         }
 
         const hex = this.acceptHexDigitSequence();
         if (hex) {
-            return this.tokenText(hex);
+            return this.tokenValue(hex);
         }
 
         this.context.problems.error(
@@ -885,20 +916,22 @@ export abstract class ParserBase {
         return undefined;
     }
 
-    protected parseDirection(): string | undefined {
+    protected parseDirection(): SourceValue<string> | undefined {
 
         this.skipTrivia();
 
+        const token = this.current();
+
         if (this.acceptOperator('->')) {
-            return '->';
+            return this.tokenValue(token);
         }
 
         if (this.acceptOperator('<-')) {
-            return '<-';
+            return this.tokenValue(token);
         }
 
         if (this.acceptOperator('<->')) {
-            return '<->';
+            return this.tokenValue(token);
         }
 
         return undefined;

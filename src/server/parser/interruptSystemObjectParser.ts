@@ -9,6 +9,7 @@
 // -----------------------------------------------------------------------------
 
 import { Location } from '../core';
+import { SourceValue } from '../core/sourceValue';
 import { InterruptSystemDeclarationNode } from '../ast/interruptSystemDeclarationNode';
 import { TailParser } from './tailParser';
 
@@ -16,7 +17,7 @@ export class InterruptSystemObjectParser extends TailParser {
 
     parseTail(
         location: Location,
-        name: string
+        name: SourceValue<string>
     ): InterruptSystemDeclarationNode | undefined {
 
         if (!this.acceptKeyword('EV')) {
@@ -26,16 +27,16 @@ export class InterruptSystemObjectParser extends TailParser {
         this.expectLeftParenthesis();
 
         const mask = this.parseHexNumber();
+
         if (!mask) {
             this.synchronizeInterruptDeclaration();
         } else {
             this.validateHexDigitSequenceLength(
                 mask,
                 8,
-                "event mask",
-                this.location()
+                "event mask"
             );
-        }        
+        }
 
         this.expectRightParenthesis();
 
@@ -44,7 +45,7 @@ export class InterruptSystemObjectParser extends TailParser {
         return new InterruptSystemDeclarationNode(
             location,
             name,
-            mask ?? '00000000'
+            mask ?? SourceValue.synthetic("00000000")
         );
     }
 
@@ -54,5 +55,5 @@ export class InterruptSystemObjectParser extends TailParser {
             ')',
             ';'
         ]);
-    }    
+    }
 }

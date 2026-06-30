@@ -3,19 +3,20 @@
 
 import { AstKind } from './astKind';
 import { Location } from '../core';
+import { SourceValue } from '../core/sourceValue';
 import { SystemDeclarationNode } from './systemDeclarationNode';
 
 export class AlphicDationSystemDeclarationNode extends SystemDeclarationNode {
 
     constructor(
-        location: Location, 
-        name: string, 
-        public readonly systemName: string, 
-        public readonly direction: string,
-        public readonly tfu: number | undefined,
-        public readonly neFlag: boolean,
-        public readonly mb: string | undefined,
-        public readonly ai: string | undefined        
+        location: Location,
+        name: SourceValue<string>,
+        public readonly systemName: SourceValue<string>,
+        public readonly direction: SourceValue<string>,
+        public readonly tfu: SourceValue<string> | undefined,
+        public readonly neFlag: SourceValue<boolean>,
+        public readonly mb: SourceValue<string> | undefined,
+        public readonly ai: SourceValue<string> | undefined
     ) {
         super(
             AstKind.AlphicDationSystemDeclaration,
@@ -25,7 +26,7 @@ export class AlphicDationSystemDeclarationNode extends SystemDeclarationNode {
     }
 
     public override dumpLabel(): string {
-       return `ALPHIC Dation(${this.name} systemName ${this.systemName} direction ${this.direction})`;
+        return `ALPHIC Dation(${this.name.value} systemName ${this.systemName.value} direction ${this.direction.value})`;
     }
-
 }
+

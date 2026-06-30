@@ -3,11 +3,12 @@
 
 import { AstKind } from './astKind';
 import { Location } from '../core';
+import { SourceValue } from '../core/sourceValue';
 import { SystemDeclarationNode } from './systemDeclarationNode';
 
 export class InterruptSystemDeclarationNode extends SystemDeclarationNode {
 
-    constructor(location: Location, name: string, public readonly mask: string) {
+    constructor(location: Location, name: SourceValue<string>, public readonly mask: SourceValue<string>) {
         super(
             AstKind.InterruptSystemDeclaration,
             location,
@@ -16,7 +17,7 @@ export class InterruptSystemDeclarationNode extends SystemDeclarationNode {
     }
     
     public override dumpLabel(): string {
-       return `Interrupt(${this.name} mask ${this.mask} )`;
+       return `Interrupt(${this.name.value} mask ${this.mask.value} )`;
     }
 
 }

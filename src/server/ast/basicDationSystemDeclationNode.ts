@@ -3,16 +3,17 @@
 
 import { AstKind } from './astKind';
 import { Location } from '../core';
+import { SourceValue } from '../core/sourceValue';
 import { SystemDeclarationNode } from './systemDeclarationNode';
 
 export class BasicDationSystemDeclarationNode extends SystemDeclarationNode {
 
     constructor(
         location: Location,
-        name: string,
-        public readonly address: string,
-        public readonly accessCode: number | undefined,
-        public readonly direction: string
+        name: SourceValue<string>,
+        public readonly address: SourceValue<string>,
+        public readonly accessCode: SourceValue<string> | undefined,
+        public readonly direction: SourceValue<string>,
     ) {
         super(
             AstKind.BasicDationSystemDeclaration,
@@ -22,7 +23,7 @@ export class BasicDationSystemDeclarationNode extends SystemDeclarationNode {
     }
 
     public override dumpLabel(): string {
-       return `BASIC Dation(${this.name} direction ${this.direction})`;
+       return `BASIC Dation(${this.name.value} direction ${this.direction.value})`;
     }
 
 }
