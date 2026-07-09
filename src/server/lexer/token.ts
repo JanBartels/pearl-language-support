@@ -70,14 +70,4 @@ export interface Token {
 
   /** Wo steht dieses Token im Ursprungsdokument? */
   readonly location: Location;
-
-  /**
-   * Falls dieses Token durch Macro-Expansion entstanden ist:
-   * Wo wurde das Macro definiert?
-   */
-  readonly macroDefinition?: Location;
-}
-
-export interface NumberToken extends Token {
-  readonly numericValue: number;
 }

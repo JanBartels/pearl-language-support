@@ -6,13 +6,11 @@ import { Location } from '../core/location';
 
 export function createToken(
   kind: TokenKind,
-  location: Location,
-  macroDefinition?: Location
+  location: Location
 ): Token {
 
   return Object.freeze({
     kind,
-    location,
-    ...(macroDefinition ? { macroDefinition } : {})
+    location
   });
 }

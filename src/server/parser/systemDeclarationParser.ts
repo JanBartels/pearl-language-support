@@ -45,12 +45,10 @@ export class SystemDeclarationParser extends ParserBase {
             return undefined;
         }
 
-        const location = this.location(identifier);
         const name = this.tokenValue(identifier);
 
         if (this.acceptSemicolon()) {
             return new AlphicDationSystemDeclarationNode(
-                location,
                 name,
                 name,
                 SourceValue.synthetic("<->"),
@@ -69,20 +67,17 @@ export class SystemDeclarationParser extends ParserBase {
 
         if (this.isKeyword('EV')) {
             return this.interruptParser.parseTail(
-                location,
                 name
             );
         }
 
         if (this.isKeyword('BU')) {
             return this.basicDationSystemObjectParser.parseTail(
-                location,
                 name
             );
         }
 
         return this.alphicDationParser.parseTail(
-            location,
             name
         );
     }

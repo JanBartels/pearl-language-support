@@ -169,9 +169,9 @@ export abstract class ParserBase {
     }
 
     protected location(token = this.current()): Location {
-        return token.location;
+        return token.location.source.mapLocation(token.location);
     }
-
+    
     protected tokenKind(token = this.current()): TokenKind {
         return token.kind;
     }
@@ -264,25 +264,27 @@ export abstract class ParserBase {
 
     protected acceptKeyword(
         keywords: string | readonly string[]
-    ): boolean {
+    ): Token | undefined {
 
         if (!this.isKeyword(keywords)) {
-            return false;
+            return undefined;
         }
 
+        const token = this.current();
+
         this.next();
-        return true;
+        return token;
     }
 
     protected expectKeyword(
         keywords: string | readonly string[],
         message?: string
-    ): boolean {
+    ): Token | undefined {
 
-        const token = this.current();
+        const token = this.acceptKeyword(keywords);
 
-        if (this.acceptKeyword(keywords)) {
-            return true;
+        if (token) {
+            return token;
         }
 
         const list = Array.isArray(keywords)
@@ -299,7 +301,7 @@ export abstract class ParserBase {
             message ?? `Expected ${expected}.`
         );
 
-        return false;
+        return undefined;
     }
 
     protected isOperator(
@@ -320,25 +322,26 @@ export abstract class ParserBase {
 
     protected acceptOperator(
         operators: string | readonly string[]
-    ): boolean {
+    ): Token | undefined {
 
-        if (!this.isOperator(operators)) {
-            return false;
+        const token = this.current();
+        if (!this.isOperator(operators, token)) {
+            return undefined;
         }
-
+        
         this.next();
-        return true;
+        return token;
     }
 
     protected expectOperator(
         operators: string | readonly string[],
         message?: string
-    ): boolean {
+    ): Token | undefined {
 
-        const token = this.current();
+        const token = this.acceptOperator(operators);
 
-        if (this.acceptOperator(operators)) {
-            return true;
+        if (token) {
+            return token;
         }
 
         const list = Array.isArray(operators)
@@ -355,7 +358,7 @@ export abstract class ParserBase {
             message ?? `Expected ${expected}.`
         );
 
-        return false;
+        return undefined;
     }
 
     protected isIdentifier(
@@ -675,7 +678,7 @@ export abstract class ParserBase {
 
         this.skipTrivia();
 
-        const accepted = this.acceptOperator(',');
+        const accepted = this.acceptOperator(',') !== undefined;
 
         this.skipTrivia();
 
@@ -688,10 +691,7 @@ export abstract class ParserBase {
 
         this.skipTrivia();
 
-        const ok = this.expectOperator(
-            ',',
-            message
-        ) !== undefined;
+        const ok = this.expectOperator(',', message ) !== undefined;
 
         this.skipTrivia();
 
@@ -702,7 +702,7 @@ export abstract class ParserBase {
 
         this.skipTrivia();
 
-        const accepted = this.acceptOperator(';');
+        const accepted = this.acceptOperator(';') !== undefined;
 
         this.skipTrivia();
 
@@ -715,10 +715,7 @@ export abstract class ParserBase {
 
         this.skipTrivia();
 
-        const ok = this.expectOperator(
-            ';',
-            message
-        ) !== undefined;
+        const ok = this.expectOperator(';', message) !== undefined;
 
         this.skipTrivia();
 
@@ -729,7 +726,7 @@ export abstract class ParserBase {
 
         this.skipTrivia();
 
-        const accepted = this.acceptOperator(':');
+        const accepted = this.acceptOperator(':') !== undefined;
 
         this.skipTrivia();
 
@@ -742,10 +739,7 @@ export abstract class ParserBase {
 
         this.skipTrivia();
 
-        const ok = this.expectOperator(
-            ':',
-            message
-        ) !== undefined;
+        const ok = this.expectOperator(':', message) !== undefined;
 
         this.skipTrivia();
 
@@ -756,7 +750,7 @@ export abstract class ParserBase {
 
         this.skipTrivia();
 
-        const accepted = this.acceptOperator('=');
+        const accepted = this.acceptOperator('=') !== undefined;
 
         this.skipTrivia();
 
@@ -769,10 +763,7 @@ export abstract class ParserBase {
 
         this.skipTrivia();
 
-        const ok = this.expectOperator(
-            '=',
-            message
-        ) !== undefined;
+        const ok = this.expectOperator('=', message) !== undefined;
 
         this.skipTrivia();
 
@@ -783,7 +774,7 @@ export abstract class ParserBase {
 
         this.skipTrivia();
 
-        const accepted = this.acceptOperator('(');
+        const accepted = this.acceptOperator('(') !== undefined;
 
         this.skipTrivia();
 
@@ -796,10 +787,7 @@ export abstract class ParserBase {
 
         this.skipTrivia();
 
-        const ok = this.expectOperator(
-            '(',
-            message
-        ) !== undefined;
+        const ok = this.expectOperator('(', message) !== undefined;
 
         this.skipTrivia();
 
@@ -810,7 +798,7 @@ export abstract class ParserBase {
 
         this.skipTrivia();
 
-        const accepted = this.acceptOperator(')');
+        const accepted = this.acceptOperator(')') !== undefined;
 
         this.skipTrivia();
 
@@ -823,10 +811,7 @@ export abstract class ParserBase {
 
         this.skipTrivia();
 
-        const ok = this.expectOperator(
-            ')',
-            message
-        ) !== undefined;
+        const ok = this.expectOperator(')', message) !== undefined;
 
         this.skipTrivia();
 
@@ -837,7 +822,7 @@ export abstract class ParserBase {
 
         this.skipTrivia();
 
-        const accepted = this.acceptOperator('[');
+        const accepted = this.acceptOperator('[') !== undefined;
 
         this.skipTrivia();
 
@@ -850,10 +835,7 @@ export abstract class ParserBase {
 
         this.skipTrivia();
 
-        const ok = this.expectOperator(
-            '[',
-            message
-        ) !== undefined;
+        const ok = this.expectOperator('[', message) !== undefined;
 
         this.skipTrivia();
 
@@ -864,7 +846,7 @@ export abstract class ParserBase {
 
         this.skipTrivia();
 
-        const accepted = this.acceptOperator(']');
+        const accepted = this.acceptOperator(']') !== undefined;
 
         this.skipTrivia();
 
@@ -877,10 +859,7 @@ export abstract class ParserBase {
 
         this.skipTrivia();
 
-        const ok = this.expectOperator(
-            ']',
-            message
-        ) !== undefined;
+        const ok = this.expectOperator(']', message) !== undefined;
 
         this.skipTrivia();
 

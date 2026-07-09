@@ -15,6 +15,8 @@ import { FileSource } from "../source/fileSource";
 import { MacroSource } from "../source/macroSource";
 import { Lexer } from "../lexer/lexer";
 
+import { MacroDefinition } from './macroDefinition';
+import { MacroReference } from './macroReference';
 import { PreprocessorContext } from './preprocessorContext';
 import { ExpansionStack } from './expansionStack';
 
@@ -78,6 +80,7 @@ export class Preprocessor implements TokenStream {
         private readonly source: Source,
         private readonly context: PreprocessorContext,
         private readonly problems: ProblemCollection,
+        private readonly macroReferences: MacroReference[],
         private readonly logger: Logger
     ) {
         this.handlers.set("#define", this.handleDefine.bind(this));
@@ -96,6 +99,7 @@ export class Preprocessor implements TokenStream {
         source: Source,
         context: PreprocessorContext,
         problems: ProblemCollection,
+        macroReferences: MacroReference[],
         logger: Logger
     ): TokenStream {
         const stream = new LexerTokenStream(
@@ -108,6 +112,7 @@ export class Preprocessor implements TokenStream {
             source,
             context,
             problems,
+            macroReferences,
             logger
         );
     }
@@ -240,21 +245,22 @@ export class Preprocessor implements TokenStream {
 
                     const name = stream.tokenText(token);
 
-                    if (!this.context.macroTable.has(name)) {
+                    const macroDefinition = this.context.macroTable.get(name);
+                    if (macroDefinition===undefined) {
                         // Kein Makro → Identifier durchreichen.
                         this.currentToken = token;
                         stream.next();
                         return;
                     }
 
-                    const replacement = this.context.macroTable.get(name);
-                    if (replacement === null) {
+                    this.recordMacroReference(token, macroDefinition!);
+                    if (macroDefinition.replacement === null) {
                         // Makro ohne Ersetzungstext verschwindet einfach.
                         stream.next();
                         continue;
                     }
 
-                    this.expandMacro(token, replacement!);
+                    this.expandMacro(token, macroDefinition!);
                     stream.next();
                     continue;
                 }
@@ -467,7 +473,11 @@ export class Preprocessor implements TokenStream {
 
         const name = this.input.tokenText(token);
 
-        this.context.conditionals.enterIfdef(this.context.macroTable.has(name));
+        const macroDefinition = this.context.macroTable.get(name);
+        this.context.conditionals.enterIfdef(macroDefinition !== undefined);
+        if ( macroDefinition ) {
+            this.recordMacroReference(token, macroDefinition);
+        }
 
         this.input.next();
         this.skipToNextLine();
@@ -494,8 +504,11 @@ export class Preprocessor implements TokenStream {
         }
 
         const name = this.input.tokenText(token);
-
-        this.context.conditionals.enterIfndef(this.context.macroTable.has(name));
+        const macroDefinition = this.context.macroTable.get(name);
+        this.context.conditionals.enterIfndef(macroDefinition !== undefined);
+        if ( macroDefinition ) {
+            this.recordMacroReference(token, macroDefinition);
+        }
 
         this.input.next();
         this.skipToNextLine();
@@ -577,27 +590,33 @@ export class Preprocessor implements TokenStream {
             // Makronamen expandieren.
             if (token.kind === TokenKind.Identifier) {
 
-                const replacement = this.context.macroTable.get(text);
+                const macroDefinition = this.context.macroTable.get(text);
 
-                if (replacement === undefined) {
+                if (macroDefinition === undefined) {
 
                     path += text;
 
-                } else if (replacement !== null) {
+                } else {
+                    this.recordMacroReference(token, macroDefinition);
 
-                    // Stringkonstante im Include-Pfad entpacken.
-                    if (replacement.length >= 2 &&
-                        replacement.startsWith("'") &&
-                        replacement.endsWith("'")) {
+                    if (macroDefinition.replacement !== null) {
 
-                        path += replacement.substring(
-                            1,
-                            replacement.length - 1
-                        );
+                        const replacement = macroDefinition.replacement;
 
-                    } else {
+                        // Stringkonstante im Include-Pfad entpacken.
+                        if (replacement.length >= 2 &&
+                            replacement.startsWith("'") &&
+                            replacement.endsWith("'")) {
 
-                        path += replacement;
+                            path += replacement.substring(
+                                1,
+                                replacement.length - 1
+                            );
+
+                        } else {
+
+                            path += replacement;
+                        }
                     }
                 }
 
@@ -650,6 +669,10 @@ export class Preprocessor implements TokenStream {
         }
 
         const name = this.input.tokenText(token);
+        const macroDefinition = this.context.macroTable.get(name);
+        if (macroDefinition) {
+            this.recordMacroReference(token, macroDefinition);
+        }
 
         // Makronamen konsumieren
         this.input.next();
@@ -736,7 +759,7 @@ export class Preprocessor implements TokenStream {
 
     private expandMacro(
         macroToken: Token,
-        replacement: string
+        macroDefinition: MacroDefinition
     ): void {
 
         // this.logger.debug?.(`Expand macro ${this.input.tokenText(macroToken)} -> "${replacement}"`);
@@ -749,15 +772,17 @@ export class Preprocessor implements TokenStream {
         // Quelltext für den Makroersetzungstext erzeugen
         const macroSource = new MacroSource(
             macroToken.location,
-            replacement
+            macroDefinition.replacement!
         );
 
         const lexer = new Lexer(macroSource, this.problems, this.logger);
+
         const preprocessor = Preprocessor.create(
             lexer.tokenize(),
             macroSource,
             this.context,
             this.problems,
+            this.macroReferences,
             this.logger
         );
 
@@ -802,9 +827,21 @@ export class Preprocessor implements TokenStream {
             fileSource,
             this.context,
             this.problems,
+            this.macroReferences,
             this.logger
         );
 
         this.expansions.push(preprocessor);
     }
+
+    private recordMacroReference(
+        token: Token,
+        definition: MacroDefinition
+    ): void {
+
+        this.macroReferences.push({
+            definition,
+            location: token.location
+        });
+    }    
 }

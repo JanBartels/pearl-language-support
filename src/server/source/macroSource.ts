@@ -35,15 +35,8 @@ export class MacroSource implements Source {
         return this._text.slice(span.start, span.end);
     }
 
-    positionAt(_offset: number): Position {
-
-        return this.expansion.source.positionAt(
-            this.expansion.span.start
-        );
+    mapLocation(_location: Location): Location {
+        return this.expansion;
     }
 
-    offsetAt(_line: number, _character: number): number {
-
-        return this.expansion.span.start;
-    }
 }

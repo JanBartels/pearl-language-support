@@ -8,7 +8,6 @@
 //     "EV" "(" HexNumber ")" ";" ;
 // -----------------------------------------------------------------------------
 
-import { Location } from '../core';
 import { SourceValue } from '../core/sourceValue';
 import { InterruptSystemDeclarationNode } from '../ast/interruptSystemDeclarationNode';
 import { TailParser } from './tailParser';
@@ -16,11 +15,11 @@ import { TailParser } from './tailParser';
 export class InterruptSystemObjectParser extends TailParser {
 
     parseTail(
-        location: Location,
         name: SourceValue<string>
     ): InterruptSystemDeclarationNode | undefined {
 
-        if (!this.acceptKeyword('EV')) {
+        const evKeyword = this.acceptKeyword('EV');
+        if (!evKeyword) {
             return undefined;
         }
 
@@ -43,7 +42,7 @@ export class InterruptSystemObjectParser extends TailParser {
         this.expectSemicolon();
 
         return new InterruptSystemDeclarationNode(
-            location,
+            this.tokenValue( evKeyword ),
             name,
             mask ?? SourceValue.synthetic("00000000")
         );

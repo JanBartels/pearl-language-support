@@ -30,7 +30,9 @@ import {
   TextDocumentSyncKind,
   CompletionItemKind,
   DiagnosticSeverity,
-  DiagnosticTag
+  DiagnosticTag,
+  Hover,
+  MarkupKind
 } from 'vscode-languageserver/node';
 
 import { fileURLToPath, pathToFileURL } from 'url';
@@ -42,10 +44,15 @@ import { WorkspaceManager } from './utility/workspace';
 import { PearlSettings, defaultSettings } from './settings/pearlSettings';
 import { SettingsManager } from './settings/settingsManager';
 import { Validator } from './validation/validator';
-import { DiagnosticMapper } from './lsp/diagnosticMapper';
+import { mapDiagnostics } from './lsp/diagnosticMapper';
 import { ConnectionLogger } from './utility/logging/connectionLogger';
 import { SemanticTokenService } from './semanticTokens/semanticTokenService';
 import { TokenLegend } from './semanticTokens/tokenLegend';
+import { AstLookupResult } from './ast/astLookupResult';
+import { AnalysisResult } from './validation/analysisResult';
+import { MacroDocumentationProvider } from './documentation/macroDocumentationProvider';
+
+
 const connection = createConnection(ProposedFeatures.all);
 
 const logger = new ConnectionLogger(connection);
@@ -85,7 +92,7 @@ connection.onInitialize((params: InitializeParams) => {
         },
       },      
       completionProvider: { resolveProvider: true },
-      hoverProvider: false,
+      hoverProvider: true,
       definitionProvider: false,
       foldingRangeProvider: false,
       semanticTokensProvider: {
@@ -100,6 +107,63 @@ connection.onInitialize((params: InitializeParams) => {
 connection.onInitialized(() => {
   workspaceManager.registerWorkspaceFolderListener(connection);
   settingsManager.registerConfigurationListener();
+});
+
+// ------------------------------
+// Hover
+// ------------------------------
+
+connection.onHover(params => {
+
+    const document = documentRegistry.get(params.textDocument.uri);
+    if (!document) {
+        return undefined;
+    }
+
+    const analysisResult = documentRegistry.getAnalysisResult(params.textDocument.uri);
+    if (!analysisResult) {
+      return undefined;
+    }
+
+    const offset = document.offsetAt(params.position);
+
+    //
+    // 1. Macro hover
+    //
+    const macro = analysisResult.lookupMacro(offset);
+    if (macro) {
+      return {
+          contents: {
+              kind: MarkupKind.Markdown,
+              value: MacroDocumentationProvider.getDocumentation(macro)
+          }
+      };
+    }
+
+    //
+    // 2. AST hover
+    //
+    const element = analysisResult.rootAnalysis.ast.lookupSourceValue(offset);
+    if (!element) {
+        return undefined;
+    }
+
+    const provider = element.node.documentationProvider();
+    if (!provider) {
+        return undefined;
+    }
+
+    const markdown = provider.getDocumentation(element.node, element);
+    if (markdown === undefined) {
+        return undefined;
+    }
+
+    return {
+        contents: {
+            kind: MarkupKind.Markdown,
+            value: markdown
+        }
+    };
 });
 
 // ------------------------------
@@ -120,9 +184,12 @@ async function validateAndPublish(document: TextDocument): Promise<void> {
 
     const result = await validator.analyze(document, settings);
 
+    // Analyse für spätere LSP-Features zwischenspeichern.
+    documentRegistry.setAnalysisResult(document.uri, result);
+
     // aktuelle Diagnostics melden
     const oldUris = documentRegistry.takeReportedDiagnosticUris();
-    const diagnosticsByUri = DiagnosticMapper.mapAll(result.problems, documentRegistry);
+    const diagnosticsByUri = mapDiagnostics(result.problems, documentRegistry);
     for (const [uri, diagnostics] of diagnosticsByUri) {
         connection.sendDiagnostics({
             uri,

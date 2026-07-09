@@ -2,16 +2,18 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { AstKind } from './astKind';
-import { Location } from '../core/location';
-import { SemanticContext } from '../semantic/semanticContext';
+import { AstLookupResult } from './astLookupResult';
+import { SourceValue } from '../core/sourceValue';
+import { DocumentationProvider } from '../documentation/documentationProvider';
 
 export abstract class AstNode {
 
     parent?: AstNode;
 
+    abstract documentationProvider(): DocumentationProvider<this> | undefined;    
+
     protected constructor(
-        readonly kind: AstKind,
-        readonly location: Location,
+        readonly kind: AstKind
     ) {}
 
     adopt<T extends AstNode>(child: T): T {
@@ -23,6 +25,31 @@ export abstract class AstNode {
         return children.map(child => this.adopt(child));
     }
 
+    /**
+     * Looks up the syntactic language element at the specified source offset.
+     *
+     * Returns the AST node together with the matching SourceValue,
+     * or undefined if this subtree does not cover the offset.
+     */
+    abstract lookupSourceValue(
+        offset: number
+    ): AstLookupResult | undefined;
+
+    protected lookupOwnSourceValue(
+        offset: number,
+        sourceValue: SourceValue<unknown> | undefined
+    ): AstLookupResult | undefined {
+
+        if (!sourceValue?.contains(offset)) {
+            return undefined;
+        }
+
+        return {
+            node: this,
+            element: sourceValue
+        };
+    }
+
     public dumpLabel(): string {
         return AstKind[this.kind];
     }
@@ -31,18 +58,4 @@ export abstract class AstNode {
         return [];
     }
 
-    resolveSymbols(context: SemanticContext): void {
-    }
-
-    validate(context: SemanticContext): void {
-    }
-
-    collectDocumentSymbols(): void {
-    }
-
-    collectSemanticTokens(): void {
-    }
-
-    collectFoldingRanges(): void {
-    }
 }

@@ -19,12 +19,13 @@ export class SystemPartParser extends ParserBase {
     parse(): SystemPartNode | undefined {
 
         this.skipTrivia();
-        if (!this.acceptKeyword('SYSTEM')) {
+        const systemKeyword = this.acceptKeyword("SYSTEM");
+        if (!systemKeyword) {
             return undefined;
         }
 
         const node = new SystemPartNode(
-            this.location()
+            this.tokenValue( systemKeyword )
         );
 
         if (!this.expectSemicolon()) {

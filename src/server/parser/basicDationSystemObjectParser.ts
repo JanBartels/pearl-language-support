@@ -8,19 +8,18 @@
 //     DationSpecification Direction ";" ;
 // -----------------------------------------------------------------------------
 
-import { Location } from '../core';
 import { SourceValue } from '../core/sourceValue';
 import { TailParser } from './tailParser';
-import { BasicDationSystemDeclarationNode } from '../ast/basicDationSystemDeclationNode';
+import { BasicDationSystemDeclarationNode } from '../ast/basicDationSystemDeclarationNode';
 
 export class BasicDationSystemObjectParser extends TailParser {
 
     parseTail(
-        location: Location,
         name: SourceValue<string>
     ): BasicDationSystemDeclarationNode | undefined {
 
-        if (!this.acceptKeyword('BU')) {
+        const buKeyword = this.acceptKeyword('BU');
+        if (!buKeyword) {
             return undefined;
         }
 
@@ -72,7 +71,7 @@ export class BasicDationSystemObjectParser extends TailParser {
         this.expectSemicolon();
 
         return new BasicDationSystemDeclarationNode(
-            location,
+            this.tokenValue( buKeyword ),
             name,
             address ?? SourceValue.synthetic(""),
             accessCode,

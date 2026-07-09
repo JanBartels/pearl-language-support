@@ -9,12 +9,13 @@ export class ProblemPartParser extends ParserBase {
     parse(): ProblemPartNode | undefined {
 
         this.skipTrivia();
-        if (!this.acceptKeyword("PROBLEM")) {
+        const problemKeyword = this.acceptKeyword("PROBLEM");
+        if (!problemKeyword) {
             return undefined;
         }
 
         const node = new ProblemPartNode(
-            this.location()
+            this.tokenValue( problemKeyword )
         );
 
         this.skipTrivia();

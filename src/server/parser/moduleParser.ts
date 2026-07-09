@@ -12,11 +12,10 @@ export class ModuleParser extends ParserBase {
     parse(): ModuleNode | undefined {
 
         this.skipTrivia();
-        if (!this.acceptKeyword("MODULE")) {
+        const moduleKeyword = this.expectKeyword("MODULE");
+        if (!moduleKeyword) {
             return undefined;
         }
-
-        const start = this.location();
 
         this.skipTrivia();
         const identifier = this.expectIdentifier();
@@ -31,7 +30,7 @@ export class ModuleParser extends ParserBase {
         this.expectSemicolon();
 
         const module = new ModuleNode(
-            start,
+            this.tokenValue( moduleKeyword ),
             name
         );
 
@@ -57,14 +56,19 @@ export class ModuleParser extends ParserBase {
         if (!modend) {
             return module;  // Kein sinnvoller Sync-Point mehr.
         }
+        module.modendKeyword = this.tokenValue( modend );
 
         this.skipTrivia();
         const debug = this.acceptIdentifier();
-        if (debug && this.tokenText(debug) !== "DEBUG") {
-            this.problems.error(
-                this.location(debug),
-                "Expected 'DEBUG' or ';' after MODEND."
-            );
+        if (debug) {
+            if (this.tokenText(debug) === "DEBUG") {
+                module.debugKeyword = this.tokenValue(debug);
+            } else {
+                this.problems.error(
+                    this.location(debug),
+                    "Expected 'DEBUG' or ';' after MODEND."
+                );
+            }
         }
 
         this.expectSemicolon();

@@ -4,6 +4,7 @@
 import { Source } from "../source/source";
 import { Token } from "../lexer/token";
 import { ProblemCollection } from "../core/problemCollection";
+import { MacroReference } from '../preproc/macroReference';
 import { Severity } from "../core/severity";
 import { AstNode } from "../ast/astNode";
 import { SemanticContext } from "../semantic/semanticContext";
@@ -19,6 +20,8 @@ export class Analysis {
         readonly ast: AstNode,
 
         readonly problems: ProblemCollection,
+
+        readonly macroReferences: MacroReference[],
 
         readonly semanticContext?: SemanticContext
 

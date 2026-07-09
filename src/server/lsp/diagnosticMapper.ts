@@ -10,54 +10,56 @@ import { Problem } from '../core/problem';
 import { ProblemCollection } from '../core/problemCollection';
 import { Severity } from '../core/severity';
 import { DocumentRegistry } from '../utility/documentRegistry';
-import { Source } from '../source/source';
+import { TextDocument } from 'vscode-languageserver-textdocument';
 
-export class DiagnosticMapper {
+export function mapDiagnostics(
+  problems: ProblemCollection,
+  registry: DocumentRegistry
+): Map<string, Diagnostic[]> {
 
-  static map(
-    problem: Problem,
-    registry: DocumentRegistry
-  ): Diagnostic {
+  const result = new Map<string, Diagnostic[]>();
 
-    const { source, span } = problem.location;
+  for (const problem of problems.toArray()) {
 
-    const start = source.positionAt(span.start);
-    const end = source.positionAt(span.end);
-
-    return {
-      range: { start, end },
-      message: problem.message,
-      severity: mapSeverity(problem.severity),
-      source: 'pearl',
-      ...(problem.code !== undefined && { code: problem.code })      
-    };
-  }
-
-  static mapAll(
-    problems: ProblemCollection,
-    registry: DocumentRegistry
-  ): Map<string, Diagnostic[]> {
-
-    const result = new Map<string, Diagnostic[]>();
-
-    for (const problem of problems.toArray()) {
-
-      const uri = problem.location.source.uri;
-
-      let diagnostics = result.get(uri);
-
-      if (!diagnostics) {
-        diagnostics = [];
-        result.set(uri, diagnostics);
-      }
-
-      diagnostics.push(
-        DiagnosticMapper.map(problem, registry)
-      );
+    const uri = problem.location.source.uri;
+    const document = registry.get(uri);
+    if (!document) {
+        // interner Fehler
+        continue;
     }
 
-    return result;
+    let diagnostics = result.get(uri);
+
+    if (!diagnostics) {
+      diagnostics = [];
+      result.set(uri, diagnostics);
+    }
+
+    diagnostics.push(
+      mapDiagnostic(problem, document)
+    );
   }
+
+  return result;
+}
+
+function mapDiagnostic(
+  problem: Problem,
+  document: TextDocument
+): Diagnostic {
+
+  const span = problem.location.span;
+
+  const start = document.positionAt(span.start);
+  const end = document.positionAt(span.end);
+
+  return {
+    range: { start, end },
+    message: problem.message,
+    severity: mapSeverity(problem.severity),
+    source: 'pearl',
+    ...(problem.code !== undefined && { code: problem.code })      
+  };
 }
 
 function mapSeverity(severity: Severity): DiagnosticSeverity {

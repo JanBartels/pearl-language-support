@@ -3,6 +3,8 @@
 
 import { Analysis } from './analysis';
 import { ProblemCollection } from '../core/problemCollection';
+import { MacroReference } from '../preproc/macroReference';
+import { contains } from '../core/span';
 import { Severity } from '../core/severity';
 
 export class AnalysisResult {
@@ -10,15 +12,18 @@ export class AnalysisResult {
 readonly rootAnalysis: Analysis;
     readonly files: ReadonlyMap<string, Analysis>;
     readonly problems: ProblemCollection;
+    readonly macroReferences: readonly MacroReference[];
 
     private constructor(
       rootAnalysis: Analysis,
       files: ReadonlyMap<string, Analysis>,
-      problems: ProblemCollection
+      problems: ProblemCollection,
+      macroReferences: readonly MacroReference[]      
     ) {
       this.rootAnalysis = rootAnalysis;
       this.files = files;
       this.problems = problems;
+      this.macroReferences = macroReferences;
     }
 
     static create(
@@ -33,15 +38,18 @@ readonly rootAnalysis: Analysis;
       }
 
       const allProblems = new ProblemCollection();
+      const allMacroReferences: MacroReference[] = [];
 
       for (const analysis of analyses) {
         allProblems.addAll(analysis.problems);
+        allMacroReferences.push(...analysis.macroReferences);
       }
 
       return new AnalysisResult(
         rootAnalysis,
         fileMap,
-        allProblems
+        allProblems,
+        allMacroReferences
       );
     }
 
@@ -62,4 +70,15 @@ readonly rootAnalysis: Analysis;
     return Array.from(this.files.values())
       .flatMap(f => f.tokens);
   }
+
+  lookupMacro(offset: number): MacroReference | undefined {
+    for (const reference of this.macroReferences) {
+        if (contains(reference.location.span, offset)) {
+            return reference;
+        }
+    }
+
+    return undefined;
+  }
+
 }

@@ -8,7 +8,6 @@
 //     DationSpecification Direction ";" ;
 // -----------------------------------------------------------------------------
 
-import { Location } from '../core';
 import { SourceValue } from '../core/sourceValue';
 import { extendSpan } from '../core/span';
 import { TailParser } from './tailParser';
@@ -17,7 +16,6 @@ import { AlphicDationSystemDeclarationNode } from '../ast/alphicDationSystemDecl
 export class AlphicDationSystemObjectParser extends TailParser {
 
     parseTail(
-        location: Location,
         name: SourceValue<string>
     ): AlphicDationSystemDeclarationNode | undefined {
 
@@ -50,7 +48,6 @@ export class AlphicDationSystemObjectParser extends TailParser {
         }
 
         return new AlphicDationSystemDeclarationNode(
-            location,
             name,
             systemName,
             direction ?? SourceValue.synthetic('<->'),

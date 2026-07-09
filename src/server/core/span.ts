@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
+import { Position } from "./position";
+
 export interface Span {
   /** inclusive */
   start: number;
@@ -34,3 +36,13 @@ export function extendSpan(
         Math.max(a.end, b.end)
     );
 }
+
+export function contains(
+    span: Span,
+    offset: number
+): boolean {
+
+    return span.start <= offset
+        && offset < span.end;
+}
+

@@ -6,6 +6,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import * as fs from 'fs';
 import * as path from "path";
 import { filePathFromUri, uriFromFilePath } from './uriUtils'
+import { AnalysisResult } from '../validation/analysisResult';
 
 export class DocumentRegistry {
   private documents: TextDocuments<TextDocument>;
@@ -14,12 +15,18 @@ export class DocumentRegistry {
     string,
     { mtimeMs: number; doc: TextDocument }
   > = new Map();
+  
   // Liste, für welche Dokumente Diagnosen gesendet worden sind
   // Wenn keine Diagnose mehr ansteht, muss diese aktiv gelöscht werden
   private reportedDiagnosticUris = new Set<string>();
+  
   // Include-Graph für Re-Validierung bei Änderungen an untergeordneten #includes
   private readonly includes = new Map<string, Set<string>>();
   private readonly includedBy = new Map<string, Set<string>>();
+
+  // Validierungs-Ergebnis
+  private readonly analysisResults =
+    new Map<string, AnalysisResult>();
 
   constructor(documents: TextDocuments<TextDocument>) {
     this.documents = documents;
@@ -82,6 +89,8 @@ export class DocumentRegistry {
 
     const visited = new Set<string>();
     this.invalidateRecursive(uri, visited);
+    
+    this.clearAnalysisResult(uri);
   }
 
   private invalidateRecursive(
@@ -148,6 +157,28 @@ export class DocumentRegistry {
 
   markDiagnosticsReported(uri: string): void {
       this.reportedDiagnosticUris.add(uri);
+  }
+
+  setAnalysisResult(
+      uri: string,
+      result: AnalysisResult
+  ): void {
+
+      this.analysisResults.set(uri, result);
+  }
+
+  getAnalysisResult(
+      uri: string
+  ): AnalysisResult | undefined {
+
+      return this.analysisResults.get(uri);
+  }
+
+  clearAnalysisResult(
+      uri: string
+  ): void {
+
+      this.analysisResults.delete(uri);
   }
 
   stats(): { openDocuments: number; cachedIncludes: number } {

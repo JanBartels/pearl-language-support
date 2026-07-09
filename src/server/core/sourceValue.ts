@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { Location } from './location';
+import { contains } from '../core/span';
 
 /**
  * Fachlicher Wert mit optionalem Bezug zum Quelltext.
@@ -25,4 +26,10 @@ export class SourceValue<T> {
     public static synthetic<T>(value: T): SourceValue<T> {
         return new SourceValue(value);
     }
+
+    contains(offset: number): boolean {
+
+        return this.location !== undefined &&
+            contains(this.location.span, offset);
+    }    
 }

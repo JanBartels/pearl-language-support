@@ -11,6 +11,7 @@ import { ProblemCollection } from '../core/problemCollection';
 import { Preprocessor } from '../preproc/preprocessor';
 import { PreprocessorContext } from '../preproc/preprocessorContext';
 import { MacroTable } from '../preproc/macroTable';
+import { MacroReference } from '../preproc/macroReference';
 
 import { Parser } from '../parser/parser';
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -41,6 +42,7 @@ export class Validator {
     this.logger.debug?.('[pearl] settings = ' + JSON.stringify(settings));
 
     const problems = new ProblemCollection();
+    const macroReferences: MacroReference[] = [];
 
     // ----------------------------
     // vordefinierte Macros anlegen
@@ -79,6 +81,7 @@ export class Validator {
         fileSource,
         context,
         problems,
+        macroReferences,
         this.logger
     );
 
@@ -110,7 +113,8 @@ export class Validator {
         fileSource,
         tokens,
         ast,
-        problems
+        problems,
+        macroReferences
     );
 
     return AnalysisResult.create(
