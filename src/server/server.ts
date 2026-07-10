@@ -45,6 +45,7 @@ import { PearlSettings, defaultSettings } from './settings/pearlSettings';
 import { SettingsManager } from './settings/settingsManager';
 import { Validator } from './validation/validator';
 import { mapDiagnostics } from './lsp/diagnosticMapper';
+import { mapLspLocation } from './lsp/lspLocationMapper';
 import { ConnectionLogger } from './utility/logging/connectionLogger';
 import { SemanticTokenService } from './semanticTokens/semanticTokenService';
 import { TokenLegend } from './semanticTokens/tokenLegend';
@@ -93,7 +94,7 @@ connection.onInitialize((params: InitializeParams) => {
       },      
       completionProvider: { resolveProvider: true },
       hoverProvider: true,
-      definitionProvider: false,
+      definitionProvider: true,
       foldingRangeProvider: false,
       semanticTokensProvider: {
         legend: tokenLegend.getLegend(),
@@ -164,6 +165,44 @@ connection.onHover(params => {
             value: markdown
         }
     };
+});
+
+// ------------------------------
+// Goto Definition
+// ------------------------------
+
+connection.onDefinition(params => {
+
+    const document =
+        documentRegistry.get(params.textDocument.uri);
+    if (!document) {
+        return undefined;
+    }
+
+    const analysisResult =
+        documentRegistry.getAnalysisResult(params.textDocument.uri);
+    if (!analysisResult) {
+        return undefined;
+    }
+
+    const offset = document.offsetAt(params.position);
+
+    //
+    // Macro definitions
+    //
+    const macro = analysisResult.lookupMacro(offset);
+    if (macro?.definition.location) {
+        return mapLspLocation(
+            macro.definition.location,
+            documentRegistry
+        );      
+    }
+
+    //
+    // AST / semantic definitions (later)
+    //
+
+    return undefined;
 });
 
 // ------------------------------

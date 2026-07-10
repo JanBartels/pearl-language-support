@@ -738,11 +738,9 @@ export class Preprocessor implements TokenStream {
         location: Location
     ): void {
 
-        if (this.context.macroTable.define(name, replacement)) {
+        if (this.context.macroTable.define(name, replacement, location)) {
             this.problems.warning(location, `Macro '${name}' redefined.`);
         }
-
-        // this.logger.debug?.(`#define ${name} "${replacement}"`);
     }
 
     private undefineMacro(
@@ -753,16 +751,12 @@ export class Preprocessor implements TokenStream {
         if (!this.context.macroTable.undefine(name)) {
             this.problems.warning(location, `Macro '${name}' is not defined.`);
         }
-
-        // this.logger.debug?.(`#undef ${name}`);
     }
 
     private expandMacro(
         macroToken: Token,
         macroDefinition: MacroDefinition
     ): void {
-
-        // this.logger.debug?.(`Expand macro ${this.input.tokenText(macroToken)} -> "${replacement}"`);
 
         if (this.expansions.size >= Preprocessor.MAX_INCLUDE_DEPTH) {
             this.problems.error(macroToken.location, `Maximum macro depth (${Preprocessor.MAX_INCLUDE_DEPTH}) exceeded.`);
@@ -791,8 +785,6 @@ export class Preprocessor implements TokenStream {
     }
 
     private includeFile(includePath: string, location: Location): void {
-
-        // this.logger.debug?.(`#include ${includePath}`);
 
         const document =
             this.context.documentRegistry.resolveInclude(
