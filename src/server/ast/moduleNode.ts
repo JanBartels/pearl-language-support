@@ -9,6 +9,7 @@ import { AstLookupResult } from './astLookupResult';
 import { DocumentationProvider } from '../documentation/documentationProvider';
 import { ModuleDocumentationProvider } from '../documentation/moduleDocumentationProvider';
 
+import { ShellCommandNode } from './shellCommandNode';
 import { SystemPartNode } from './systemPartNode';
 import { ProblemPartNode } from './problemPartNode';
 
@@ -16,6 +17,8 @@ export class ModuleNode extends AstNode {
 
     readonly keyword: SourceValue<string>;
     readonly name: SourceValue<string>;
+
+    readonly shellCommands: ShellCommandNode[] = [];
 
     systemPart?: SystemPartNode;
 
@@ -47,6 +50,13 @@ export class ModuleNode extends AstNode {
     ): AstLookupResult | undefined {
 
         let result: AstLookupResult | undefined;
+
+        for (const shellCommand of this.shellCommands) {
+            result = shellCommand.lookupSourceValue(offset);
+            if (result) {
+                return result;
+            }
+        }
 
         result = this.systemPart?.lookupSourceValue(offset);
         if (result) {
@@ -97,5 +107,9 @@ export class ModuleNode extends AstNode {
         }
 
         return result;
+    }
+
+    public isShellModule(): boolean {
+        return (this.keyword.value === "SHELLMODULE");
     }
 }
