@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
+import { Source } from "../source/source";
 import { SourceValue } from '../core/sourceValue';
 import { AstNode } from './astNode';
 import { AstKind } from './astKind';
@@ -8,6 +9,9 @@ import { AstLookupResult } from './astLookupResult';
 
 import { DocumentationProvider } from '../documentation/documentationProvider';
 import { ModuleDocumentationProvider } from '../documentation/moduleDocumentationProvider';
+
+import { FoldingRegionCollection } from '../folding/foldingRegionCollection';
+import { createInclusiveFoldingRegion, createExclusiveFoldingRegion } from '../folding/foldingRegion';
 
 import { ShellCommandNode } from './shellCommandNode';
 import { SystemPartNode } from './systemPartNode';
@@ -89,6 +93,46 @@ export class ModuleNode extends AstNode {
         }
 
         return undefined;
+    }
+
+    override addFoldingRegionsTo(
+        source: Source,
+        regions: FoldingRegionCollection
+    ): void {
+
+        if (this.keyword.location && this.modendKeyword?.location && this.keyword.location.source === source) {
+            const region = createInclusiveFoldingRegion(this.keyword.location, this.modendKeyword.location);
+            if ( region ) {
+              regions.add(region);
+            }
+        }
+
+        if (this.systemPart?.keyword.location) {
+
+            const end =
+                this.problemPart?.keyword.location
+                ?? this.modendKeyword?.location;
+
+            if (this.systemPart.keyword.location && end) {
+                const region = createExclusiveFoldingRegion(this.systemPart.keyword.location, end);
+                if ( region ) {
+                    regions.add(region);
+                }
+            }
+        }
+
+        if (this.problemPart?.keyword.location) {
+
+            const end = this.modendKeyword?.location;
+
+            if (this.problemPart.keyword.location && end) {
+                const region = createExclusiveFoldingRegion(this.problemPart.keyword.location, end);
+                if ( region ) {
+                    regions.add(region);
+                }
+            }
+        }
+
     }
 
     public override dumpLabel(): string {

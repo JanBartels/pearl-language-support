@@ -4,6 +4,7 @@
 import { DocumentRegistry } from '../utility/documentRegistry';
 import { MacroTable } from './macroTable';
 import { ConditionalStack } from './conditionalStack';
+import { PreprocessorConditionalBlockStack } from './preprocessorConditionalBlockStack';
 
 export class PreprocessorContext {
 
@@ -22,8 +23,12 @@ export class PreprocessorContext {
     /**
      * Aktueller Makrozustand.
      */
-    readonly conditionals: ConditionalStack
+    readonly conditionals: ConditionalStack,
     
+    /**
+     * Aktueller Stack für Präprozessordirektiven #ifdef/#ifndef, #else, #endif.
+     */
+    readonly conditionalBlocks: PreprocessorConditionalBlockStack
   ) {}
 
 }

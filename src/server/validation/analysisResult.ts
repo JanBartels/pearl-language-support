@@ -18,7 +18,7 @@ readonly rootAnalysis: Analysis;
       rootAnalysis: Analysis,
       files: ReadonlyMap<string, Analysis>,
       problems: ProblemCollection,
-      macroReferences: readonly MacroReference[]      
+      macroReferences: readonly MacroReference[]
     ) {
       this.rootAnalysis = rootAnalysis;
       this.files = files;

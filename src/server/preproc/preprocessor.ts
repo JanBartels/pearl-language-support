@@ -19,6 +19,8 @@ import { MacroDefinition } from './macroDefinition';
 import { MacroReference } from './macroReference';
 import { PreprocessorContext } from './preprocessorContext';
 import { ExpansionStack } from './expansionStack';
+import { PreprocessorConditionalBlock } from "./preprocessorConditionalBlock";
+import { PreprocessorConditionalBlockCollection } from "./preprocessorConditionalBlockCollection";
 
 class LexerTokenStream implements TokenStream {
 
@@ -81,6 +83,7 @@ export class Preprocessor implements TokenStream {
         private readonly context: PreprocessorContext,
         private readonly problems: ProblemCollection,
         private readonly macroReferences: MacroReference[],
+        private readonly preprocessorConditionalBlocks: PreprocessorConditionalBlockCollection,
         private readonly logger: Logger
     ) {
         this.handlers.set("#define", this.handleDefine.bind(this));
@@ -100,6 +103,7 @@ export class Preprocessor implements TokenStream {
         context: PreprocessorContext,
         problems: ProblemCollection,
         macroReferences: MacroReference[],
+        preprocessorConditionalBlocks: PreprocessorConditionalBlockCollection,
         logger: Logger
     ): TokenStream {
         const stream = new LexerTokenStream(
@@ -113,6 +117,7 @@ export class Preprocessor implements TokenStream {
             context,
             problems,
             macroReferences,
+            preprocessorConditionalBlocks,
             logger
         );
     }
@@ -402,12 +407,12 @@ export class Preprocessor implements TokenStream {
 
     private handleElse(): void {
 
-        const token = this.input.current();
+        const directive = this.input.current();
 
         if (this.context.conditionals.isEmpty()) {
 
             this.problems.error(
-                token.location,
+                directive.location,
                 "#else without matching #ifdef/#ifndef."
             );
 
@@ -415,9 +420,9 @@ export class Preprocessor implements TokenStream {
             return;
         }
 
-        if (this.context.conditionals.hasElse()) {
+        if (this.context.conditionalBlocks.hasElse()) {
             this.problems.error(
-                token.location,
+                directive.location,
                 "Multiple #else directives."
             );
             this.skipToNextLine();
@@ -425,6 +430,9 @@ export class Preprocessor implements TokenStream {
         }
         
         this.context.conditionals.handleElse();
+        this.context.conditionalBlocks.handleElse(
+            directive.location
+        );
 
         this.input.next();
         this.skipToNextLine();
@@ -432,12 +440,12 @@ export class Preprocessor implements TokenStream {
 
     private handleEndif(): void {
 
-        const token = this.input.current();
+        const directive = this.input.current();
 
         if (this.context.conditionals.isEmpty()) {
 
             this.problems.error(
-                token.location,
+                directive.location,
                 "#endif without matching #ifdef/#ifndef."
             );
 
@@ -446,7 +454,17 @@ export class Preprocessor implements TokenStream {
         }
 
         this.context.conditionals.leaveConditional();
-
+        const open = this.context.conditionalBlocks.leaveConditional();
+        this.preprocessorConditionalBlocks.add(
+            new PreprocessorConditionalBlock(
+                open.ifdef,
+                open.macro,
+                open.macroDefinition,
+                open.ifLocation,
+                open.elseLocation,
+                directive.location
+            )
+        );
         this.input.next();
         this.skipToNextLine();
     }
@@ -475,6 +493,11 @@ export class Preprocessor implements TokenStream {
 
         const macroDefinition = this.context.macroTable.get(name);
         this.context.conditionals.enterIfdef(macroDefinition !== undefined);
+        this.context.conditionalBlocks.enterIfdef(
+            name,
+            macroDefinition,
+            directive.location
+        );        
         if ( macroDefinition ) {
             this.recordMacroReference(token, macroDefinition);
         }
@@ -506,6 +529,11 @@ export class Preprocessor implements TokenStream {
         const name = this.input.tokenText(token);
         const macroDefinition = this.context.macroTable.get(name);
         this.context.conditionals.enterIfndef(macroDefinition !== undefined);
+        this.context.conditionalBlocks.enterIfndef(
+            name,
+            macroDefinition,
+            directive.location
+        );        
         if ( macroDefinition ) {
             this.recordMacroReference(token, macroDefinition);
         }
@@ -777,6 +805,7 @@ export class Preprocessor implements TokenStream {
             this.context,
             this.problems,
             this.macroReferences,
+            this.preprocessorConditionalBlocks,
             this.logger
         );
 
@@ -820,6 +849,7 @@ export class Preprocessor implements TokenStream {
             this.context,
             this.problems,
             this.macroReferences,
+            this.preprocessorConditionalBlocks,
             this.logger
         );
 

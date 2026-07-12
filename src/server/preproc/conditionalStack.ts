@@ -3,7 +3,6 @@
 
 interface ConditionalState {
     active: boolean;
-    elseSeen: boolean;
 }
 
 export class ConditionalStack {
@@ -18,21 +17,15 @@ export class ConditionalStack {
 
     enterIfdef(defined: boolean): void {
         this.stack.push({
-            active: this.isActive() && defined,
-            elseSeen: false
+            active: this.isActive() && defined
         });
     }
 
     enterIfndef(defined: boolean): void {
         this.stack.push({
-            active: this.isActive() && !defined,
-            elseSeen: false
+            active: this.isActive() && !defined
         });
     }
-
-    hasElse(): boolean {
-        return this.stack[this.stack.length - 1]!.elseSeen;
-    }    
 
     handleElse(): void {
 
@@ -44,8 +37,7 @@ export class ConditionalStack {
                 : this.stack[this.stack.length - 1]!.active;
 
         this.stack.push({
-            active: parent && !state.active,
-            elseSeen: true
+            active: parent && !state.active
         });
     }
 

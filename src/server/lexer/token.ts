@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { Location } from '../core';
-import { DocumentRegistry } from '../utility/documentRegistry';
+import { CompilerOption } from './compilerOption';
 
 export enum TokenKind {
 
@@ -70,4 +70,19 @@ export interface Token {
 
   /** Wo steht dieses Token im Ursprungsdokument? */
   readonly location: Location;
+}
+
+export enum CommentKind {
+    Line,
+    Block
+}
+
+export interface CommentToken extends Token {
+    readonly commentKind: CommentKind;
+
+    compilerOption(): CompilerOption | undefined;
+}
+
+export function isCommentToken(token: Token): token is CommentToken {
+    return token.kind === TokenKind.Comment;
 }

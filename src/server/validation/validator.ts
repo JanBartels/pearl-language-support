@@ -12,6 +12,8 @@ import { Preprocessor } from '../preproc/preprocessor';
 import { PreprocessorContext } from '../preproc/preprocessorContext';
 import { MacroTable } from '../preproc/macroTable';
 import { MacroReference } from '../preproc/macroReference';
+import { PreprocessorConditionalBlockStack } from '../preproc/preprocessorConditionalBlockStack';
+import { PreprocessorConditionalBlockCollection } from "../preproc/preprocessorConditionalBlockCollection";
 
 import { Parser } from '../parser/parser';
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -43,6 +45,8 @@ export class Validator {
 
     const problems = new ProblemCollection();
     const macroReferences: MacroReference[] = [];
+    const preprocessorConditionalBlocks = new PreprocessorConditionalBlockCollection();
+
 
     // ----------------------------
     // vordefinierte Macros anlegen
@@ -73,7 +77,8 @@ export class Validator {
     const context = new PreprocessorContext(
       this.documentRegistry,
       macroTable,
-      new ConditionalStack()
+      new ConditionalStack(),
+      new PreprocessorConditionalBlockStack
     );
 
     const preprocessor = Preprocessor.create(
@@ -82,6 +87,7 @@ export class Validator {
         context,
         problems,
         macroReferences,
+        preprocessorConditionalBlocks,
         this.logger
     );
 
@@ -114,7 +120,8 @@ export class Validator {
         tokens,
         ast,
         problems,
-        macroReferences
+        macroReferences,
+        preprocessorConditionalBlocks
     );
 
     return AnalysisResult.create(

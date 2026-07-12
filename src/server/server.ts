@@ -32,6 +32,7 @@ import {
   DiagnosticSeverity,
   DiagnosticTag,
   Hover,
+  FoldingRange,
   MarkupKind
 } from 'vscode-languageserver/node';
 
@@ -52,7 +53,14 @@ import { TokenLegend } from './semanticTokens/tokenLegend';
 import { AstLookupResult } from './ast/astLookupResult';
 import { AnalysisResult } from './validation/analysisResult';
 import { MacroDocumentationProvider } from './documentation/macroDocumentationProvider';
-
+import { CompilerOptionDocumentationProvider } from './documentation/compilerOptionDocumentProvider';
+import { contains } from './core/span';
+import { FoldingRegionCollection } from './folding/foldingRegionCollection';
+import { createInclusiveFoldingRegion } from './folding/foldingRegion';
+import { mapFoldingRegion } from './lsp/foldingMapper';
+import { CommentFoldingCollector } from './lexer/commentFoldingCollector';
+import { PreprocessorFoldingCollector } from './preproc/preprocessorFoldingCollector';
+import { AstFoldingCollector } from './ast/astFoldingCollector';
 
 const connection = createConnection(ProposedFeatures.all);
 
@@ -95,7 +103,7 @@ connection.onInitialize((params: InitializeParams) => {
       completionProvider: { resolveProvider: true },
       hoverProvider: true,
       definitionProvider: true,
-      foldingRangeProvider: false,
+      foldingRangeProvider: true,
       semanticTokensProvider: {
         legend: tokenLegend.getLegend(),
         full: true,     // wir liefern das ganze Dokument
@@ -116,7 +124,7 @@ connection.onInitialized(() => {
 
 connection.onHover(params => {
 
-    const document = documentRegistry.get(params.textDocument.uri);
+  const document = documentRegistry.get(params.textDocument.uri);
     if (!document) {
         return undefined;
     }
@@ -129,7 +137,30 @@ connection.onHover(params => {
     const offset = document.offsetAt(params.position);
 
     //
-    // 1. Macro hover
+    // 1. Compiler-Options
+    //
+    for (const comment of analysisResult.rootAnalysis.blockComments) {
+        if (!contains(comment.location.span,offset)) {
+            continue;
+        }
+
+        const option = comment.compilerOption();
+
+        if (!option) {
+            continue;
+        }
+
+        return {
+            contents: {
+                kind: MarkupKind.Markdown,
+                value: CompilerOptionDocumentationProvider.getDocumentation(option)
+            }
+        };
+
+    }
+
+    //
+    // 2. Macro hover
     //
     const macro = analysisResult.lookupMacro(offset);
     if (macro) {
@@ -142,7 +173,7 @@ connection.onHover(params => {
     }
 
     //
-    // 2. AST hover
+    // 3. AST hover
     //
     const element = analysisResult.rootAnalysis.ast.lookupSourceValue(offset);
     if (!element) {
@@ -203,6 +234,67 @@ connection.onDefinition(params => {
     //
 
     return undefined;
+});
+
+// ------------------------------
+// Folding
+// ------------------------------
+
+connection.onFoldingRanges((params) => {
+    const document =
+        documentRegistry.get(params.textDocument.uri);
+    if (!document) {
+        return [];
+    }
+
+    const analysisResult =
+        documentRegistry.getAnalysisResult(params.textDocument.uri);
+    if (!analysisResult) {
+        return [];
+    }
+
+    const regions = new FoldingRegionCollection();
+
+    //
+    // Block comments
+    //
+    CommentFoldingCollector.collect(
+        analysisResult.rootAnalysis.source,
+        analysisResult.rootAnalysis.blockComments,
+        regions
+    );
+
+    //
+    // Präprozessor
+    //
+    PreprocessorFoldingCollector.collect(
+        analysisResult.rootAnalysis.source,
+        analysisResult.rootAnalysis.preprocessorConditionalBlocks,
+        regions
+    );
+
+    //
+    // AST
+    //
+    AstFoldingCollector.collect(
+        analysisResult.rootAnalysis.source,
+        analysisResult.rootAnalysis.ast,
+        regions
+    );
+
+    //
+    // Map to LSP
+    //
+    const result: FoldingRange[] = [];
+    for (const region of regions) {
+        const folding = mapFoldingRegion(document, region);
+
+        if (folding) {
+            result.push(folding);
+        }
+    }    
+
+    return result;
 });
 
 // ------------------------------

@@ -2,11 +2,12 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { Source } from "../source/source";
-import { Token } from "../lexer/token";
+import { Token, CommentToken, CommentKind, isCommentToken } from "../lexer/";
 import { ProblemCollection } from "../core/problemCollection";
 import { MacroReference } from '../preproc/macroReference';
 import { Severity } from "../core/severity";
 import { AstNode } from "../ast/astNode";
+import { PreprocessorConditionalBlockCollection } from "../preproc/preprocessorConditionalBlockCollection";
 import { SemanticContext } from "../semantic/semanticContext";
 
 export class Analysis {
@@ -23,9 +24,27 @@ export class Analysis {
 
         readonly macroReferences: MacroReference[],
 
+        readonly preprocessorConditionalBlocks: PreprocessorConditionalBlockCollection,
+
         readonly semanticContext?: SemanticContext
 
     ) {
+    }
+
+    private cachedBlockComments?: readonly CommentToken[];
+
+    get blockComments(): readonly CommentToken[] {
+
+        if (!this.cachedBlockComments) {
+
+            this.cachedBlockComments = this.tokens.filter(
+                (token): token is CommentToken =>
+                    isCommentToken(token)
+                    && token.commentKind === CommentKind.Block
+            );
+        }
+
+        return this.cachedBlockComments;
     }
 
     hasErrors(): boolean {

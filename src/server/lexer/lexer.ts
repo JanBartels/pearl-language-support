@@ -1,8 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
-import { TokenKind, Token } from './token';
-import { createToken } from './tokenFactory';
+import {
+    Token,
+    TokenKind,
+    CommentToken,
+    CommentKind,
+    createToken,
+    createCommentToken
+} from './';
+
 import { Span } from '../core/span';
 import { Location } from '../core/location';
 
@@ -243,7 +250,7 @@ export class Lexer {
       this.stream.next();
     }
 
-    return this.createTokenFromSpan(TokenKind.Comment, start);
+    return this.createCommentTokenFromSpan( CommentKind.Line, start );
   }
 
   private lexBlockComment(): Token {
@@ -283,7 +290,7 @@ export class Lexer {
       this.problems.error(this.location(start),"Unterminated block comment.");
     }
 
-    return this.createTokenFromSpan(TokenKind.Comment, start);
+    return this.createCommentTokenFromSpan( CommentKind.Block, start );
   }
 
   private lexIdentifier(): Token {
@@ -707,6 +714,17 @@ export class Lexer {
 
   private createTokenFromSpan(kind: TokenKind, start: number): Token {
     return createToken(kind, this.location(start));
+  }
+
+  private createCommentTokenFromSpan(
+      commentKind: CommentKind,
+      start: number
+  ): CommentToken {
+
+      return createCommentToken(
+          this.location(start),
+          commentKind
+      );
   }
 
   private consumeMalformedIdentifierSuffix(): void {

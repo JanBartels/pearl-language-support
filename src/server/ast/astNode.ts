@@ -3,8 +3,10 @@
 
 import { AstKind } from './astKind';
 import { AstLookupResult } from './astLookupResult';
+import { Source } from "../source/source";
 import { SourceValue } from '../core/sourceValue';
 import { DocumentationProvider } from '../documentation/documentationProvider';
+import { FoldingRegionCollection } from '../folding/foldingRegionCollection';
 
 export abstract class AstNode {
 
@@ -48,6 +50,16 @@ export abstract class AstNode {
             node: this,
             element: sourceValue
         };
+    }
+
+    /**
+     * Folding
+     */
+    addFoldingRegionsTo(
+        source: Source,
+        regions: FoldingRegionCollection
+    ): void {
+        // Default: no folding regions.
     }
 
     public dumpLabel(): string {
