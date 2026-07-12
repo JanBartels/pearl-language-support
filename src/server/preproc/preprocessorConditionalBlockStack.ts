@@ -15,6 +15,8 @@ interface OpenPreprocessorConditionalBlock {
     readonly ifLocation: Location;
 
     elseLocation?: Location;
+
+    readonly conditionSatisfied: boolean;
 }
 
 export class PreprocessorConditionalBlockStack {
@@ -33,7 +35,8 @@ export class PreprocessorConditionalBlockStack {
             macroDefinition: macroDefinition
                 ? { ...macroDefinition }
                 : undefined,
-            ifLocation: location
+            ifLocation: location,
+            conditionSatisfied: macroDefinition !== undefined
         });
     }
 
@@ -49,7 +52,8 @@ export class PreprocessorConditionalBlockStack {
             macroDefinition: macroDefinition
                 ? { ...macroDefinition }
                 : undefined,
-            ifLocation: location
+            ifLocation: location,
+            conditionSatisfied: macroDefinition === undefined
         });
     }
 

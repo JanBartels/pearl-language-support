@@ -47,16 +47,18 @@ import { SettingsManager } from './settings/settingsManager';
 import { Validator } from './validation/validator';
 import { mapDiagnostics } from './lsp/diagnosticMapper';
 import { mapLspLocation } from './lsp/lspLocationMapper';
+import { createHover } from './lsp/createHover';
 import { ConnectionLogger } from './utility/logging/connectionLogger';
 import { SemanticTokenService } from './semanticTokens/semanticTokenService';
 import { TokenLegend } from './semanticTokens/tokenLegend';
-import { AstLookupResult } from './ast/astLookupResult';
+import { CompilerOptionLookup } from './lexer/compilerOptionLookup';
+import { PreprocessorConditionalBlockLookup } from './preproc/preprocessorConditionalBlockLookup';
 import { AnalysisResult } from './validation/analysisResult';
 import { MacroDocumentationProvider } from './documentation/macroDocumentationProvider';
 import { CompilerOptionDocumentationProvider } from './documentation/compilerOptionDocumentProvider';
-import { contains } from './core/span';
+import { PreprocessorConditionalBlockDocumentationProvider } from './documentation/preprocessorConditionalBlockDocumentationProvider';
+import { AstLookupResultDocumentationProvider } from './documentation/astLookupResultDocumentationProvider';
 import { FoldingRegionCollection } from './folding/foldingRegionCollection';
-import { createInclusiveFoldingRegion } from './folding/foldingRegion';
 import { mapFoldingRegion } from './lsp/foldingMapper';
 import { CommentFoldingCollector } from './lexer/commentFoldingCollector';
 import { PreprocessorFoldingCollector } from './preproc/preprocessorFoldingCollector';
@@ -137,65 +139,45 @@ connection.onHover(params => {
     const offset = document.offsetAt(params.position);
 
     //
-    // 1. Compiler-Options
+    // Compiler-Options
     //
-    for (const comment of analysisResult.rootAnalysis.blockComments) {
-        if (!contains(comment.location.span,offset)) {
-            continue;
-        }
-
-        const option = comment.compilerOption();
-
-        if (!option) {
-            continue;
-        }
-
-        return {
-            contents: {
-                kind: MarkupKind.Markdown,
-                value: CompilerOptionDocumentationProvider.getDocumentation(option)
-            }
-        };
-
+    const option = CompilerOptionLookup.lookup(analysisResult.rootAnalysis.blockComments, offset);
+    if (option) {
+        return createHover( CompilerOptionDocumentationProvider.getDocumentation(option) );
     }
 
     //
-    // 2. Macro hover
+    // Preprocessor conditionals
+    //
+    const conditional =
+        PreprocessorConditionalBlockLookup.lookup(
+            analysisResult.rootAnalysis.source,
+            analysisResult.rootAnalysis.preprocessorConditionalBlocks,
+            offset
+        );
+    if (conditional) {
+        return createHover( PreprocessorConditionalBlockDocumentationProvider.getDocumentation(conditional) );
+    }
+
+    //
+    // Macro hover
     //
     const macro = analysisResult.lookupMacro(offset);
     if (macro) {
-      return {
-          contents: {
-              kind: MarkupKind.Markdown,
-              value: MacroDocumentationProvider.getDocumentation(macro)
-          }
-      };
+        return createHover( MacroDocumentationProvider.getDocumentation(macro) );
     }
 
     //
-    // 3. AST hover
+    // AST hover
     //
-    const element = analysisResult.rootAnalysis.ast.lookupSourceValue(offset);
-    if (!element) {
-        return undefined;
-    }
+    const result = analysisResult.rootAnalysis.ast.lookupSourceValue(offset);
+    if (result) {
 
-    const provider = element.node.documentationProvider();
-    if (!provider) {
-        return undefined;
-    }
-
-    const markdown = provider.getDocumentation(element.node, element);
-    if (markdown === undefined) {
-        return undefined;
-    }
-
-    return {
-        contents: {
-            kind: MarkupKind.Markdown,
-            value: markdown
+        const markdown = AstLookupResultDocumentationProvider.getDocumentation(result);
+        if (markdown) {
+            return createHover(markdown);
         }
-    };
+    }
 });
 
 // ------------------------------

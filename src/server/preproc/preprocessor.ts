@@ -462,7 +462,8 @@ export class Preprocessor implements TokenStream {
                 open.macroDefinition,
                 open.ifLocation,
                 open.elseLocation,
-                directive.location
+                directive.location,
+                open.conditionSatisfied
             )
         );
         this.input.next();

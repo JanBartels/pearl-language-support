@@ -37,7 +37,12 @@ export class PreprocessorConditionalBlock {
         /**
          * Position von #endif.
          */
-        readonly endifLocation: Location
+        readonly endifLocation: Location,
+
+        /**
+         * Bedingung von #ifdef/#ifndef erfüllt?
+         */
+        readonly conditionSatisfied: boolean
 
     ) {}
 
