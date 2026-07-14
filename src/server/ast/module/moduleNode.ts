@@ -1,21 +1,21 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
-import { Source } from "../source/source";
-import { SourceValue } from '../core/sourceValue';
-import { AstNode } from './astNode';
-import { AstKind } from './astKind';
-import { AstLookupResult } from './astLookupResult';
+import { Source } from "../../source/source";
+import { SourceValue } from '../../core/sourceValue';
+import { AstNode } from '../astNode';
+import { AstKind } from '../astKind';
+import { AstLookupResult } from '../astLookupResult';
 
-import { DocumentationProvider } from '../documentation/documentationProvider';
-import { ModuleDocumentationProvider } from '../documentation/moduleDocumentationProvider';
+import { DocumentationProvider } from '../../documentation/documentationProvider';
+import { ModuleDocumentationProvider } from '../../documentation/module/moduleDocumentationProvider';
 
-import { FoldingRegionCollection } from '../folding/foldingRegionCollection';
-import { createInclusiveFoldingRegion, createExclusiveFoldingRegion } from '../folding/foldingRegion';
+import { FoldingRegionCollection } from '../../folding/foldingRegionCollection';
+import { createInclusiveFoldingRegion, createExclusiveFoldingRegion } from '../../folding/foldingRegion';
 
 import { ShellCommandNode } from './shellCommandNode';
-import { SystemPartNode } from './systemPartNode';
-import { ProblemPartNode } from './problemPartNode';
+import { SystemPartNode } from '../system/systemPartNode';
+import { ProblemPartNode } from '../problem/problemPartNode';
 
 export class ModuleNode extends AstNode {
 

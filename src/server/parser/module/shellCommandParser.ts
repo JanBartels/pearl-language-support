@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
-import { SourceValue } from '../core/sourceValue';
-import { ParserBase } from './parserBase';
-import { TailParser } from './tailParser';
-import { ShellCommandNode } from '../ast/shellCommandNode';
+import { SourceValue } from '../../core/sourceValue';
+import { ParserBase } from '../parserBase';
+import { TailParser } from '../tailParser';
+import { ShellCommandNode } from '../../ast/module/shellCommandNode';
 
 export class ShellCommandParser extends ParserBase {
 

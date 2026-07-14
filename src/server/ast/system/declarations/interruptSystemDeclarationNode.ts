@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
-import { AstKind } from './astKind';
-import { SourceValue } from '../core/sourceValue';
-import { AstLookupResult } from './astLookupResult';
+import { AstKind } from '../../astKind';
+import { SourceValue } from '../../../core/sourceValue';
+import { AstLookupResult } from '../../astLookupResult';
 
 import { SystemDeclarationNode } from './systemDeclarationNode';
-import { DocumentationProvider } from '../documentation/documentationProvider';
-import { InterruptDocumentationProvider } from '../documentation/interruptDocumentationProvider';
+import { DocumentationProvider } from '../../../documentation/documentationProvider';
+import { InterruptDocumentationProvider } from '../../../documentation/system/declarations/interruptDocumentationProvider';
 
 export class InterruptSystemDeclarationNode extends SystemDeclarationNode {
 

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
-import { DocumentationProvider } from './documentationProvider';
-import { AstLookupResult } from '../ast/astLookupResult';
-import { md } from './markdownUtils';
-import { SystemPartNode } from '../ast/systemPartNode';
+import { DocumentationProvider } from '../documentationProvider';
+import { AstLookupResult } from '../../ast/astLookupResult';
+import { md } from '../markdownUtils';
+import { SystemPartNode } from '../../ast/system/systemPartNode';
 
 export class SystemPartDocumentationProvider
     extends DocumentationProvider<SystemPartNode> {

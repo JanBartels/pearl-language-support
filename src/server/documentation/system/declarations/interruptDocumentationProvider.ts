@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
-import { DocumentationProvider } from '../documentation/documentationProvider';
-import { AstLookupResult } from '../ast/astLookupResult';
-import { md } from '../documentation/markdownUtils';
+import { DocumentationProvider } from '../../documentationProvider';
+import { AstLookupResult } from '../../../ast/astLookupResult';
+import { md } from '../../markdownUtils';
 import { InterruptSystemDeclarationNode } from '../ast/interruptSystemDeclarationNode';
 
 export class InterruptDocumentationProvider

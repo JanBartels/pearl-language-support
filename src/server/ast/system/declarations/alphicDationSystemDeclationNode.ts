@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
-import { AstKind } from './astKind';
-import { SourceValue } from '../core/sourceValue';
-import { AstLookupResult } from './astLookupResult';
+import { AstKind } from '../../astKind';
+import { SourceValue } from '../../../core/sourceValue';
+import { AstLookupResult } from '../../astLookupResult';
 
 import { SystemDeclarationNode } from './systemDeclarationNode';
-import { DocumentationProvider } from '../documentation/documentationProvider';
-import { AlphicDationDocumentationProvider } from '../documentation/alphicDationDocumentationProvider';
+import { DocumentationProvider } from '../../../documentation/documentationProvider';
+import { AlphicDationDocumentationProvider } from '../../../documentation/system/declarations/alphicDationDocumentationProvider';
 
 export class AlphicDationSystemDeclarationNode extends SystemDeclarationNode {
 

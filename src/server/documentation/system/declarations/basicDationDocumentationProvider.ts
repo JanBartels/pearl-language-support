@@ -4,7 +4,7 @@
 import { DocumentationProvider } from './documentationProvider';
 import { AstLookupResult } from '../ast/astLookupResult';
 import { md } from './markdownUtils';
-import { BasicDationSystemDeclarationNode } from '../ast/basicDationSystemDeclarationNode';
+import { BasicDationSystemDeclarationNode } from '../ast/system/declarations/basicDationSystemDeclarationNode';
                                                          
 
 export class BasicDationDocumentationProvider

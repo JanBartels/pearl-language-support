@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
-import { DocumentationProvider } from './documentationProvider';
-import { md } from './markdownUtils';
-import { ShellCommandNode } from '../ast/shellCommandNode';
-import { AstLookupResult } from '../ast/astLookupResult';
+import { DocumentationProvider } from '../documentationProvider';
+import { md } from '../markdownUtils';
+import { ShellCommandNode } from '../../ast/module/shellCommandNode';
+import { AstLookupResult } from '../../ast/astLookupResult';
 
 export class ShellCommandDocumentationProvider
     extends DocumentationProvider<ShellCommandNode> {

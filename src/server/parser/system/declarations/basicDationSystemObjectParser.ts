@@ -8,9 +8,9 @@
 //     DationSpecification Direction ";" ;
 // -----------------------------------------------------------------------------
 
-import { SourceValue } from '../core/sourceValue';
-import { TailParser } from './tailParser';
-import { BasicDationSystemDeclarationNode } from '../ast/basicDationSystemDeclarationNode';
+import { SourceValue } from '../../../core/sourceValue';
+import { TailParser } from '../../tailParser';
+import { BasicDationSystemDeclarationNode } from '../../../ast/system/declarations/basicDationSystemDeclarationNode';
 
 export class BasicDationSystemObjectParser extends TailParser {
 

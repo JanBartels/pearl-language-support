@@ -15,11 +15,11 @@
 //     | ':' DationSystemTail ;
 // -----------------------------------------------------------------------------
 
-import { SourceValue } from '../core/sourceValue';
-import { ParserBase } from './parserBase';
-import { ParserContext } from './parserContext';
-import { SystemDeclarationNode } from '../ast/systemDeclarationNode';
-import { AlphicDationSystemDeclarationNode } from '../ast/alphicDationSystemDeclationNode';
+import { SourceValue } from '../../../core/sourceValue';
+import { ParserBase } from '../../parserBase';
+import { ParserContext } from '../../parserContext';
+import { SystemDeclarationNode } from '../../../ast/system/declarations/systemDeclarationNode';
+import { AlphicDationSystemDeclarationNode } from '../../../ast/system/declarations/alphicDationSystemDeclationNode';
 import { AlphicDationSystemObjectParser } from './alphicDationSystemObjectParser';
 import { BasicDationSystemObjectParser } from './basicDationSystemObjectParser';
 import { InterruptSystemObjectParser } from './interruptSystemObjectParser';

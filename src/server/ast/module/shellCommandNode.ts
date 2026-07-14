@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
-import { SourceValue } from '../core/sourceValue';
-import { AstNode } from './astNode';
-import { AstKind } from './astKind';
-import { AstLookupResult } from './astLookupResult';
+import { SourceValue } from '../../core/sourceValue';
+import { AstNode } from '../astNode';
+import { AstKind } from '../astKind';
+import { AstLookupResult } from '../astLookupResult';
 
-import { DocumentationProvider } from '../documentation/documentationProvider';
-import { ShellCommandDocumentationProvider } from '../documentation/shellCommandDocumentationProvider';
+import { DocumentationProvider } from '../../documentation/documentationProvider';
+import { ShellCommandDocumentationProvider } from '../../documentation/module/shellCommandDocumentationProvider';
 
 export class ShellCommandNode extends AstNode {
 

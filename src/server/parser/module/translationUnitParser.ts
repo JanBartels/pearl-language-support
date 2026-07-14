@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
-import { ParserBase } from "./parserBase";
-import { TranslationUnitNode } from "../ast/translationUnitNode";
+import { ParserBase } from "../parserBase";
+import { TranslationUnitNode } from "../../ast/module/translationUnitNode";
 import { ModuleParser } from "./moduleParser";
 
 export class TranslationUnitParser extends ParserBase {

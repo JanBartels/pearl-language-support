@@ -8,9 +8,9 @@
 //     "EV" "(" HexNumber ")" ";" ;
 // -----------------------------------------------------------------------------
 
-import { SourceValue } from '../core/sourceValue';
-import { InterruptSystemDeclarationNode } from '../ast/interruptSystemDeclarationNode';
-import { TailParser } from './tailParser';
+import { SourceValue } from '../../../core/sourceValue';
+import { InterruptSystemDeclarationNode } from '../../../ast/system/declarations/interruptSystemDeclarationNode';
+import { TailParser } from '../../tailParser';
 
 export class InterruptSystemObjectParser extends TailParser {
 

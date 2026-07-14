@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
-import { SourceValue } from '../core/sourceValue';
-import { ParserBase } from './parserBase';
-import { ModuleNode } from '../ast/moduleNode';
+import { SourceValue } from '../../core/sourceValue';
+import { ParserBase } from '../parserBase';
+import { ModuleNode } from '../../ast/module/moduleNode';
 import { ShellCommandParser } from './shellCommandParser';
-import { SystemPartParser } from './systemPartParser';
-import { ProblemPartParser } from './problemPartParser';
+import { SystemPartParser } from '../system/systemPartParser';
+import { ProblemPartParser } from '../problem/problemPartParser';
 
 export class ModuleParser extends ParserBase {
 

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
-import { ParserBase } from './parserBase';
-import { ParserContext } from './parserContext';
-import { SystemPartNode } from '../ast/systemPartNode';
-import { SystemDeclarationParser } from './systemDeclarationParser';
+import { ParserBase } from '../parserBase';
+import { ParserContext } from '../parserContext';
+import { SystemPartNode } from '../../ast/system/systemPartNode';
+import { SystemDeclarationParser } from './declarations/systemDeclarationParser';
 
 export class SystemPartParser extends ParserBase {
 
