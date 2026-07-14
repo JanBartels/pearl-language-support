@@ -10,7 +10,7 @@
 
 import { SourceValue } from '../../../core/sourceValue';
 import { extendSpan } from '../../../core/span';
-import { TailParser } from '../.././tailParser';
+import { TailParser } from '../../tailParser';
 import { AlphicDationSystemDeclarationNode } from '../../../ast/system/declarations/alphicDationSystemDeclationNode';
 
 export class AlphicDationSystemObjectParser extends TailParser {
