@@ -15,6 +15,12 @@ export enum AstKind {
     
     ProblemPart,
 
+    OneIdentifierOrList,
+    ConstantFixedExpression,
+    DimensionBoundaries,
+    DimensionAttribute,
+    VirtualDimensionList,
+
     TypeDeclaration,
     DclDeclaration,
     SpcDeclaration,
