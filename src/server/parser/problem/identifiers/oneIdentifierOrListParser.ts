@@ -9,49 +9,92 @@ import { OneIdentifierOrListNode } from "../../../ast/problem/identifiers/oneIde
 
 export class OneIdentifierOrListParser extends ParserBase {
 
-    parse(): OneIdentifierOrListNode | undefined {
+    override parse(): OneIdentifierOrListNode | undefined {
 
         this.skipTrivia();
 
-        const parenthesized = this.acceptLeftParenthesis();
+        /*
+         * OneIdentifierOrList ::=
+         *       Identifier
+         *     | "(" Identifier [ "," Identifier ] ... ")"
+         */
 
-        this.skipTrivia();
+        if (this.acceptLeftParenthesis()) {
+            return this.parseIdentifierList();
+        }
 
         const identifier = this.acceptIdentifier();
 
         if (!identifier) {
+            return undefined;
+        }
 
-            if (parenthesized) {
-                this.problems.error(
-                    this.location(),
-                    "Expected identifier."
-                );
-            }
+        return new OneIdentifierOrListNode(
+            false,
+            [
+                this.tokenValue(identifier)
+            ]
+        );
+    }
+
+    private parseIdentifierList():
+        OneIdentifierOrListNode | undefined {
+
+        const identifiers: SourceValue<string>[] = [];
+
+        const first = this.expectIdentifier(
+            "Expected identifier in identifier list."
+        );
+
+        if (!first) {
+
+            /*
+             * Die öffnende Klammer wurde bereits konsumiert.
+             * Die lokale Produktion ist damit zerstört.
+             * Bis zu ihrem Ende synchronisieren.
+             */
+            this.synchronize([
+                ")"
+            ]);
+
+            this.acceptRightParenthesis();
 
             return undefined;
         }
 
-        const identifiers: SourceValue<string>[] = [
-            this.tokenValue(identifier)
-        ];
+        identifiers.push(
+            this.tokenValue(first)
+        );
 
         while (this.acceptComma()) {
 
-            const next = this.expectIdentifier();
+            const identifier = this.expectIdentifier(
+                "Expected identifier after ','."
+            );
 
-            if (!next) {
+            if (!identifier) {
+
+                this.synchronize([
+                    ")"
+                ]);
+
                 break;
             }
 
-            identifiers.push(this.tokenValue(next));
+            identifiers.push(
+                this.tokenValue(identifier)
+            );
         }
 
-        if (parenthesized) {
-            this.expectRightParenthesis();
-        }
+        /*
+         * Falls ')' fehlt, meldet expectRightParenthesis() den Fehler,
+         * lässt das aktuelle Token aber stehen. Dadurch kann der
+         * aufrufende Parser z.B. den nachfolgenden Typ noch erkennen.
+         */
+        this.expectRightParenthesis();
 
         return new OneIdentifierOrListNode(
-            parenthesized,
+            true,
             identifiers
         );
     }

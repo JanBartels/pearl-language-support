@@ -1,0 +1,20 @@
+MODULE huhu;
+
+SYSTEM;
+   A1: /A1 ->;
+   MyEv: EV(12345678);
+    B1;
+Myfile:
+ /X0/dies/ist/nur/ein/platzhalter;
+Winch1:
+ /LD/3.2/USR/GE/test(TFU=400)<->;
+! nach Moeglichkeit immer Mnemos anstelle von ’LD’ verwenden.
+Terminal: /A1/Dialog (TFU=1234,NE,AI=$3C00)<->;
+Termreset:/A1/Reset <->;
+! i. a. ist ’/TYA’ besser als ’/A1’
+VENTIL: BU(42) ->;
+FUEHLR: BU(0240FFFC) <-;
+!FUEHLR: BU(02401234) <-;
+/* MC 68000: Adr=$40FFFC, Zugriffscode=2 */; 
+PROBLEM;
+MODEND;

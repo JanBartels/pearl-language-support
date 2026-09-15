@@ -20,7 +20,7 @@ export class SystemPartNode extends AstNode {
     constructor(
         keyword: SourceValue<string>
     ) {
-        super(AstKind.ProblemPart);
+        super(AstKind.SystemPart);
 
         this.keyword = keyword;
     }

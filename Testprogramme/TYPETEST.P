@@ -1,0 +1,101 @@
+
+! Einzeiliger Kommentar
+
+/* Mehrzeiliger
+Kommentar
+DCL A FIXED;
+*/
+
+!MODE=NOLSTOP;
+!SC=2000;
+
+/*+M*/
+/*+T*/
+/*+D=1000*/
+
+#define Mod "MODULE huhu"
+!Mod;
+!MODULE huhu;
+SHELLMODULE huhu;
+
+aloha: 'he';
+hallo: 'welt';
+
+SYSTEM;
+   A1;
+   MyEv: EV(12345678);
+
+PROBLEM;
+!   SPC A1 DATION INOUT ALPHIC;
+
+DCL Limit INV FIXED INIT(10);
+DCL End INV FIXED INIT(-1);
+DCL Warn INV FIXED INIT(Limit - Limit // 10);
+
+DCL Pi INV FLOAT INIT(3.141);
+DCL Text CHAR(5) INIT('Hallo');
+DCL Flags BIT(4) INIT('1010'B);
+
+TYPE T1 FIXED(31);
+TYPE T2 FIXED(+31);
+TYPE T3 FIXED(2*16-1);
+TYPE T4 FIXED((2+3)*4);
+TYPE T5 FIXED(100//3);
+TYPE T6 FIXED(100 REM 7);
+
+DCL a(0:Limit-1) FIXED;
+DCL b(0:2*Limit-1) FLOAT;
+
+TYPE Bad1 FIXED(31.5);
+TYPE Bad2 FIXED(1E2);
+TYPE T7 FIXED(TOFIXED('A'));
+TYPE T8 FIXED(TOFIXED('1010'B));
+TYPE T9 FIXED(31 FIT 0(15));
+TYPE T10 FIXED((20+10) FIT 1(7));
+
+TYPE T11 FIXED(31(15));
+
+TYPE Foo FIXED;
+DCL Bar Foo;
+
+TYPE CounterType FIXED(31);
+
+TYPE Vector(10) FIXED;
+TYPE Matrix(0:9, 1:20) FLOAT;
+TYPE CounterVector(10) CounterType;
+
+DCL v Vector;
+DCL m Matrix;
+DCL cv CounterVector;
+
+DCL xf, yf FIXED;
+
+DCL x FIXED;
+DCL y CounterType;
+DCL (a, b) FLOAT(55);
+DCL flag BIT,
+    text CHAR(20),
+    interval DURATION;
+
+TYPE Counter FIXED;
+TYPE LongCounter FIXED(31);
+TYPE Real FLOAT(55);
+TYPE Flag BIT;
+TYPE Flags BIT(16);
+TYPE Text CHAR(80);
+TYPE OtherText CHARACTER(40);
+TYPE Time CLOCK;
+TYPE Interval DURATION;
+
+DCL Start FIXED;
+
+DCL MySema SEMA;
+DCL MyBolt BOLT;
+
+DCL AFoldingTest /* eine 
+tolle
+Variable */ FIXED;
+
+DCL matrix(1:10, 0:20) FLOAT;
+
+MODEND DEBUG;

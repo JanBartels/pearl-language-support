@@ -17,12 +17,24 @@ export enum AstKind {
 
     OneIdentifierOrList,
     ConstantFixedExpression,
+    ConstantFixedTerm,
+    ConstantFixedFactor,
     DimensionBoundaries,
     DimensionAttribute,
     VirtualDimensionList,
 
+    SimpleType,
+    NamedType,
+
+    ProblemDataAttribute,
+    InitializationAttribute,
+    InitElement,
+
     TypeDeclaration,
     DclDeclaration,
+    DclDeclarationSentence,
+    SemaAttribute,
+    BoltAttribute,
     SpcDeclaration,
     ProcedureDeclaration,
     TaskDeclaration,

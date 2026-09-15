@@ -308,145 +308,147 @@ export class Lexer {
 
   private lexNumber(): Token {
 
-      const start = this.stream.mark();
+    const start = this.stream.mark();
 
-      let hasDigitsBeforeDot = false;
-      let hasDot = false;
-      let hasDigitsAfterDot = false;
-      let hasExponent = false;
+    let hasDigitsBeforeDot = false;
+    let hasDot = false;
+    let hasDigitsAfterDot = false;
+    let hasExponent = false;
 
-      // ------------------------------------------------------------
-      // Ganzzahlteil
-      // ------------------------------------------------------------
+    // ------------------------------------------------------------
+    // Ganzzahlteil
+    // ------------------------------------------------------------
 
-      while (isDigit(this.stream.peek())) {
-          hasDigitsBeforeDot = true;
-          this.stream.next();
-      }
+    while (isDigit(this.stream.peek())) {
+        hasDigitsBeforeDot = true;
+        this.stream.next();
+    }
 
-      // ------------------------------------------------------------
-      // Nachkommateil
-      // ------------------------------------------------------------
+    // ------------------------------------------------------------
+    // Nachkommateil
+    // ------------------------------------------------------------
 
-      if (this.stream.peek() === 46 /* . */) {
+    if (this.stream.peek() === 46 /* . */) {
 
-          hasDot = true;
-          this.stream.next();
+        hasDot = true;
+        this.stream.next();
 
-          while (isDigit(this.stream.peek())) {
-              hasDigitsAfterDot = true;
-              this.stream.next();
-          }
-      }
+        while (isDigit(this.stream.peek())) {
+            hasDigitsAfterDot = true;
+            this.stream.next();
+        }
+    }
 
-      // ------------------------------------------------------------
-      // Exponent
-      // ------------------------------------------------------------
+    // ------------------------------------------------------------
+    // Exponent
+    // ------------------------------------------------------------
 
-      if (this.stream.peek() === 69 /* E */) {
+    if (this.stream.peek() === 69 /* E */) {
 
-          hasExponent = true;
+        hasExponent = true;
 
-          const exponentStart = this.stream.mark();
+        const exponentStart = this.stream.mark();
 
-          this.stream.next();
+        this.stream.next();
 
-          if (this.stream.peek() === 43 /* + */ ||
-              this.stream.peek() === 45 /* - */) {
+        if (this.stream.peek() === 43 /* + */ ||
+            this.stream.peek() === 45 /* - */) {
 
-              this.stream.next();
-          }
+            this.stream.next();
+        }
 
-          if (!isDigit(this.stream.peek())) {
+        if (!isDigit(this.stream.peek())) {
 
-              this.problems.error(
-                  this.location(exponentStart),
-                  "Expected exponent."
-              );
+            this.problems.error(
+                this.location(exponentStart),
+                "Expected exponent."
+            );
 
-          } else {
+        } else {
 
-              while (isDigit(this.stream.peek())) {
-                  this.stream.next();
-              }
-          }
-      }
+            while (isDigit(this.stream.peek())) {
+                this.stream.next();
+            }
+        }
+    }
 
-      // ------------------------------------------------------------
-      // Mindestens vor oder nach dem Punkt müssen Ziffern stehen.
-      // ------------------------------------------------------------
+    // ------------------------------------------------------------
+    // Mindestens vor oder nach dem Punkt müssen Ziffern stehen.
+    // ------------------------------------------------------------
 
-      if (!hasDigitsBeforeDot && !hasDigitsAfterDot) {
+    if (!hasDigitsBeforeDot && !hasDigitsAfterDot) {
 
-          this.problems.error(
-              this.location(start),
-              "Invalid number literal."
-          );
-      }
+        this.problems.error(
+            this.location(start),
+            "Invalid number literal."
+        );
+    }
 
-      // ------------------------------------------------------------
-      // HexDigitSequence?
-      // Nur möglich, wenn kein '.' und kein Exponent vorkam.
-      // ------------------------------------------------------------
+    // ------------------------------------------------------------
+    // HexDigitSequence?
+    // Nur möglich, wenn kein '.' und kein Exponent vorkam.
+    // ------------------------------------------------------------
 
-      if (!hasDot && !hasExponent) {
+    if (!hasDot && !hasExponent) {
 
-          let containsHexLetter = false;
+        let containsHexLetter = false;
 
-          while (true) {
+        while (true) {
 
-              const ch = this.stream.peek();
+            const ch = this.stream.peek();
 
-              if (ch >= 65 /* A */ && ch <= 70 /* F */) {
-                  containsHexLetter = true;
-                  this.stream.next();
-                  continue;
-              }
+            if (ch >= 65 /* A */ && ch <= 70 /* F */) {
+                containsHexLetter = true;
+                this.stream.next();
+                continue;
+            }
 
-              break;
-          }
+            break;
+        }
 
-          if (containsHexLetter) {
+        if (containsHexLetter) {
 
-              if (isIdentifierStart(this.stream.peek())) {
+            if (isIdentifierStart(this.stream.peek())) {
 
-                  this.problems.error(
-                      this.location(start),
-                      "Invalid hexadecimal digit sequence."
-                  );
+                this.problems.error(
+                    this.location(start),
+                    "Invalid hexadecimal digit sequence."
+                );
 
-                  while (isIdentifierPart(this.stream.peek())) {
-                      this.stream.next();
-                  }
-              }
+                while (isIdentifierPart(this.stream.peek())) {
+                    this.stream.next();
+                }
+            }
 
-              return this.createTokenFromSpan(
-                  TokenKind.HexDigitSequence,
-                  start
-              );
-          }
-      }
+            return this.createTokenFromSpan(
+                TokenKind.HexDigitSequence,
+                start
+            );
+        }
+    }
 
-      // ------------------------------------------------------------
-      // Ungültiges NumberLiteral?
-      // ------------------------------------------------------------
+    // ------------------------------------------------------------
+    // Ungültiges numerisches Literal?
+    // ------------------------------------------------------------
 
-      if (isIdentifierStart(this.stream.peek())) {
+    if (isIdentifierStart(this.stream.peek())) {
 
-          this.problems.error(
-              this.location(start),
-              "Invalid number literal."
-          );
+        this.problems.error(
+            this.location(start),
+            "Invalid number literal."
+        );
 
-          while (isIdentifierPart(this.stream.peek())) {
-              this.stream.next();
-          }
-      }
+        while (isIdentifierPart(this.stream.peek())) {
+            this.stream.next();
+        }
+    }
 
-      return this.createTokenFromSpan(
-          TokenKind.NumberLiteral,
-          start
-      );
+    return this.createTokenFromSpan(
+        hasDot || hasExponent
+            ? TokenKind.FloatingPointLiteral
+            : TokenKind.IntegerLiteral,
+        start
+    );
   }
 
   private lexHexLiteral(): Token {

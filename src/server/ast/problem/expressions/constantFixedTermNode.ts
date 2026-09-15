@@ -8,38 +8,38 @@ import { AstNode } from "../../astNode";
 import { SourceValue } from "../../../core/sourceValue";
 
 import { DocumentationProvider } from "../../../documentation/documentationProvider";
-import { ConstantFixedExpressionDocumentationProvider } from "../../../documentation/problem/expressions/constantFixedExpressionDocumentationProvider";
+import { ConstantFixedTermDocumentationProvider } from "../../../documentation/problem/expressions/constantFixedTermDocumentationProvider";
 
-import { ConstantFixedTermNode } from "./constantFixedTermNode";
+import { ConstantFixedFactorNode } from "./constantFixedFactorNode";
 
-export interface ConstantFixedExpressionTail {
+export interface ConstantFixedTermTail {
 
     readonly operator: SourceValue<string>;
-    readonly term: ConstantFixedTermNode;
+    readonly factor: ConstantFixedFactorNode;
 }
 
-export class ConstantFixedExpressionNode extends AstNode {
+export class ConstantFixedTermNode extends AstNode {
 
     private static readonly provider =
-        new ConstantFixedExpressionDocumentationProvider();
+        new ConstantFixedTermDocumentationProvider();
 
     constructor(
-        public readonly firstTerm: ConstantFixedTermNode,
-        public readonly tails: readonly ConstantFixedExpressionTail[]
+        public readonly firstFactor: ConstantFixedFactorNode,
+        public readonly tails: readonly ConstantFixedTermTail[]
     ) {
-        super(AstKind.ConstantFixedExpression);
+        super(AstKind.ConstantFixedTerm);
 
-        this.adopt(firstTerm);
+        this.adopt(firstFactor);
 
         for (const tail of tails) {
-            this.adopt(tail.term);
+            this.adopt(tail.factor);
         }
     }
 
     override documentationProvider():
-        DocumentationProvider<ConstantFixedExpressionNode> {
+        DocumentationProvider<ConstantFixedTermNode> {
 
-        return ConstantFixedExpressionNode.provider;
+        return ConstantFixedTermNode.provider;
     }
 
     override lookupSourceValue(
@@ -47,7 +47,7 @@ export class ConstantFixedExpressionNode extends AstNode {
     ): AstLookupResult | undefined {
 
         const first =
-            this.firstTerm.lookupSourceValue(offset);
+            this.firstFactor.lookupSourceValue(offset);
 
         if (first) {
             return first;
@@ -65,11 +65,11 @@ export class ConstantFixedExpressionNode extends AstNode {
                 return operator;
             }
 
-            const term =
-                tail.term.lookupSourceValue(offset);
+            const factor =
+                tail.factor.lookupSourceValue(offset);
 
-            if (term) {
-                return term;
+            if (factor) {
+                return factor;
             }
         }
 
@@ -79,7 +79,7 @@ export class ConstantFixedExpressionNode extends AstNode {
     public override dumpLabel(): string {
 
         if (this.tails.length === 0) {
-            return "ConstantFixedExpression";
+            return "ConstantFixedTerm";
         }
 
         const operators =
@@ -87,15 +87,14 @@ export class ConstantFixedExpressionNode extends AstNode {
                 .map(tail => tail.operator.value)
                 .join(" ");
 
-        return `ConstantFixedExpression(${operators})`;
+        return `ConstantFixedTerm(${operators})`;
     }
     
     public override getChildren(): readonly AstNode[] {
 
         return [
-            this.firstTerm,
-            ...this.tails.map(tail => tail.term)
+            this.firstFactor,
+            ...this.tails.map(tail => tail.factor)
         ];
     }
-
 }

@@ -5,31 +5,21 @@ import { AstKind } from "../../astKind";
 import { AstLookupResult } from "../../astLookupResult";
 import { AstNode } from "../../astNode";
 
-import { SourceValue } from "../../../core/sourceValue";
-
-import { DocumentationProvider } from "../../../documentation/documentationProvider";
-import { DimensionAttributeDocumentationProvider } from "../../../documentation/problem/dimensions/dimensionAttributeDocumentationProvider";
-
 import { DimensionBoundariesNode } from "./dimensionBoundariesNode";
 
 export class DimensionAttributeNode extends AstNode {
 
-    private static readonly provider =
-        new DimensionAttributeDocumentationProvider();
-
     constructor(
-        public readonly keyword: SourceValue<string>,
-        public readonly dimensions: readonly DimensionBoundariesNode[]
+        public readonly dimensions:
+            readonly DimensionBoundariesNode[]
     ) {
         super(AstKind.DimensionAttribute);
 
         this.adoptAll(dimensions);
     }
 
-    override documentationProvider():
-        DocumentationProvider<DimensionAttributeNode> {
-
-        return DimensionAttributeNode.provider;
+    override documentationProvider(): undefined {
+        return undefined;
     }
 
     override lookupSourceValue(
@@ -38,16 +28,15 @@ export class DimensionAttributeNode extends AstNode {
 
         for (const dimension of this.dimensions) {
 
-            const result = dimension.lookupSourceValue(offset);
+            const result =
+                dimension.lookupSourceValue(offset);
+
             if (result) {
                 return result;
             }
         }
 
-        return this.lookupOwnSourceValue(
-            offset,
-            this.keyword
-        );
+        return undefined;
     }
 
     public override dumpLabel(): string {

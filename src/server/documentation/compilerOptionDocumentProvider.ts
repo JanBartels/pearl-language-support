@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { CompilerOption } from '../lexer';
-import { md } from './markdownUtils';
+import { md } from '../documentation/markdownUtils';
 
 export class CompilerOptionDocumentationProvider {
 

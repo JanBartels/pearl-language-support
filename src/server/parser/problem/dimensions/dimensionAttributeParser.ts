@@ -4,6 +4,7 @@
 import { ParserBase } from "../../parserBase";
 
 import { DimensionAttributeNode } from "../../../ast/problem/dimensions/dimensionAttributeNode";
+import { DimensionBoundariesNode } from "../../../ast/problem/dimensions/dimensionBoundariesNode";
 
 import { DimensionBoundariesParser } from "./dimensionBoundariesParser";
 
@@ -13,35 +14,72 @@ export class DimensionAttributeParser extends ParserBase {
 
         this.skipTrivia();
 
-        const keyword = this.acceptKeyword("DIM");
-        if (!keyword) {
+        if (!this.acceptLeftParenthesis()) {
             return undefined;
         }
 
-        this.expectLeftParenthesis();
+        const dimensions:
+            DimensionBoundariesNode[] = [];
 
-        const dimensions = [];
+        const first =
+            new DimensionBoundariesParser(
+                this.context
+            ).parse();
 
-        while (true) {
+        if (!first) {
+
+            this.problems.error(
+                this.location(),
+                "Expected dimension boundaries."
+            );
+
+            this.synchronize([
+                ")"
+            ]);
+
+            this.acceptRightParenthesis();
+
+            return new DimensionAttributeNode(
+                dimensions
+            );
+        }
+
+        dimensions.push(first);
+
+        while (this.acceptComma()) {
 
             const dimension =
-                new DimensionBoundariesParser(this.context).parse();
+                new DimensionBoundariesParser(
+                    this.context
+                ).parse();
 
             if (!dimension) {
+
+                this.problems.error(
+                    this.location(),
+                    "Expected dimension boundaries after ','."
+                );
+
+                this.synchronize([
+                    ")"
+                ]);
+
                 break;
             }
 
             dimensions.push(dimension);
-
-            if (!this.acceptComma()) {
-                break;
-            }
         }
 
-        this.expectRightParenthesis();
+        if (!this.expectRightParenthesis()) {
+
+            this.synchronize([
+                ")"
+            ]);
+
+            this.acceptRightParenthesis();
+        }
 
         return new DimensionAttributeNode(
-            this.tokenValue(keyword),
             dimensions
         );
     }

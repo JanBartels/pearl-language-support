@@ -1,17 +1,59 @@
-MODE=NOLSTOP;
-SC=2000;
 
+! Einzeiliger Kommentar
+
+/* Mehrzeiliger
+Kommentar
+DCL A FIXED;
+*/
+
+!MODE=NOLSTOP;
+!SC=2000;
+
+/*+M*/
+/*+T*/
+/*+D=1000*/
+
+#define Mod "MODULE huhu"
+!Mod;
 MODULE huhu;
+!SHELLMODULE huhu;
+
+aloha: 'he';
+hallo: 'welt';
 
 SYSTEM;
-   A1: <->;
+   A1;
+   MyEv: EV(12345678);
 
 PROBLEM;
-   SPC A1 DATION INOUT ALPHIC;
+!   SPC A1 DATION INOUT ALPHIC;
+
+TYPE Counter FIXED(31);
+
+DCL x FIXED;
+DCL y Counter;
+DCL (a, b) FLOAT(55);
+DCL flag BIT,
+    text CHAR(20),
+    interval DURATION;
+
+TYPE Counter FIXED;
+TYPE LongCounter FIXED(31);
+TYPE Real FLOAT(55);
+TYPE Flag BIT;
+TYPE Flags BIT(16);
+TYPE Text CHAR(80);
+TYPE OtherText CHARACTER(40);
+TYPE Time CLOCK;
+TYPE Interval DURATION;
 
 DCL Start FIXED;
 
 DCL MySema SEMA;
+
+DCL AFoldingTest /* eine 
+tolle
+Variable */ FIXED;
 
 PP2: PROC( A FIXED, B FIXED );
   A := 1;
@@ -56,7 +98,7 @@ DCL (
 #define ghi "fehler"
 #undef nohave
 
-#huhu
+  #huhu
 
 
 /* 
@@ -106,6 +148,7 @@ DCL Var FIXED;  ! Verwendung per Makro defVar
 
 #define defVarName "VarMacro"
 DCL defVarName FIXED;
+DCL EinStringKeinMacro CHAR(255) INIT('VarMacro');
 
 DCL MyTestStruct TestStruct;
 
@@ -294,7 +337,7 @@ CALL something;
 /* Einzeiliger Kommentar */
 
 ! Wenn man hier hinter einen Kommentar beginnt, crasht es. Bedingung: Es ist der letzte Kommentar vor Dateiende
-! /* 
+!/* 
 
 SPC P2 PROC( FIXED, FIXED );
 
@@ -303,8 +346,8 @@ T2: TASK;
    P2(1,2);
 END;
 
-P2: PROC( A FIXED, B FIXED );
+P2: PROC /*+G*/ ( A FIXED, B FIXED );
   A := 1;
 END;
 
-MODEND;
+MODEND DEBUG;

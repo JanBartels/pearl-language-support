@@ -1,37 +1,86 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
-import { ParserBase } from '../parserBase';
-import { ProblemPartNode } from '../../ast/problem/problemPartNode';
+import { ParserBase } from "../parserBase";
+
+import { ProblemPartNode } from "../../ast/problem/problemPartNode";
+
+import { TypeDeclarationParser } from "./declarations/typeDeclarationParser";
+import { DclDeclarationParser } from "./declarations/dclDeclarationParser";
 
 export class ProblemPartParser extends ParserBase {
 
-    parse(): ProblemPartNode | undefined {
+    override parse(): ProblemPartNode | undefined {
 
         this.skipTrivia();
-        const problemKeyword = this.acceptKeyword("PROBLEM");
+
+        const problemKeyword =
+            this.acceptKeyword("PROBLEM");
+
         if (!problemKeyword) {
             return undefined;
         }
 
         const node = new ProblemPartNode(
-            this.tokenValue( problemKeyword )
+            this.tokenValue(problemKeyword)
         );
 
-        this.skipTrivia();
-        if (!this.expectOperator(";")) {
+        if (!this.expectSemicolon()) {
             this.synchronize([
+                "TYPE",
+                "DCL",
+                "DECLARE",
                 "MODEND"
             ]);
         }
 
         while (!this.eof()) {
 
+            this.skipTrivia();
+
             if (this.isKeyword("MODEND")) {
                 break;
             }
 
-            this.next();
+            const typeDeclaration =
+                new TypeDeclarationParser(
+                    this.context
+                ).parse();
+
+            if (typeDeclaration) {
+                node.addChild(typeDeclaration);
+                continue;
+            }
+
+            const dclDeclaration =
+                new DclDeclarationParser(
+                    this.context
+                ).parse();
+
+            if (dclDeclaration) {
+                node.addChild(dclDeclaration);
+                continue;
+            }
+
+            this.problems.error(
+                this.location(),
+                `Unsupported PROBLEM declaration '${this.tokenText()}'.`
+            );
+
+            /*
+             * Weitere PROBLEM-Produktionen sind noch nicht
+             * implementiert.
+             *
+             * Nicht tokenweise nach bekannten Produktionen suchen,
+             * da sonst beispielsweise TYPE oder DCL innerhalb einer
+             * noch nicht geparsten TASK oder PROC fälschlich als
+             * Deklaration auf Modulebene erkannt werden könnten.
+             */
+            this.synchronize([
+                "MODEND"
+            ]);
+
+            break;
         }
 
         return node;

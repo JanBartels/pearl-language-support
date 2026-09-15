@@ -5,13 +5,13 @@ import { DocumentationProvider } from "../../documentationProvider";
 import { AstLookupResult } from "../../../ast/astLookupResult";
 import { md } from "../../markdownUtils";
 
-import { ConstantFixedExpressionNode } from "../../../ast/problem/expressions/constantFixedExpressionNode";
+import { ConstantFixedTermNode } from "../../../ast/problem/expressions/constantFixedTermNode";
 
-export class ConstantFixedExpressionDocumentationProvider
-    extends DocumentationProvider<ConstantFixedExpressionNode> {
+export class ConstantFixedTermDocumentationProvider
+    extends DocumentationProvider<ConstantFixedTermNode> {
 
     override getDocumentation(
-        node: ConstantFixedExpressionNode,
+        node: ConstantFixedTermNode,
         lookup: AstLookupResult
     ): string | undefined {
 
@@ -24,25 +24,31 @@ export class ConstantFixedExpressionDocumentationProvider
             return undefined;
         }
 
-        switch (tail.operator.value) {
+        switch (tail.operator.value.toUpperCase()) {
 
-            case "+":
+            case "*":
                 return md`
-# Addition
+# Multiplication
 
-Addition operator in a constant FIXED expression.
+Multiplication operator in a constant FIXED expression.
 `;
 
-            case "-":
+            case "//":
                 return md`
-# Subtraction
+# Integer division
 
-Subtraction operator in a constant FIXED expression.
+Integer division operator in a constant FIXED expression.
+`;
+
+            case "REM":
+                return md`
+# REM
+
+Remainder operator in a constant FIXED expression.
 `;
 
             default:
                 return undefined;
         }
     }
-
 }

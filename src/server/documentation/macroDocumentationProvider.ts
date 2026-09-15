@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { MacroReference } from '../preproc/macroReference';
-import { md } from './markdownUtils';
+import { md } from '../documentation/markdownUtils';
 
 export class MacroDocumentationProvider {
 

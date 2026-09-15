@@ -18,8 +18,11 @@ export enum TokenKind {
   /** Bezeichner (Schlüsselwörter werden zunächst ebenfalls als Identifier erkannt) */
   Identifier,
 
-  /** Numerisches Literal */
-  NumberLiteral,
+  /** Ganzzahliges numerisches Literal */
+  IntegerLiteral,
+
+  /** Gleitkomma-Literal */
+  FloatingPointLiteral,
 
   /** Zeichenkettenliteral */
   StringLiteral,

@@ -20,9 +20,14 @@ const RESERVED_WORDS = new Set<string>([
   'AT',
   'BASIC',
   'BEGIN',
+  'BIT',
+  'BOLT',
   'BY',
   'CALL',
   'CASE',
+  'CHAR',
+  'CHARACTER',
+  'CLOCK',
   'CLOSE',
   'CONT',
   'CONTINUE',
@@ -31,12 +36,16 @@ const RESERVED_WORDS = new Set<string>([
   'CREATE',
   'CREATED',
   'CYCLIC',
+  'DATION',
   'DECLARE',
   'DCL',
   'DELETE',
   'DIM',
   'DIRECT',
   'DISABLE',
+  'DUR',
+  'DURATION',
+  'DURING',
   'ELSE',
   'ENABLE',
   'END',
@@ -45,6 +54,9 @@ const RESERVED_WORDS = new Set<string>([
   'EVERY',
   'EXIT',
   'FIN',
+  'FIT',
+  'FIXED',
+  'FLOAT',
   'FOR',
   'FORBACK',
   'FORMAT',
@@ -55,8 +67,8 @@ const RESERVED_WORDS = new Set<string>([
   'GLOBAL',
   'GOTO',
   'HRS',
-  'IDENTICAL',
   'IDENT',
+  'IDENTICAL',
   'IDF',
   'IF',
   'IN',
@@ -66,9 +78,12 @@ const RESERVED_WORDS = new Set<string>([
   'INLINE',
   'INOUT',
   'INTFAC',
+  'INTERRUPT',
+  'IRPT',
   'INV',
   'LEAVE',
   'LENGTH',
+  'MAIN',
   'MATCH',
   'MAX',
   'MIN',
@@ -86,16 +101,17 @@ const RESERVED_WORDS = new Set<string>([
   'PRECEDENCE',
   'PRESET',
   'PREVENT',
-  'PRIORITY',
   'PRIO',
+  'PRIORITY',
   'PROBLEM',
-  'PROCEDURE',
   'PROC',
+  'PROCEDURE',
   'PUT',
   'READ',
   'REENT',
   'REF',
   'RELEASE',
+  'REM',
   'REPEAT',
   'REQUEST',
   'RESERVE',
@@ -104,12 +120,13 @@ const RESERVED_WORDS = new Set<string>([
   'RETURN',
   'RETURNS',
   'SEC',
+  'SEMA',
   'SEMASET',
   'SEND',
   'SHELLMODULE',
   'SIGNAL',
-  'SPECIFY',
   'SPC',
+  'SPECIFY',
   'STREAM',
   'STRUCT',
   'SUSPEND',
@@ -121,6 +138,7 @@ const RESERVED_WORDS = new Set<string>([
   'TFU',
   'THEN',
   'TO',
+  'TOFIXED',  
   'TRIGGER',
   'TRY',
   'TYPE',
@@ -399,11 +417,84 @@ export abstract class ParserBase {
         return undefined;
     }
 
+    protected isIntegerLiteral(
+        token: Token = this.current()
+    ): boolean {
+
+        return this.tokenKind(token) === TokenKind.IntegerLiteral;
+    }
+
+    protected acceptIntegerLiteral(): Token | undefined {
+
+        const token = this.current();
+
+        if (!this.isIntegerLiteral(token)) {
+            return undefined;
+        }
+
+        this.next();
+        return token;
+    }
+
+    protected expectIntegerLiteral(message?: string): Token | undefined {
+
+        const token = this.current();
+
+        if (this.isIntegerLiteral(token)) {
+            this.next();
+            return token;
+        }
+
+        this.context.problems.error(
+            this.location(token),
+            message ?? "Expected integer literal."
+        );
+
+        return undefined;
+    }
+
+    protected isFloatingPointLiteral(
+        token: Token = this.current()
+    ): boolean {
+
+        return this.tokenKind(token) === TokenKind.FloatingPointLiteral;
+    }
+
+    protected acceptFloatingPointLiteral(): Token | undefined {
+
+        const token = this.current();
+
+        if (!this.isFloatingPointLiteral(token)) {
+            return undefined;
+        }
+
+        this.next();
+        return token;
+    }
+
+    protected expectFloatingPointLiteral(message?: string): Token | undefined {
+
+        const token = this.current();
+
+        if (this.isFloatingPointLiteral(token)) {
+            this.next();
+            return token;
+        }
+
+        this.context.problems.error(
+            this.location(token),
+            message ?? "Expected floating point literal."
+        );
+
+        return undefined;
+    }
+
     protected isNumberLiteral(
         token: Token = this.current()
     ): boolean {
 
-        return this.tokenKind(token) === TokenKind.NumberLiteral;
+        return this.isIntegerLiteral(token)
+            || this.isFloatingPointLiteral(token);
     }
 
     protected acceptNumberLiteral(): Token | undefined {
@@ -433,7 +524,7 @@ export abstract class ParserBase {
         );
 
         return undefined;
-    }    
+    }
 
     protected validateIntegerLiteral(
         literal: SourceValue<string> | undefined,
@@ -870,13 +961,13 @@ export abstract class ParserBase {
      * Liest eine Hexzahl für BU(...) und EV(...).
      *
      * PEARL erlaubt an diesen Stellen Hexzahlen ohne '$'-Präfix.
-     * Daher werden sowohl NumberLiteral (nur Ziffern) als auch
-     * HexDigitSequence (enthält A...F) akzeptiert.
+     * Daher werden numerische Literale über acceptNumberLiteral()
+     * sowie HexDigitSequence (enthält A...F) akzeptiert.
      */
     protected parseHexNumber(
         message?: string
     ): SourceValue<string> | undefined {
-
+        
         const number = this.acceptNumberLiteral();
         if (number) {
             return this.tokenValue(number);

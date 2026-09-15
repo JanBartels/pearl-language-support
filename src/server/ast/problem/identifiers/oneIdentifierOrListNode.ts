@@ -49,7 +49,12 @@ export class OneIdentifierOrListNode extends AstNode {
     }
 
     public override dumpLabel(): string {
-        return `Identifiers(${this.identifiers.length})`;
+        const names =
+                this.identifiers
+                    .map(identifier => identifier.value)
+                    .join(", ");
+
+        return `Identifiers(${this.identifiers.length}: ${names})`;
     }
 
     public override getChildren(): readonly AstNode[] {
