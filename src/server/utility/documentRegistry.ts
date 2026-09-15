@@ -26,7 +26,13 @@ export class DocumentRegistry {
 
   // Validierungs-Ergebnis
   private readonly analysisResults =
-    new Map<string, AnalysisResult>();
+    new Map<
+        string,
+        {
+            version: number;
+            result: AnalysisResult;
+        }
+    >();
 
   constructor(documents: TextDocuments<TextDocument>) {
     this.documents = documents;
@@ -89,8 +95,6 @@ export class DocumentRegistry {
 
     const visited = new Set<string>();
     this.invalidateRecursive(uri, visited);
-    
-    this.clearAnalysisResult(uri);
   }
 
   private invalidateRecursive(
@@ -106,6 +110,7 @@ export class DocumentRegistry {
 
       const fsPath = filePathFromUri(uri);
       this.includeCache.delete(fsPath);
+      this.clearAnalysisResult(uri);
 
       for (const parent of this.includedBy.get(uri) ?? []) {
           this.invalidateRecursive(parent, visited);
@@ -160,18 +165,37 @@ export class DocumentRegistry {
   }
 
   setAnalysisResult(
-      uri: string,
-      result: AnalysisResult
+    uri: string,
+    version: number,
+    result: AnalysisResult
   ): void {
 
-      this.analysisResults.set(uri, result);
+      this.analysisResults.set(
+          uri,
+          {
+              version,
+              result
+          }
+      );
   }
 
   getAnalysisResult(
-      uri: string
+      uri: string,
+      version: number
   ): AnalysisResult | undefined {
 
-      return this.analysisResults.get(uri);
+      const entry =
+          this.analysisResults.get(uri);
+
+      if (!entry) {
+          return undefined;
+      }
+
+      if (entry.version !== version) {
+          return undefined;
+      }
+
+      return entry.result;
   }
 
   clearAnalysisResult(

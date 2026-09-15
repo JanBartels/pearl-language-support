@@ -28,7 +28,6 @@ import {
   WorkspaceFolder,
   DidChangeConfigurationNotification,
   TextDocumentSyncKind,
-  CompletionItemKind,
   DiagnosticSeverity,
   DiagnosticTag,
   Hover,
@@ -102,7 +101,7 @@ connection.onInitialize((params: InitializeParams) => {
           changeNotifications: true,
         },
       },      
-      completionProvider: { resolveProvider: true },
+//      completionProvider: { resolveProvider: true },
       hoverProvider: true,
       definitionProvider: true,
       foldingRangeProvider: true,
@@ -131,7 +130,7 @@ connection.onHover(params => {
         return undefined;
     }
 
-    const analysisResult = documentRegistry.getAnalysisResult(params.textDocument.uri);
+    const analysisResult = documentRegistry.getAnalysisResult(params.textDocument.uri, document.version );
     if (!analysisResult) {
       return undefined;
     }
@@ -193,7 +192,7 @@ connection.onDefinition(params => {
     }
 
     const analysisResult =
-        documentRegistry.getAnalysisResult(params.textDocument.uri);
+        documentRegistry.getAnalysisResult(params.textDocument.uri, document.version );
     if (!analysisResult) {
         return undefined;
     }
@@ -230,7 +229,7 @@ connection.onFoldingRanges((params) => {
     }
 
     const analysisResult =
-        documentRegistry.getAnalysisResult(params.textDocument.uri);
+        documentRegistry.getAnalysisResult(params.textDocument.uri, document.version );
     if (!analysisResult) {
         return [];
     }
@@ -293,12 +292,31 @@ connection.languages.semanticTokens.on(async (params) => {
 
 async function validateAndPublish(document: TextDocument): Promise<void> {
   try {
-    const settings = await settingsManager.getDocumentSettings(document.uri);
+    const snapshot = TextDocument.create(
+      document.uri,
+      document.languageId,
+      document.version,
+      document.getText()
+    );
 
-    const result = await validator.analyze(document, settings);
+    const settings = await settingsManager.getDocumentSettings(snapshot.uri);
+
+    const result = await validator.analyze(snapshot, settings);
+
+    // Während der Analyse kann bereits eine neuere Dokumentversion
+    // eingetroffen sein. In diesem Fall darf das veraltete Ergebnis
+    // weder gespeichert noch als Diagnostics veröffentlicht werden.
+    const currentDocument = documentRegistry.get(snapshot.uri);
+
+    if (
+        !currentDocument ||
+        currentDocument.version !== snapshot.version
+    ) {
+        return;
+    }
 
     // Analyse für spätere LSP-Features zwischenspeichern.
-    documentRegistry.setAnalysisResult(document.uri, result);
+    documentRegistry.setAnalysisResult(snapshot.uri, snapshot.version, result);
 
     // aktuelle Diagnostics melden
     const oldUris = documentRegistry.takeReportedDiagnosticUris();
@@ -351,6 +369,7 @@ const uri = event.document.uri;
 
   semanticTokenService.clear(uri);
   settingsManager.clearDocument(uri);
+  documentRegistry.clearAnalysisResult(uri);
 
   connection.sendDiagnostics({
     uri,
@@ -361,6 +380,10 @@ const uri = event.document.uri;
 connection.onDidChangeWatchedFiles((event) => {
   for (const change of event.changes) {
     documentRegistry.invalidateUri(change.uri);
+  }
+
+  for (const document of documents.all()) {
+    void validateAndPublish(document);
   }
 });
 
@@ -377,4 +400,3 @@ for (const document of documents.all()) {
 
 documents.listen(connection);
 connection.listen();
-
