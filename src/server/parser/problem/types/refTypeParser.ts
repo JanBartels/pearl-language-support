@@ -3,34 +3,54 @@
 
 import { ParserBase } from "../../parserBase";
 
-import { ProblemDataTypeNode } from "../../../ast/problem/types/problemDataTypeNode";
+import {
+    RefTargetTypeNode,
+    RefTypeNode
+} from "../../../ast/problem/types/refTypeNode";
 
 import { SimpleTypeParser } from "./simpleTypeParser";
 import { StructTypeParser } from "./structTypeParser";
 import { NamedTypeParser } from "./namedTypeParser";
-import { RefTypeParser } from "./refTypeParser";
 
-export class ProblemDataTypeParser extends ParserBase {
+export class RefTypeParser extends ParserBase {
 
-    override parse(): ProblemDataTypeNode | undefined {
+    override parse(): RefTypeNode | undefined {
 
         this.skipTrivia();
 
+        const keyword = this.acceptKeyword("REF");
+
+        if (!keyword) {
+            return undefined;
+        }
+
+        const target = this.parseTarget();
+
+        if (!target) {
+
+            this.problems.error( this.location(), "Expected referenced type after 'REF'." );
+
+            return undefined;
+        }
+
+        return new RefTypeNode( this.tokenValue(keyword), target );
+    }
+
+    private parseTarget(): RefTargetTypeNode | undefined {
+
         const simpleType = new SimpleTypeParser( this.context ).parse();
+
         if (simpleType) {
             return simpleType;
         }
 
         const structType = new StructTypeParser( this.context ).parse();
+
         if (structType) {
             return structType;
         }
 
-        const refType = new RefTypeParser( this.context ).parse();
-        if (refType) {
-            return refType;
-        }
-
         return new NamedTypeParser( this.context ).parse();
     }
+
 }

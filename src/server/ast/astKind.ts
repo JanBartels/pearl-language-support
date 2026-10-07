@@ -40,6 +40,7 @@ export enum AstKind {
     TaskDeclaration,
 
     StructType,
+    StructComponent,
     RefType,
 
     Block,

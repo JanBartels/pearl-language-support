@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
-import { AnalysisResult } from './analysisResult';  
+import { AnalysisResult } from './analysisResult';
 import { Analysis } from './analysis';
 import { FileSource } from '../source/fileSource';
 import { Lexer } from '../lexer/lexer';
@@ -13,7 +13,7 @@ import { PreprocessorContext } from '../preproc/preprocessorContext';
 import { MacroTable } from '../preproc/macroTable';
 import { MacroReference } from '../preproc/macroReference';
 import { PreprocessorConditionalBlockStack } from '../preproc/preprocessorConditionalBlockStack';
-import { PreprocessorConditionalBlockCollection } from "../preproc/preprocessorConditionalBlockCollection";
+import { PreprocessorConditionalBlockCollection } from '../preproc/preprocessorConditionalBlockCollection';
 
 import { Parser } from '../parser/parser';
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -25,114 +25,166 @@ import { ConditionalStack } from '../preproc/conditionalStack';
 
 import { AstDumper } from '../ast/astDumper';
 
+import { SemanticAnalyzer } from '../semantic/semanticAnalyzer';
+import {
+    SemanticDiagnostic,
+    SemanticDiagnosticSeverity
+} from '../semantic/semanticDiagnostic';
+
+
 const DUMP_AST: boolean = true;
+
 
 export class Validator {
 
-  constructor(
-    private workspaceManager: WorkspaceManager,
-    private documentRegistry: DocumentRegistry,
-    private logger: Logger
-  ) {}
-
-  async analyze(
-    document: TextDocument,
-    settings: PearlSettings
-  ): Promise<AnalysisResult> {
-
-    this.logger.debug?.(`Analyzing ${document.uri}`);
-    this.logger.debug?.('[pearl] settings = ' + JSON.stringify(settings));
-
-    const problems = new ProblemCollection();
-    const macroReferences: MacroReference[] = [];
-    const preprocessorConditionalBlocks = new PreprocessorConditionalBlockCollection();
+    constructor(
+        private workspaceManager: WorkspaceManager,
+        private documentRegistry: DocumentRegistry,
+        private logger: Logger
+    ) {}
 
 
-    // ----------------------------
-    // vordefinierte Macros anlegen
-    // ----------------------------
+    async analyze(
+        document: TextDocument,
+        settings: PearlSettings
+    ): Promise<AnalysisResult> {
 
-    const macroTable = new MacroTable();
-    for (const [name, value] of Object.entries(settings.macros ?? {})) {
-        macroTable.define(
-            name,
-            value === "" ? null : value
+        this.logger.debug?.(`Analyzing ${document.uri}`);
+        this.logger.debug?.('[pearl] settings = ' + JSON.stringify(settings));
+
+        const problems = new ProblemCollection();
+        const macroReferences: MacroReference[] = [];
+        const preprocessorConditionalBlocks = new PreprocessorConditionalBlockCollection();
+
+        // ----------------------------
+        // vordefinierte Macros anlegen
+        // ----------------------------
+
+        const macroTable = new MacroTable();
+
+        for (const [name, value] of Object.entries(settings.macros ?? {})) {
+            macroTable.define(
+                name,
+                value === '' ? null : value
+            );
+        }
+
+        // ----------------------------
+        // Lexer
+        // ----------------------------
+
+        const fileSource = FileSource.fromDocument(document);
+
+        const lexer = new Lexer(
+            fileSource,
+            problems,
+            this.logger
+        );
+
+        const tokens = lexer.tokenize();
+
+        // ----------------------------
+        // Preprocessor + Parser
+        // ----------------------------
+
+        const context = new PreprocessorContext(
+            this.documentRegistry,
+            macroTable,
+            new ConditionalStack(),
+            new PreprocessorConditionalBlockStack(),
+            preprocessorConditionalBlocks
+        );
+
+        const preprocessor = Preprocessor.create(
+            tokens,
+            fileSource,
+            context,
+            problems,
+            macroReferences,
+            preprocessorConditionalBlocks,
+            this.logger
+        );
+
+        const parser = new Parser(
+            preprocessor,
+            problems,
+            this.logger
+        );
+
+        const ast = parser.parse();
+
+        if (DUMP_AST) {
+            this.logger.debug?.(
+                AstDumper.dump(ast)
+            );
+        }
+
+        // ----------------------------
+        // Semantik
+        // ----------------------------
+
+        const semanticAnalyzer = new SemanticAnalyzer();
+        const semanticContext = semanticAnalyzer.analyze(ast);
+
+        this.addSemanticDiagnostics(
+            problems,
+            semanticContext.diagnostics
+        );
+
+        // ----------------------------
+        // Analysis
+        // ----------------------------
+
+        this.logger.debug?.(
+            `Analysis finished: ${problems.size()} problems`
+        );
+
+        const analysis = new Analysis(
+            fileSource,
+            tokens,
+            ast,
+            problems,
+            macroReferences,
+            preprocessorConditionalBlocks,
+            semanticContext
+        );
+
+        return AnalysisResult.create(
+            analysis,
+            [analysis]
         );
     }
 
-    // ----------------------------
-    // Lexer
-    // ----------------------------
 
-    const fileSource = FileSource.fromDocument(document);
-    
-    const lexer = new Lexer(fileSource, problems, this.logger);
+    private addSemanticDiagnostics(
+        problems: ProblemCollection,
+        diagnostics: readonly SemanticDiagnostic[]
+    ): void {
 
-    const tokens = lexer.tokenize();
+        for (const diagnostic of diagnostics) {
 
-    // ----------------------------
-    // Preprocessor + Parser
-    // ----------------------------
+            switch (diagnostic.severity) {
 
-    const context = new PreprocessorContext(
-      this.documentRegistry,
-      macroTable,
-      new ConditionalStack(),
-      new PreprocessorConditionalBlockStack
-    );
+                case SemanticDiagnosticSeverity.Error:
+                    problems.error(
+                        diagnostic.location,
+                        diagnostic.message
+                    );
+                    break;
 
-    const preprocessor = Preprocessor.create(
-        tokens,
-        fileSource,
-        context,
-        problems,
-        macroReferences,
-        preprocessorConditionalBlocks,
-        this.logger
-    );
-
-    const parser = new Parser(
-      preprocessor,
-      problems,
-      this.logger
-    );
-
-    const ast = parser.parse();
-    if ( DUMP_AST ) {
-      this.logger.debug?.(
-        AstDumper.dump(ast)
-      );
+                case SemanticDiagnosticSeverity.Warning:
+                    problems.warning(
+                        diagnostic.location,
+                        diagnostic.message
+                    );
+                    break;
+            }
+        }
     }
 
-    // Semantik kommt später
-    // analysis.semanticContext = semantic.analyze(ast);
 
-    // ----------------------------
-    // Analysis
-    // ----------------------------
-
-    this.logger.debug?.(
-      `Analysis finished: ${problems.size()} problems`
-    );
-
-    const analysis = new Analysis(
-        fileSource,
-        tokens,
-        ast,
-        problems,
-        macroReferences,
-        preprocessorConditionalBlocks
-    );
-
-    return AnalysisResult.create(
-        analysis,
-        [analysis]
-    );
-  }
-  
-  handleConfigurationChanged(): void {
-    this.logger.debug?.('Configuration changed – invalidating include cache');
-    this.documentRegistry.invalidateAllIncludes();
-  }
-
+    handleConfigurationChanged(): void {
+        this.logger.debug?.('Configuration changed – invalidating include cache');
+        this.documentRegistry.invalidateAllIncludes();
+    }
 }

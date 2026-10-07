@@ -3,7 +3,13 @@
 
 import { SimpleTypeNode } from "./simpleTypeNode";
 import { NamedTypeNode } from "./namedTypeNode";
+import { StructTypeNode } from "./structTypeNode";
+import { RefTypeNode } from "./refTypeNode";
 
 export type ProblemDataTypeNode =
-    SimpleTypeNode
-    | NamedTypeNode;
+    | SimpleTypeNode
+    | NamedTypeNode
+    | StructTypeNode
+    | RefTypeNode
+    ;
+    

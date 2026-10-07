@@ -28,6 +28,29 @@ SYSTEM;
 PROBLEM;
 !   SPC A1 DATION INOUT ALPHIC;
 
+DCL R1 REF FIXED;
+DCL R2 REF Person;
+DCL R3 REF STRUCT[
+    Value FIXED
+];
+DCL R4 REF STRUCT[];
+
+TYPE Node STRUCT[
+    Value FIXED,
+    Next REF Node
+];
+
+TYPE Counter FIXED; 
+
+TYPE Person STRUCT[
+    Name CHAR(20),
+    Age FIXED
+];
+
+TYPE Matrix(10, 20) FLOAT;
+
+TYPE Vector(10) Counter;
+
 DCL Limit INV FIXED INIT(10);
 DCL End INV FIXED INIT(-1);
 DCL Warn INV FIXED INIT(Limit - Limit // 10);

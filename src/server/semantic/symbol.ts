@@ -1,14 +1,74 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
-import { SymbolKind  } from "./symbolKind";
-import { AstNode } from '../ast/astNode';
+import { SourceValue } from '../core/sourceValue';
+import type { SemanticType } from './semanticType';
+import { SymbolKind } from './symbolKind';
 
-export interface Symbol {
-
-    readonly name: string;
+export interface SymbolBase {
 
     readonly kind: SymbolKind;
 
-    readonly declaration: AstNode;
+    readonly name: SourceValue<string>;
 }
+
+export interface ModuleSymbol extends SymbolBase {
+
+    readonly kind: SymbolKind.Module;
+}
+
+export interface TypeSymbol extends SymbolBase {
+
+    readonly kind: SymbolKind.Type;
+}
+
+export interface DataObjectSymbol extends SymbolBase {
+
+    readonly kind: SymbolKind.DataObject;
+
+    readonly type: SemanticType;
+
+    readonly assignmentProtected: boolean;
+}
+
+export interface ParameterSymbol extends SymbolBase {
+
+    readonly kind: SymbolKind.Parameter;
+}
+
+export interface IdentificationSymbol extends SymbolBase {
+
+    readonly kind: SymbolKind.Identification;
+}
+
+export interface ProcedureSymbol extends SymbolBase {
+
+    readonly kind: SymbolKind.Procedure;
+}
+
+export interface TaskSymbol extends SymbolBase {
+
+    readonly kind: SymbolKind.Task;
+}
+
+export interface LoopControlVariableSymbol extends SymbolBase {
+
+    readonly kind: SymbolKind.LoopControlVariable;
+}
+
+export interface LabelSymbol extends SymbolBase {
+
+    readonly kind: SymbolKind.Label;
+}
+
+export type SemanticSymbol =
+    | ModuleSymbol
+    | TypeSymbol
+    | DataObjectSymbol
+    | ParameterSymbol
+    | IdentificationSymbol
+    | ProcedureSymbol
+    | TaskSymbol
+    | LoopControlVariableSymbol
+    | LabelSymbol
+    ;

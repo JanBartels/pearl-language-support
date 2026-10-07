@@ -5,23 +5,19 @@ export enum SymbolKind {
 
     Module,
 
+    Type,
+
+    DataObject,
+
+    Parameter,
+
+    Identification,
+
     Procedure,
 
     Task,
 
-    Type,
+    LoopControlVariable,
 
-    Variable,
-
-    Parameter,
-
-    Label,
-
-    Semaphore,
-
-    Bolt,
-
-    Dation,
-
-    Interrupt
+    Label
 }
