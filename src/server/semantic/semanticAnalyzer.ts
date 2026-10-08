@@ -6,6 +6,8 @@ import type { AstNode } from '../ast/astNode';
 import type { SourceValue } from '../core/sourceValue';
 import { TypeDeclarationNode } from '../ast/problem/declarations/typeDeclarationNode';
 import { ConstantFixedExpressionNode } from '../ast/problem/expressions/constantFixedExpressionNode';
+import { ConstantFixedTermNode } from '../ast/problem/expressions/constantFixedTermNode';
+import { ConstantFixedFactorNode } from '../ast/problem/expressions/constantFixedFactorNode';
 import { DimensionAttributeNode } from '../ast/problem/dimensions/dimensionAttributeNode';
 import { DimensionBoundariesNode } from '../ast/problem/dimensions/dimensionBoundariesNode';
 import type { Environment } from './environment';
@@ -63,15 +65,135 @@ class SemanticAnalysisState implements SemanticTypeResolverContext {
         expression: ConstantFixedExpressionNode,
         environment: Environment
     ): number | undefined {
-        void environment;
+        let value = this.evaluateConstantFixedTerm(expression.firstTerm, environment);
 
-        const value = Number(expression.literal.value);
-
-        if (!Number.isSafeInteger(value)) {
+        if (value === undefined) {
             return undefined;
         }
 
+        for (const tail of expression.tails) {
+            const right = this.evaluateConstantFixedTerm(tail.term, environment);
+
+            if (right === undefined) {
+                return undefined;
+            }
+
+            switch (tail.operator.value) {
+                case "+":
+                    value += right;
+                    break;
+
+                case "-":
+                    value -= right;
+                    break;
+
+                default:
+                    return undefined;
+            }
+
+            if (!Number.isSafeInteger(value)) {
+                return undefined;
+            }
+        }
+
         return value;
+    }
+
+    private evaluateConstantFixedTerm(
+        term: ConstantFixedTermNode,
+        environment: Environment
+    ): number | undefined {
+        let value = this.evaluateConstantFixedFactor(term.firstFactor, environment);
+
+        if (value === undefined) {
+            return undefined;
+        }
+
+        for (const tail of term.tails) {
+            const right = this.evaluateConstantFixedFactor(tail.factor, environment);
+
+            if (right === undefined) {
+                return undefined;
+            }
+
+            switch (tail.operator.value) {
+                case "*":
+                    value *= right;
+                    break;
+
+                case "//":
+                    if (right === 0) {
+                        return undefined;
+                    }
+
+                    value = Math.trunc(value / right);
+                    break;
+
+                case "REM":
+                    if (right === 0) {
+                        return undefined;
+                    }
+
+                    value %= right;
+                    break;
+
+                default:
+                    return undefined;
+            }
+
+            if (!Number.isSafeInteger(value)) {
+                return undefined;
+            }
+        }
+
+        return value;
+    }
+
+    private evaluateConstantFixedFactor(
+        factor: ConstantFixedFactorNode,
+        environment: Environment
+    ): number | undefined {
+        let value: number | undefined;
+
+        switch (factor.operand.kind) {
+            case "integer":
+                value = Number(factor.operand.literal.value);
+                break;
+
+            case "parenthesized":
+                value = this.evaluateConstantFixedExpression(factor.operand.expression, environment);
+                break;
+
+            case "identifier":
+                /*
+                 * Benannte FIXED-Konstanten werden mit der DCL-Semantik aufgelöst.
+                 */
+                return undefined;
+
+            case "toFixedCharacter":
+            case "toFixedBit":
+                /*
+                 * TOFIXED wird später ergänzt.
+                 */
+                return undefined;
+        }
+
+        if (value === undefined || !Number.isSafeInteger(value)) {
+            return undefined;
+        }
+
+        if (factor.sign?.value === "-") {
+            value = -value;
+        }
+
+        /*
+         * FIT wird später ergänzt.
+         */
+        if (factor.fit) {
+            return undefined;
+        }
+
+        return Number.isSafeInteger(value) ? value : undefined;
     }
 
     resolveDimensionedType(
