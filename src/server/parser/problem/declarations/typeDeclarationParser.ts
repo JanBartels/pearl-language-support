@@ -11,6 +11,7 @@ import { ProblemDataTypeNode } from "../../../ast/problem/types/problemDataTypeN
 import { DimensionAttributeParser } from "../dimensions/dimensionAttributeParser";
 import { ProblemDataTypeParser } from "../types/problemDataTypeParser";
 import { SimpleTypeParser } from "../types/simpleTypeParser";
+import { NamedTypeParser } from "../types/namedTypeParser";
 import { StructTypeParser } from "../types/structTypeParser";
 
 export class TypeDeclarationParser extends ParserBase {
@@ -99,6 +100,12 @@ export class TypeDeclarationParser extends ParserBase {
 
         if (simpleType) {
             return simpleType;
+        }
+
+        const namedType = new NamedTypeParser( this.context ).parse();
+
+        if (namedType) {
+            return namedType;
         }
 
         return new StructTypeParser( this.context ).parse();
