@@ -4,6 +4,8 @@
 import { DocumentationProvider } from "../../documentationProvider";
 import { AstLookupResult } from "../../../ast/astLookupResult";
 import { md } from "../../markdownUtils";
+import type { SemanticContext } from "../../../semantic/semanticContext";
+import { appendSemanticConstantValue } from "../../semanticConstantValueDocumentation";
 
 import { ConstantFixedTermNode } from "../../../ast/problem/expressions/constantFixedTermNode";
 
@@ -12,7 +14,8 @@ export class ConstantFixedTermDocumentationProvider
 
     override getDocumentation(
         node: ConstantFixedTermNode,
-        lookup: AstLookupResult
+        lookup: AstLookupResult,
+        semanticContext?: SemanticContext
     ): string | undefined {
 
         const tail =
@@ -24,31 +27,41 @@ export class ConstantFixedTermDocumentationProvider
             return undefined;
         }
 
+        let documentation: string;
+
         switch (tail.operator.value.toUpperCase()) {
 
             case "*":
-                return md`
+                documentation = md`
 # Multiplication
 
 Multiplication operator in a constant FIXED expression.
 `;
+                break;
 
             case "//":
-                return md`
+                documentation = md`
 # Integer division
 
 Integer division operator in a constant FIXED expression.
 `;
+                break;
 
             case "REM":
-                return md`
+                documentation = md`
 # REM
 
 Remainder operator in a constant FIXED expression.
 `;
+                break;
 
             default:
                 return undefined;
         }
+
+        return appendSemanticConstantValue(
+            documentation,
+            semanticContext?.constantFixedValues.get(node)
+        );
     }
 }

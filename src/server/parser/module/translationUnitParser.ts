@@ -4,6 +4,7 @@
 import { ParserBase } from "../parserBase";
 import { TranslationUnitNode } from "../../ast/module/translationUnitNode";
 import { ModuleParser } from "./moduleParser";
+import { CompilerModeParser } from "./compilerModeParser";
 
 export class TranslationUnitParser extends ParserBase {
 
@@ -12,6 +13,13 @@ export class TranslationUnitParser extends ParserBase {
         const root = new TranslationUnitNode();
 
         while (!this.eof()) {
+
+            const compilerMode = new CompilerModeParser(this.context).parse();
+
+            if (compilerMode) {
+                root.addChild(compilerMode);
+                continue;
+            }
 
             const module = new ModuleParser(this.context).parse();
 

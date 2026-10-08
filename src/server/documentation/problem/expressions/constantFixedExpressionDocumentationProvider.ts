@@ -4,6 +4,8 @@
 import { DocumentationProvider } from "../../documentationProvider";
 import { AstLookupResult } from "../../../ast/astLookupResult";
 import { md } from "../../markdownUtils";
+import type { SemanticContext } from "../../../semantic/semanticContext";
+import { appendSemanticConstantValue } from "../../semanticConstantValueDocumentation";
 
 import { ConstantFixedExpressionNode } from "../../../ast/problem/expressions/constantFixedExpressionNode";
 
@@ -12,7 +14,8 @@ export class ConstantFixedExpressionDocumentationProvider
 
     override getDocumentation(
         node: ConstantFixedExpressionNode,
-        lookup: AstLookupResult
+        lookup: AstLookupResult,
+        semanticContext?: SemanticContext
     ): string | undefined {
 
         const tail =
@@ -24,25 +27,34 @@ export class ConstantFixedExpressionDocumentationProvider
             return undefined;
         }
 
+        let documentation: string;
+
         switch (tail.operator.value) {
 
             case "+":
-                return md`
+                documentation = md`
 # Addition
 
 Addition operator in a constant FIXED expression.
 `;
+                break;
 
             case "-":
-                return md`
+                documentation = md`
 # Subtraction
 
 Subtraction operator in a constant FIXED expression.
 `;
+                break;
 
             default:
                 return undefined;
         }
+
+        return appendSemanticConstantValue(
+            documentation,
+            semanticContext?.constantFixedValues.get(node)
+        );
     }
 
 }

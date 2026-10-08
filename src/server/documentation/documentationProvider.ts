@@ -3,6 +3,7 @@
 
 import { AstNode } from '../ast/astNode';
 import { AstLookupResult } from '../ast/astLookupResult';
+import type { SemanticContext } from '../semantic/semanticContext';
 
 /**
  * Provides end-user documentation for a specific AST node type.
@@ -17,10 +18,14 @@ export abstract class DocumentationProvider<T extends AstNode> {
      *
      * The implementation may return undefined if the supplied
      * SourceValue is not documented by this AST node.
+     *
+     * Semantic information is optional so documentation remains usable
+     * for syntactically valid but not yet semantically analyzed trees.
      */
     abstract getDocumentation(
         node: T,
-        lookup: AstLookupResult
+        lookup: AstLookupResult,
+        semanticContext?: SemanticContext
     ): string | undefined;
 
 }

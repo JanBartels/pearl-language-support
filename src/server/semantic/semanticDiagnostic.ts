@@ -14,6 +14,22 @@ export enum SemanticDiagnosticCode {
     UnknownType = 'semantic.unknown-type',
     ExpectedType = 'semantic.expected-type',
     DuplicateType = 'semantic.duplicate-type',
+    DuplicateDeclaration = 'semantic.duplicate-declaration',
+    InvalidDeclarationScope = 'semantic.invalid-declaration-scope',
+    InvalidSemaPresetValue = 'semantic.invalid-sema-preset-value',
+    SemaPresetElementCount = 'semantic.sema-preset-element-count',
+    ConstantExpressionNotEvaluable = 'semantic.constant-expression-not-evaluable',
+    UnknownIdentifier = 'semantic.unknown-identifier',
+    ExpectedNamedFixedConstant = 'semantic.expected-named-fixed-constant',
+    ExpectedNamedConstant = 'semantic.expected-named-constant',
+    InitializationElementCount = 'semantic.initialization-element-count',
+    InvalidFixedInitialization = 'semantic.invalid-fixed-initialization',
+    InvalidInitialization = 'semantic.invalid-initialization',
+    InitializationValueTooLong = 'semantic.initialization-value-too-long',
+    InvalidClockConstant = 'semantic.invalid-clock-constant',
+    TimeResolutionLoss = 'semantic.time-resolution-loss',
+    UnknownCompilerMode = 'semantic.unknown-compiler-mode',
+    MarkerOptionWithoutNoLineStop = 'semantic.marker-option-without-nolstop',
 }
 
 

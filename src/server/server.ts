@@ -172,7 +172,10 @@ connection.onHover(params => {
     const result = analysisResult.rootAnalysis.ast.lookupSourceValue(offset);
     if (result) {
 
-        const markdown = AstLookupResultDocumentationProvider.getDocumentation(result);
+        const markdown = AstLookupResultDocumentationProvider.getDocumentation(
+            result,
+            analysisResult.rootAnalysis.semanticContext
+        );
         if (markdown) {
             return createHover(markdown);
         }

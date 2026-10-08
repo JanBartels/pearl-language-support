@@ -2,11 +2,13 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { AstLookupResult } from "../ast/astLookupResult";
+import type { SemanticContext } from "../semantic/semanticContext";
 
 export class AstLookupResultDocumentationProvider {
 
     static getDocumentation(
-        result: AstLookupResult
+        result: AstLookupResult,
+        semanticContext?: SemanticContext
     ): string | undefined {
 
         const provider =
@@ -18,7 +20,8 @@ export class AstLookupResultDocumentationProvider {
 
         return provider.getDocumentation(
             result.node,
-            result
+            result,
+            semanticContext
         );
     }
 }

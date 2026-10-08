@@ -4,6 +4,8 @@
 import { DocumentationProvider } from "../../documentationProvider";
 import { AstLookupResult } from "../../../ast/astLookupResult";
 import { md } from "../../markdownUtils";
+import type { SemanticContext } from "../../../semantic/semanticContext";
+import { appendSemanticConstantValue } from "../../semanticConstantValueDocumentation";
 
 import { ConstantFixedFactorNode } from "../../../ast/problem/expressions/constantFixedFactorNode";
 
@@ -12,24 +14,51 @@ export class ConstantFixedFactorDocumentationProvider
 
     override getDocumentation(
         node: ConstantFixedFactorNode,
-        lookup: AstLookupResult
+        lookup: AstLookupResult,
+        semanticContext?: SemanticContext
     ): string | undefined {
 
-        if (lookup.element === node.sign) {
+        let documentation: string | undefined;
 
-            return md`
+        if (lookup.element === node.sign) {
+            documentation = md`
 # Sign
 
 Unary sign \`${node.sign?.value}\` of a constant FIXED factor.
 `;
+        } else {
+            documentation = this.getOperandDocumentation(node, lookup);
         }
+
+        if (!documentation && node.fit && lookup.element === node.fit.keyword) {
+            documentation = md`
+# FIT
+
+\`FIT\` changes the precision of the left FIXED operand to the precision of the right operand.
+`;
+        }
+
+        if (!documentation) {
+            return undefined;
+        }
+
+        return appendSemanticConstantValue(
+            documentation,
+            semanticContext?.constantFixedValues.get(node)
+        );
+    }
+
+
+    private getOperandDocumentation(
+        node: ConstantFixedFactorNode,
+        lookup: AstLookupResult
+    ): string | undefined {
 
         switch (node.operand.kind) {
 
             case "integer":
 
                 if (lookup.element === node.operand.literal) {
-
                     return md`
 # FIXED literal
 
@@ -41,7 +70,6 @@ Integer literal \`${node.operand.literal.value}\` used in a constant FIXED expre
                     node.operand.precision &&
                     lookup.element === node.operand.precision
                 ) {
-
                     return md`
 # FIXED precision
 
@@ -49,12 +77,11 @@ Explicit precision \`${node.operand.precision.value}\` of the FIXED constant.
 `;
                 }
 
-                break;
+                return undefined;
 
             case "identifier":
 
                 if (lookup.element === node.operand.identifier) {
-
                     return md`
 # Named constant
 
@@ -64,15 +91,14 @@ Whether the identifier denotes a permitted named constant is checked semanticall
 `;
                 }
 
-                break;
+                return undefined;
 
             case "parenthesized":
-                break;
+                return undefined;
 
             case "toFixedCharacter":
 
                 if (lookup.element === node.operand.keyword) {
-
                     return md`
 # TOFIXED
 
@@ -81,7 +107,6 @@ Converts a character string constant to a FIXED value.
                 }
 
                 if (lookup.element === node.operand.literal) {
-
                     return md`
 # Character string constant
 
@@ -89,12 +114,11 @@ Character string operand of \`TOFIXED\`.
 `;
                 }
 
-                break;
+                return undefined;
 
             case "toFixedBit":
 
                 if (lookup.element === node.operand.keyword) {
-
                     return md`
 # TOFIXED
 
@@ -103,7 +127,6 @@ Converts a bit string constant to a FIXED value.
                 }
 
                 if (lookup.element === node.operand.literal) {
-
                     return md`
 # Bit string constant
 
@@ -111,22 +134,8 @@ Bit string operand of \`TOFIXED\`.
 `;
                 }
 
-                break;
+                return undefined;
         }
-
-        if (
-            node.fit &&
-            lookup.element === node.fit.keyword
-        ) {
-
-            return md`
-# FIT
-
-\`FIT\` changes the precision of the left FIXED operand to the precision of the right operand.
-`;
-        }
-
-        return undefined;
     }
 
 }

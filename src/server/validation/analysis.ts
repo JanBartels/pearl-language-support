@@ -10,6 +10,14 @@ import { AstNode } from "../ast/astNode";
 import { PreprocessorConditionalBlockCollection } from "../preproc/preprocessorConditionalBlockCollection";
 import { SemanticContext } from "../semantic/semanticContext";
 
+export function collectBlockComments(tokens: readonly Token[]): readonly CommentToken[] {
+    return tokens.filter(
+        (token): token is CommentToken =>
+            isCommentToken(token)
+            && token.commentKind === CommentKind.Block
+    );
+}
+
 export class Analysis {
 
     constructor(
@@ -37,11 +45,7 @@ export class Analysis {
 
         if (!this.cachedBlockComments) {
 
-            this.cachedBlockComments = this.tokens.filter(
-                (token): token is CommentToken =>
-                    isCommentToken(token)
-                    && token.commentKind === CommentKind.Block
-            );
+            this.cachedBlockComments = collectBlockComments(this.tokens);
         }
 
         return this.cachedBlockComments;

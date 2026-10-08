@@ -4,6 +4,7 @@
 export enum AstKind {
 
     TranslationUnit,
+    CompilerMode,
     Module,
     ModuleParameter,
     ShellCommand,
@@ -19,6 +20,9 @@ export enum AstKind {
     ConstantFixedExpression,
     ConstantFixedTerm,
     ConstantFixedFactor,
+    ClockConstant,
+    DurationConstant,
+    SignedConstantExpression,
     DimensionBoundaries,
     DimensionAttribute,
     VirtualDimensionList,

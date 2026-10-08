@@ -15,11 +15,8 @@ export class SemaAttributeDocumentationProvider
         lookup: AstLookupResult
     ): string | undefined {
 
-        if (lookup.element !== node.keyword) {
-            return undefined;
-        }
-
-        return md`
+        if (lookup.element === node.keyword) {
+            return md`
 # SEMA
 
 Declares a semaphore variable.
@@ -32,5 +29,24 @@ Example:
 DCL MySema SEMA;
 \`\`\`
 `;
+        }
+
+        if (lookup.element === node.presetKeyword) {
+            return md`
+# PRESET
+
+Defines the initial values of the declared SEMA variables.
+
+The values must be non-negative constant FIXED expressions.
+
+Example:
+
+\`\`\`pearl
+DCL (S1, S2) SEMA PRESET(3, 5);
+\`\`\`
+`;
+        }
+
+        return undefined;
     }
 }

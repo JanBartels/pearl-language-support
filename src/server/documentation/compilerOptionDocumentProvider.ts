@@ -47,7 +47,9 @@ Codeprotokollierung ausschalten
                     return md`
 # Compiler Option +M
 
-Markierungsoption einschalten. Evtl. in Verbindung mit MODE=NOLSTOP;
+Markierungsoption einschalten. Ohne \`MODE=NOLSTOP;\` kann die Markierung die Laufzeit erheblich verlangsamen.
+
+Mit NOLSTOP ist der Aufwand deutlich geringer, der Zeilenstop beim Tracen ist dann jedoch nicht möglich.
 `;
                 } else {
                     return md`

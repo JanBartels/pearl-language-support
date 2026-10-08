@@ -13,6 +13,8 @@ export enum SemanticTypeKind {
     Character,
     Clock,
     Duration,
+    Sema,
+    Bolt,
     Array,
     Struct,
     Reference,
@@ -62,6 +64,18 @@ export interface ClockType {
 export interface DurationType {
 
     readonly kind: SemanticTypeKind.Duration;
+}
+
+
+export interface SemaType {
+
+    readonly kind: SemanticTypeKind.Sema;
+}
+
+
+export interface BoltType {
+
+    readonly kind: SemanticTypeKind.Bolt;
 }
 
 
@@ -128,6 +142,8 @@ export type SemanticType =
     | CharacterType
     | ClockType
     | DurationType
+    | SemaType
+    | BoltType
     | ArrayType
     | StructType
     | ReferenceType

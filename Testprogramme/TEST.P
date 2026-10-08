@@ -12,6 +12,7 @@ DCL A FIXED;
 /*+M*/
 /*+T*/
 /*+D=1000*/
+/*+T Indextester */
 
 #define Mod "MODULE huhu"
 !Mod;

@@ -1,0 +1,16 @@
+MODULE huhu;
+SYSTEM;
+PROBLEM;
+
+TYPE Counter FIXED;
+TYPE Other Counter;
+
+TYPE Node STRUCT[
+    Value FIXED,
+    Next REF Node
+];
+
+TYPE A FIXED;
+TYPE A FLOAT;
+
+MODEND;

@@ -3,6 +3,7 @@
 
 import { SourceValue } from "../core/sourceValue";
 
+import { AstNode } from "../ast/astNode";
 import { ConstantFixedExpressionNode } from "../ast/problem/expressions/constantFixedExpressionNode";
 import { ConstantFixedTermNode } from "../ast/problem/expressions/constantFixedTermNode";
 import { ConstantFixedFactorNode } from "../ast/problem/expressions/constantFixedFactorNode";
@@ -15,7 +16,12 @@ export interface ConstantFixedExpressionEvaluatorContext {
     resolveConstantFixedIdentifier(
         identifier: SourceValue<string>,
         environment: Environment
-    ): number | undefined;
+    ): bigint | undefined;
+
+    recordConstantFixedValue(
+        node: AstNode,
+        value: bigint
+    ): void;
 }
 
 
@@ -30,24 +36,22 @@ export class ConstantFixedExpressionEvaluator {
     evaluate(
         expression: ConstantFixedExpressionNode,
         environment: Environment
-    ): number | undefined {
+    ): bigint | undefined {
 
-        let value = this.evaluateTerm( expression.firstTerm, environment );
+        let value = this.evaluateTerm(expression.firstTerm, environment);
 
         if (value === undefined) {
             return undefined;
         }
 
         for (const tail of expression.tails) {
-
-            const right = this.evaluateTerm( tail.term, environment );
+            const right = this.evaluateTerm(tail.term, environment);
 
             if (right === undefined) {
                 return undefined;
             }
 
             switch (tail.operator.value) {
-
                 case "+":
                     value += right;
                     break;
@@ -59,12 +63,9 @@ export class ConstantFixedExpressionEvaluator {
                 default:
                     return undefined;
             }
-
-            if (!Number.isSafeInteger(value)) {
-                return undefined;
-            }
         }
 
+        this.context.recordConstantFixedValue(expression, value);
         return value;
     }
 
@@ -72,40 +73,36 @@ export class ConstantFixedExpressionEvaluator {
     private evaluateTerm(
         term: ConstantFixedTermNode,
         environment: Environment
-    ): number | undefined {
+    ): bigint | undefined {
 
-        let value = this.evaluateFactor( term.firstFactor, environment );
+        let value = this.evaluateFactor(term.firstFactor, environment);
 
         if (value === undefined) {
             return undefined;
         }
 
         for (const tail of term.tails) {
-
-            const right = this.evaluateFactor( tail.factor, environment );
+            const right = this.evaluateFactor(tail.factor, environment);
 
             if (right === undefined) {
                 return undefined;
             }
 
             switch (tail.operator.value) {
-
                 case "*":
                     value *= right;
                     break;
 
                 case "//":
-
-                    if (right === 0) {
+                    if (right === BigInt(0)) {
                         return undefined;
                     }
 
-                    value = Math.trunc(value / right);
+                    value /= right;
                     break;
 
                 case "REM":
-
-                    if (right === 0) {
+                    if (right === BigInt(0)) {
                         return undefined;
                     }
 
@@ -115,12 +112,9 @@ export class ConstantFixedExpressionEvaluator {
                 default:
                     return undefined;
             }
-
-            if (!Number.isSafeInteger(value)) {
-                return undefined;
-            }
         }
 
+        this.context.recordConstantFixedValue(term, value);
         return value;
     }
 
@@ -128,9 +122,9 @@ export class ConstantFixedExpressionEvaluator {
     private evaluateFactor(
         factor: ConstantFixedFactorNode,
         environment: Environment
-    ): number | undefined {
+    ): bigint | undefined {
 
-        let value = this.evaluateOperand( factor, environment );
+        let value = this.evaluateOperand(factor, environment);
 
         if (value === undefined) {
             return undefined;
@@ -140,21 +134,15 @@ export class ConstantFixedExpressionEvaluator {
             value = -value;
         }
 
-        if (!Number.isSafeInteger(value)) {
-            return undefined;
-        }
-
         /*
-         * FIT werten wir noch nicht aus.
-         *
-         * Die Syntax ist bereits vollständig im AST vorhanden, aber die
-         * Semantik von FIT gehört in einen eigenen Schritt. Insbesondere
-         * sollen wir hier nicht stillschweigend einen falschen Wert liefern.
+         * FIT wird in einem eigenen Semantikschritt ergänzt. Die Syntax ist bereits im AST vorhanden,
+         * aber ohne die exakte FIT-Semantik soll hier kein scheinbar gültiger Wert entstehen.
          */
         if (factor.fit) {
             return undefined;
         }
 
+        this.context.recordConstantFixedValue(factor, value);
         return value;
     }
 
@@ -162,20 +150,11 @@ export class ConstantFixedExpressionEvaluator {
     private evaluateOperand(
         factor: ConstantFixedFactorNode,
         environment: Environment
-    ): number | undefined {
+    ): bigint | undefined {
 
         switch (factor.operand.kind) {
-
-            case "integer": {
-
-                const value = Number(factor.operand.literal.value);
-
-                if (!Number.isSafeInteger(value)) {
-                    return undefined;
-                }
-
-                return value;
-            }
+            case "integer":
+                return this.parseIntegerLiteral(factor.operand.literal.value);
 
             case "identifier":
                 return this.context.resolveConstantFixedIdentifier(
@@ -184,21 +163,25 @@ export class ConstantFixedExpressionEvaluator {
                 );
 
             case "parenthesized":
-                return this.evaluate(
-                    factor.operand.expression,
-                    environment
-                );
+                return this.evaluate(factor.operand.expression, environment);
 
             case "toFixedCharacter":
             case "toFixedBit":
-
-                /*
-                 * TOFIXED wird später ergänzt.
-                 *
-                 * Auch hier lieber "noch nicht auswertbar" als eine
-                 * semantisch falsche Näherung.
-                 */
+                /* TOFIXED wird später ergänzt. */
                 return undefined;
+        }
+    }
+
+
+    private parseIntegerLiteral(value: string): bigint | undefined {
+        try {
+            if (/^[01]+B$/i.test(value)) {
+                return BigInt(`0b${value.slice(0, -1)}`);
+            }
+
+            return BigInt(value);
+        } catch {
+            return undefined;
         }
     }
 }

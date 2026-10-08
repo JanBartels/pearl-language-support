@@ -8,7 +8,11 @@ import { AstLookupResult } from "../../astLookupResult";
 import { AstNode } from "../../astNode";
 
 import { DocumentationProvider } from "../../../documentation/documentationProvider";
-import { SemaAttributeDocumentationProvider } from "../../../documentation/problem/declarations/semaAttributeDocumentationProvider";
+import {
+    SemaAttributeDocumentationProvider
+} from "../../../documentation/problem/declarations/semaAttributeDocumentationProvider";
+
+import { ConstantFixedExpressionNode } from "../expressions/constantFixedExpressionNode";
 
 export class SemaAttributeNode extends AstNode {
 
@@ -16,9 +20,15 @@ export class SemaAttributeNode extends AstNode {
         new SemaAttributeDocumentationProvider();
 
     constructor(
-        public readonly keyword: SourceValue<string>
+        public readonly keyword: SourceValue<string>,
+        public readonly presetKeyword: SourceValue<string> | undefined,
+        public readonly presetValues: readonly ConstantFixedExpressionNode[]
     ) {
         super(AstKind.SemaAttribute);
+
+        for (const value of presetValues) {
+            this.adopt(value);
+        }
     }
 
     override documentationProvider():
@@ -31,17 +41,44 @@ export class SemaAttributeNode extends AstNode {
         offset: number
     ): AstLookupResult | undefined {
 
-        return this.lookupOwnSourceValue(
+        const keyword = this.lookupOwnSourceValue(
             offset,
             this.keyword
         );
+
+        if (keyword) {
+            return keyword;
+        }
+
+        const presetKeyword = this.lookupOwnSourceValue(
+            offset,
+            this.presetKeyword
+        );
+
+        if (presetKeyword) {
+            return presetKeyword;
+        }
+
+        for (const value of this.presetValues) {
+            const result = value.lookupSourceValue(offset);
+
+            if (result) {
+                return result;
+            }
+        }
+
+        return undefined;
     }
 
     public override dumpLabel(): string {
-        return "SemaAttribute";
+        if (!this.presetKeyword) {
+            return "SemaAttribute";
+        }
+
+        return `SemaAttribute(PRESET, ${this.presetValues.length} values)`;
     }
 
     public override getChildren(): readonly AstNode[] {
-        return [];
+        return this.presetValues;
     }
 }

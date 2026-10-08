@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { AnalysisResult } from './analysisResult';
-import { Analysis } from './analysis';
+import { Analysis, collectBlockComments } from './analysis';
 import { FileSource } from '../source/fileSource';
 import { Lexer } from '../lexer/lexer';
 
@@ -26,6 +26,7 @@ import { ConditionalStack } from '../preproc/conditionalStack';
 import { AstDumper } from '../ast/astDumper';
 
 import { SemanticAnalyzer } from '../semantic/semanticAnalyzer';
+import { CompilerControlAnalyzer } from '../semantic/compilerControlAnalyzer';
 import {
     SemanticDiagnostic,
     SemanticDiagnosticSeverity
@@ -124,7 +125,19 @@ export class Validator {
         // ----------------------------
 
         const semanticAnalyzer = new SemanticAnalyzer();
-        const semanticContext = semanticAnalyzer.analyze(ast);
+        let semanticContext = semanticAnalyzer.analyze(ast);
+
+        const blockComments = collectBlockComments(tokens);
+
+        const compilerControlDiagnostics = new CompilerControlAnalyzer().analyze(
+            ast,
+            blockComments,
+            semanticContext
+        );
+
+        semanticContext = semanticContext.withAdditionalDiagnostics(
+            compilerControlDiagnostics
+        );
 
         this.addSemanticDiagnostics(
             problems,

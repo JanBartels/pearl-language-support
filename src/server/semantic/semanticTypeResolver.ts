@@ -48,7 +48,7 @@ export interface SemanticTypeResolverContext {
     evaluateConstantFixedExpression(
         expression: ConstantFixedExpressionNode,
         environment: Environment
-    ): number | undefined;
+    ): bigint | undefined;
 
     resolveDimensionedType(
         elementType: SemanticType,
@@ -139,7 +139,17 @@ export class SemanticTypeResolver {
             return undefined;
         }
 
-        return this.context.evaluateConstantFixedExpression( node.precisionOrLength, environment );
+        const value = this.context.evaluateConstantFixedExpression( node.precisionOrLength, environment );
+
+        if (value === undefined) {
+            return undefined;
+        }
+
+        const numericValue = Number(value);
+
+        return Number.isSafeInteger(numericValue)
+            ? numericValue
+            : undefined;
     }
 
 
