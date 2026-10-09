@@ -1,55 +1,34 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
-import { AstKind } from "../../astKind";
-import { AstLookupResult } from "../../astLookupResult";
-import { AstNode } from "../../astNode";
-
-import { DocumentationProvider } from "../../../documentation/documentationProvider";
-import { VirtualDimensionListDocumentationProvider } from "../../../documentation/problem/dimensions/virtualDimensionListDocumentationProvider";
-
-import { DimensionAttributeNode } from "./dimensionAttributeNode";
+import { DocumentationProvider } from '../../../documentation/documentationProvider';
+import {
+    VirtualDimensionListDocumentationProvider
+} from '../../../documentation/problem/dimensions/virtualDimensionListDocumentationProvider';
+import { AstKind } from '../../astKind';
+import { AstLookupResult } from '../../astLookupResult';
+import { AstNode } from '../../astNode';
 
 export class VirtualDimensionListNode extends AstNode {
+    private static readonly provider = new VirtualDimensionListDocumentationProvider();
 
-    private static readonly provider =
-        new VirtualDimensionListDocumentationProvider();
-
-    constructor(
-        public readonly dimensions: readonly DimensionAttributeNode[]
-    ) {
+    constructor(public readonly rank: number) {
         super(AstKind.VirtualDimensionList);
-
-        this.adoptAll(dimensions);
     }
 
-    override documentationProvider():
-        DocumentationProvider<VirtualDimensionListNode> {
-
+    override documentationProvider(): DocumentationProvider<VirtualDimensionListNode> {
         return VirtualDimensionListNode.provider;
     }
 
-    override lookupSourceValue(
-        offset: number
-    ): AstLookupResult | undefined {
-
-        for (const dimension of this.dimensions) {
-
-            const result = dimension.lookupSourceValue(offset);
-            if (result) {
-                return result;
-            }
-        }
-
+    override lookupSourceValue(_offset: number): AstLookupResult | undefined {
         return undefined;
     }
 
-    public override dumpLabel(): string {
-        return `VirtualDimensionList(${this.dimensions.length})`;
+    override dumpLabel(): string {
+        return `VirtualDimensionList(${this.rank})`;
     }
 
-    public override getChildren(): readonly AstNode[] {
-        return this.dimensions;
+    override getChildren(): readonly AstNode[] {
+        return [];
     }
-
 }

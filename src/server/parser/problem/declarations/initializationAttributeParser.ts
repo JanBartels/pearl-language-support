@@ -49,10 +49,13 @@ export class InitializationAttributeParser extends ParserBase {
 
             this.synchronize([
                 ")",
+                "GLOBAL",
                 ";",
                 "TYPE",
                 "DCL",
                 "DECLARE",
+                "SPC",
+                "SPECIFY",
                 "MODEND"
             ]);
 
@@ -82,10 +85,13 @@ export class InitializationAttributeParser extends ParserBase {
 
                 this.synchronize([
                     ")",
+                    "GLOBAL",
                     ";",
                     "TYPE",
                     "DCL",
                     "DECLARE",
+                    "SPC",
+                    "SPECIFY",
                     "MODEND"
                 ]);
 

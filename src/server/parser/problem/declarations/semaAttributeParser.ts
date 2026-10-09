@@ -67,6 +67,8 @@ export class SemaAttributeParser extends ParserBase {
                 "TYPE",
                 "DCL",
                 "DECLARE",
+                "SPC",
+                "SPECIFY",
                 "MODEND"
             ]);
 
@@ -93,6 +95,8 @@ export class SemaAttributeParser extends ParserBase {
                     "TYPE",
                     "DCL",
                     "DECLARE",
+                    "SPC",
+                    "SPECIFY",
                     "MODEND"
                 ]);
 

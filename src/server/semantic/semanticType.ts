@@ -16,6 +16,7 @@ export enum SemanticTypeKind {
     Sema,
     Bolt,
     Array,
+    VirtualArray,
     Struct,
     Reference,
     Named,
@@ -97,6 +98,16 @@ export interface ArrayDimension {
 }
 
 
+export interface VirtualArrayType {
+
+    readonly kind: SemanticTypeKind.VirtualArray;
+
+    readonly elementType: SemanticType;
+
+    readonly rank: number;
+}
+
+
 export interface StructType {
 
     readonly kind: SemanticTypeKind.Struct;
@@ -145,6 +156,7 @@ export type SemanticType =
     | SemaType
     | BoltType
     | ArrayType
+    | VirtualArrayType
     | StructType
     | ReferenceType
     | NamedType

@@ -79,6 +79,8 @@ export class DclDeclarationParser extends ParserBase {
                 "TYPE",
                 "DCL",
                 "DECLARE",
+                "SPC",
+                "SPECIFY",
                 "MODEND"
             ]);
 

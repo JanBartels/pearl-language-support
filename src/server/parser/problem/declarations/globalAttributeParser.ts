@@ -56,6 +56,11 @@ export class GlobalAttributeParser extends ParserBase {
             "INIT",
             "INITIAL",
             "PRESET",
+            "TYPE",
+            "DCL",
+            "DECLARE",
+            "SPC",
+            "SPECIFY",
             ",",
             ";"
         ]);

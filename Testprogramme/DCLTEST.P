@@ -8,6 +8,38 @@ PROBLEM;
 
 /*+M*/
 
+TYPE SNode STRUCT[
+    Value FIXED,
+    Next REF SNode
+];
+
+SPC SScalar FIXED GLOBAL;
+SPC SScalarInit FIXED INIT(4) GLOBAL;
+SPC SVector() FIXED;
+SPC SMatrix(,) FLOAT(55) GLOBAL;
+SPC SNodes() SNode GLOBAL;
+SPC SHandles(,) REF SNode GLOBAL;
+
+SPC SSemaphores() SEMA GLOBAL;
+SPC SBolts(,) BOLT GLOBAL;
+
+DCL SVector(4) FIXED;
+
+SPC ForwardScalar FIXED;
+SPC ForwardVector() FIXED;
+
+SPC ExternalScalar FIXED GLOBAL;
+SPC ExternalVector() FIXED GLOBAL;
+
+DCL ForwardScalar FIXED;
+DCL ForwardVector(10) FIXED;
+
+SPC ForwardRangError(,) FIXED;
+DCL ForwardRangError(10) FIXED;
+
+SPC ForwardTypeError() FLOAT;
+DCL ForwardTypeError(10) FIXED;
+
 DCL GA FIXED GLOBAL;
 DCL GB FLOAT GLOBAL(OtherModule);
 DCL GC INV FIXED GLOBAL INIT(10);

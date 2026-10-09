@@ -11,16 +11,24 @@ export class VirtualDimensionListDocumentationProvider
     extends DocumentationProvider<VirtualDimensionListNode> {
 
     override getDocumentation(
-        _node: VirtualDimensionListNode,
+        node: VirtualDimensionListNode,
         _lookup: AstLookupResult
     ): string | undefined {
 
         return md`
 # Virtual dimension list
 
-A virtual dimension list groups one or more \`DIM\` attributes.
+Specifies only the number of dimensions of an array, not their bounds.
 
-Each \`DIM\` attribute specifies the bounds of one or more array dimensions.
+The virtual dimension list has rank ${node.rank}.
+
+Examples:
+
+\`\`\`pearl
+()    ! one-dimensional
+(,)   ! two-dimensional
+(,,)  ! three-dimensional
+\`\`\`
 `;
     }
 

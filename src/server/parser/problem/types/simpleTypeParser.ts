@@ -65,6 +65,8 @@ export class SimpleTypeParser extends ParserBase {
                     "TYPE",
                     "DCL",
                     "DECLARE",
+                    "SPC",
+                    "SPECIFY",
                     "MODEND"
                 ]);
 

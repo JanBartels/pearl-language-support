@@ -7,6 +7,7 @@ import { ProblemPartNode } from "../../ast/problem/problemPartNode";
 
 import { TypeDeclarationParser } from "./declarations/typeDeclarationParser";
 import { DclDeclarationParser } from "./declarations/dclDeclarationParser";
+import { SpcDeclarationParser } from "./specifications/spcDeclarationParser";
 
 export class ProblemPartParser extends ParserBase {
 
@@ -30,6 +31,8 @@ export class ProblemPartParser extends ParserBase {
                 "TYPE",
                 "DCL",
                 "DECLARE",
+                "SPC",
+                "SPECIFY",
                 "MODEND"
             ]);
         }
@@ -59,6 +62,16 @@ export class ProblemPartParser extends ParserBase {
 
             if (dclDeclaration) {
                 node.addChild(dclDeclaration);
+                continue;
+            }
+
+            const spcDeclaration =
+                new SpcDeclarationParser(
+                    this.context
+                ).parse();
+
+            if (spcDeclaration) {
+                node.addChild(spcDeclaration);
                 continue;
             }
 
