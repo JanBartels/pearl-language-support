@@ -31,6 +31,7 @@ export enum AstKind {
     NamedType,
 
     ProblemDataAttribute,
+    GlobalAttribute,
     InitializationAttribute,
     InitElement,
 

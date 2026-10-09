@@ -11,6 +11,7 @@ import { DocumentationProvider } from "../../../documentation/documentationProvi
 import { ProblemDataAttributeDocumentationProvider } from "../../../documentation/problem/declarations/problemDataAttributeDocumentationProvider";
 
 import { ProblemDataTypeNode } from "../types/problemDataTypeNode";
+import { GlobalAttributeNode } from "./globalAttributeNode";
 import { InitializationAttributeNode } from "./initializationAttributeNode";
 
 export class ProblemDataAttributeNode extends AstNode {
@@ -21,12 +22,17 @@ export class ProblemDataAttributeNode extends AstNode {
     constructor(
         public readonly inv: SourceValue<string> | undefined,
         public readonly type: ProblemDataTypeNode | undefined,
+        public readonly global: GlobalAttributeNode | undefined,
         public readonly initialization: InitializationAttributeNode | undefined
     ) {
         super(AstKind.ProblemDataAttribute);
 
         if (type) {
             this.adopt(type);
+        }
+
+        if (global) {
+            this.adopt(global);
         }
 
         if (initialization) {
@@ -61,22 +67,41 @@ export class ProblemDataAttributeNode extends AstNode {
             return type;
         }
 
+        const global =
+            this.global?.lookupSourceValue(offset);
+
+        if (global) {
+            return global;
+        }
+
         return this.initialization?.lookupSourceValue(offset);
     }
 
     public override dumpLabel(): string {
+        const attributes: string[] = [];
 
-        return this.inv
-            ? "ProblemDataAttribute(INV)"
+        if (this.inv) {
+            attributes.push("INV");
+        }
+
+        if (this.global) {
+            attributes.push("GLOBAL");
+        }
+
+        return attributes.length > 0
+            ? `ProblemDataAttribute(${attributes.join(", ")})`
             : "ProblemDataAttribute";
     }
 
     public override getChildren(): readonly AstNode[] {
-
         const children: AstNode[] = [];
 
         if (this.type) {
             children.push(this.type);
+        }
+
+        if (this.global) {
+            children.push(this.global);
         }
 
         if (this.initialization) {

@@ -22,7 +22,17 @@ export interface TypeSymbol extends SymbolBase {
     readonly kind: SymbolKind.Type;
 }
 
-export interface DataObjectSymbol extends SymbolBase {
+export interface GlobalSymbolAttribute {
+
+    readonly moduleName: SourceValue<string> | undefined;
+}
+
+export interface GlobalSymbolBase extends SymbolBase {
+
+    readonly global: GlobalSymbolAttribute | undefined;
+}
+
+export interface DataObjectSymbol extends GlobalSymbolBase {
 
     readonly kind: SymbolKind.DataObject;
 
@@ -41,12 +51,12 @@ export interface IdentificationSymbol extends SymbolBase {
     readonly kind: SymbolKind.Identification;
 }
 
-export interface ProcedureSymbol extends SymbolBase {
+export interface ProcedureSymbol extends GlobalSymbolBase {
 
     readonly kind: SymbolKind.Procedure;
 }
 
-export interface TaskSymbol extends SymbolBase {
+export interface TaskSymbol extends GlobalSymbolBase {
 
     readonly kind: SymbolKind.Task;
 }

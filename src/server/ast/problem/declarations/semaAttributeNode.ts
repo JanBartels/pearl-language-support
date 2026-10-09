@@ -13,6 +13,7 @@ import {
 } from "../../../documentation/problem/declarations/semaAttributeDocumentationProvider";
 
 import { ConstantFixedExpressionNode } from "../expressions/constantFixedExpressionNode";
+import { GlobalAttributeNode } from "./globalAttributeNode";
 
 export class SemaAttributeNode extends AstNode {
 
@@ -21,10 +22,15 @@ export class SemaAttributeNode extends AstNode {
 
     constructor(
         public readonly keyword: SourceValue<string>,
+        public readonly global: GlobalAttributeNode | undefined,
         public readonly presetKeyword: SourceValue<string> | undefined,
         public readonly presetValues: readonly ConstantFixedExpressionNode[]
     ) {
         super(AstKind.SemaAttribute);
+
+        if (global) {
+            this.adopt(global);
+        }
 
         for (const value of presetValues) {
             this.adopt(value);
@@ -50,6 +56,12 @@ export class SemaAttributeNode extends AstNode {
             return keyword;
         }
 
+        const global = this.global?.lookupSourceValue(offset);
+
+        if (global) {
+            return global;
+        }
+
         const presetKeyword = this.lookupOwnSourceValue(
             offset,
             this.presetKeyword
@@ -71,14 +83,29 @@ export class SemaAttributeNode extends AstNode {
     }
 
     public override dumpLabel(): string {
-        if (!this.presetKeyword) {
-            return "SemaAttribute";
+        const attributes: string[] = [];
+
+        if (this.global) {
+            attributes.push("GLOBAL");
         }
 
-        return `SemaAttribute(PRESET, ${this.presetValues.length} values)`;
+        if (this.presetKeyword) {
+            attributes.push(`PRESET, ${this.presetValues.length} values`);
+        }
+
+        return attributes.length > 0
+            ? `SemaAttribute(${attributes.join(", ")})`
+            : "SemaAttribute";
     }
 
     public override getChildren(): readonly AstNode[] {
-        return this.presetValues;
+        const children: AstNode[] = [];
+
+        if (this.global) {
+            children.push(this.global);
+        }
+
+        children.push(...this.presetValues);
+        return children;
     }
 }

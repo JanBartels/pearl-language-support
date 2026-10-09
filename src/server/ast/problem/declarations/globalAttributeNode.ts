@@ -8,30 +8,24 @@ import { AstLookupResult } from "../../astLookupResult";
 import { AstNode } from "../../astNode";
 
 import { DocumentationProvider } from "../../../documentation/documentationProvider";
-import { BoltAttributeDocumentationProvider } from "../../../documentation/problem/declarations/boltAttributeDocumentationProvider";
+import { GlobalAttributeDocumentationProvider } from "../../../documentation/problem/declarations/globalAttributeDocumentationProvider";
 
-import { GlobalAttributeNode } from "./globalAttributeNode";
-
-export class BoltAttributeNode extends AstNode {
+export class GlobalAttributeNode extends AstNode {
 
     private static readonly provider =
-        new BoltAttributeDocumentationProvider();
+        new GlobalAttributeDocumentationProvider();
 
     constructor(
         public readonly keyword: SourceValue<string>,
-        public readonly global: GlobalAttributeNode | undefined
+        public readonly moduleName: SourceValue<string> | undefined
     ) {
-        super(AstKind.BoltAttribute);
-
-        if (global) {
-            this.adopt(global);
-        }
+        super(AstKind.GlobalAttribute);
     }
 
     override documentationProvider():
-        DocumentationProvider<BoltAttributeNode> {
+        DocumentationProvider<GlobalAttributeNode> {
 
-        return BoltAttributeNode.provider;
+        return GlobalAttributeNode.provider;
     }
 
     override lookupSourceValue(
@@ -47,18 +41,19 @@ export class BoltAttributeNode extends AstNode {
             return keyword;
         }
 
-        return this.global?.lookupSourceValue(offset);
+        return this.lookupOwnSourceValue(
+            offset,
+            this.moduleName
+        );
     }
 
     public override dumpLabel(): string {
-        return this.global
-            ? "BoltAttribute(GLOBAL)"
-            : "BoltAttribute";
+        return this.moduleName
+            ? `GlobalAttribute(${this.moduleName.value})`
+            : "GlobalAttribute";
     }
 
     public override getChildren(): readonly AstNode[] {
-        return this.global
-            ? [this.global]
-            : [];
+        return [];
     }
 }

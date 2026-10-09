@@ -6,24 +6,21 @@ import { ParserBase } from "../../parserBase";
 import { ProblemDataAttributeNode } from "../../../ast/problem/declarations/problemDataAttributeNode";
 
 import { ProblemDataTypeParser } from "../types/problemDataTypeParser";
+import { GlobalAttributeParser } from "./globalAttributeParser";
 import { InitializationAttributeParser } from "./initializationAttributeParser";
 
 export class ProblemDataAttributeParser extends ParserBase {
 
     override parse(): ProblemDataAttributeNode | undefined {
-
         this.skipTrivia();
 
-        const invToken =
-            this.acceptKeyword("INV");
+        const invToken = this.acceptKeyword("INV");
 
-        const type =
-            new ProblemDataTypeParser(
-                this.context
-            ).parse();
+        const type = new ProblemDataTypeParser(
+            this.context
+        ).parse();
 
         if (!type) {
-
             if (!invToken) {
                 return undefined;
             }
@@ -36,20 +33,25 @@ export class ProblemDataAttributeParser extends ParserBase {
             return new ProblemDataAttributeNode(
                 this.tokenValue(invToken),
                 undefined,
+                undefined,
                 undefined
             );
         }
 
-        const initialization =
-            new InitializationAttributeParser(
-                this.context
-            ).parse();
+        const global = new GlobalAttributeParser(
+            this.context
+        ).parse();
+
+        const initialization = new InitializationAttributeParser(
+            this.context
+        ).parse();
 
         return new ProblemDataAttributeNode(
             invToken
                 ? this.tokenValue(invToken)
                 : undefined,
             type,
+            global,
             initialization
         );
     }

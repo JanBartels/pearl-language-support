@@ -12,6 +12,7 @@ import { DclDeclarationSentenceNode } from '../ast/problem/declarations/dclDecla
 import { ProblemDataAttributeNode } from '../ast/problem/declarations/problemDataAttributeNode';
 import { SemaAttributeNode } from '../ast/problem/declarations/semaAttributeNode';
 import { BoltAttributeNode } from '../ast/problem/declarations/boltAttributeNode';
+import type { GlobalAttributeNode } from '../ast/problem/declarations/globalAttributeNode';
 import type { ClockConstantNode } from '../ast/problem/expressions/clockConstantNode';
 import { ConstantFixedExpressionNode } from '../ast/problem/expressions/constantFixedExpressionNode';
 import type { DurationConstantNode } from '../ast/problem/expressions/durationConstantNode';
@@ -41,6 +42,7 @@ import {
 } from './semanticType';
 import {
     DataObjectSymbol,
+    GlobalSymbolAttribute,
     SemanticSymbol,
     TypeSymbol
 } from './symbol';
@@ -410,6 +412,15 @@ class SemanticAnalysisState implements
             severity: SemanticDiagnosticSeverity.Error,
             location: keyword.location,
             message: `${typeName}-Variablen dürfen nur auf Modulebene deklariert werden.`
+        });
+    }
+
+    reportGlobalDeclarationOutsideModule(keyword: SourceValue<string>): void {
+        this.diagnostics.push({
+            code: SemanticDiagnosticCode.GlobalDeclarationOutsideModule,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: keyword.location,
+            message: 'Das GLOBAL-Attribut ist nur für Deklarationen auf Modulebene zulässig.'
         });
     }
 
@@ -874,6 +885,10 @@ export class SemanticAnalyzer {
             }
         }
 
+        if (attribute.global && environment.scope.kind !== ScopeKind.Module) {
+            state.reportGlobalDeclarationOutsideModule(attribute.global.keyword);
+        }
+
         const initialization = attribute.initialization;
         const resolvedInitialization = initialization
             ? state.initializationResolver.resolve(
@@ -888,6 +903,7 @@ export class SemanticAnalyzer {
             node,
             type,
             attribute.inv !== undefined,
+            this.globalSymbolAttribute(attribute.global),
             environment,
             state,
             (symbol, index, current) => {
@@ -953,6 +969,7 @@ export class SemanticAnalyzer {
             node,
             type,
             false,
+            this.globalSymbolAttribute(attribute.global),
             environment,
             state,
             (symbol, index) => {
@@ -1021,6 +1038,7 @@ export class SemanticAnalyzer {
         node: DclDeclarationSentenceNode,
         type: SemanticType,
         assignmentProtected: boolean,
+        global: GlobalSymbolAttribute | undefined,
         environment: Environment,
         state: SemanticAnalysisState,
         beforeIntroduce?: (symbol: DataObjectSymbol, index: number, current: Environment) => void
@@ -1039,7 +1057,8 @@ export class SemanticAnalyzer {
                 kind: SymbolKind.DataObject,
                 name: identifier,
                 type,
-                assignmentProtected
+                assignmentProtected,
+                global
             };
 
             state.bind(identifier, symbol);
@@ -1050,6 +1069,18 @@ export class SemanticAnalyzer {
         }
 
         return current;
+    }
+
+    private globalSymbolAttribute(
+        attribute: GlobalAttributeNode | undefined
+    ): GlobalSymbolAttribute | undefined {
+        if (!attribute) {
+            return undefined;
+        }
+
+        return {
+            moduleName: attribute.moduleName
+        };
     }
 
     private analyzeTypeDeclaration(
