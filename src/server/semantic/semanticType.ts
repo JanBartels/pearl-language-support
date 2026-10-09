@@ -15,6 +15,8 @@ export enum SemanticTypeKind {
     Duration,
     Sema,
     Bolt,
+    Dation,
+    Interrupt,
     Array,
     VirtualArray,
     Struct,
@@ -77,6 +79,28 @@ export interface SemaType {
 export interface BoltType {
 
     readonly kind: SemanticTypeKind.Bolt;
+}
+
+
+
+export type DationDirection = 'IN' | 'OUT' | 'INOUT';
+
+export type DationClass = 'ALPHIC' | 'BASIC' | 'ALL';
+
+
+export interface DationType {
+
+    readonly kind: SemanticTypeKind.Dation;
+
+    readonly direction: DationDirection;
+
+    readonly dationClass: DationClass;
+}
+
+
+export interface InterruptType {
+
+    readonly kind: SemanticTypeKind.Interrupt;
 }
 
 
@@ -155,6 +179,8 @@ export type SemanticType =
     | DurationType
     | SemaType
     | BoltType
+    | DationType
+    | InterruptType
     | ArrayType
     | VirtualArrayType
     | StructType

@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import type { DecimalTimeValue } from './decimalTimeValue';
+import type { DataObjectSymbol } from './symbol';
 
 export enum SemanticConstantKind {
     Fixed,
@@ -60,3 +61,31 @@ export type SemanticConstantValue =
     | CharacterConstantValue
     | ClockConstantValue
     | DurationConstantValue;
+
+export enum SemanticInitialValueKind {
+    Constant,
+    Reference,
+}
+
+/**
+ * Effective initialization of one declared data object.
+ *
+ * For arrays, `values` contains the explicitly contributing prefix for this
+ * object. If it is shorter than `elementCount`, PEARL repeats the last value
+ * for the remaining elements. This keeps large array initializations compact.
+ */
+export interface SemanticConstantInitialValue {
+    readonly kind: SemanticInitialValueKind.Constant;
+    readonly values: readonly SemanticConstantValue[];
+    readonly elementCount: bigint;
+}
+
+export interface SemanticReferenceInitialValue {
+    readonly kind: SemanticInitialValueKind.Reference;
+    readonly values: readonly DataObjectSymbol[];
+    readonly elementCount: bigint;
+}
+
+export type SemanticInitialValue =
+    | SemanticConstantInitialValue
+    | SemanticReferenceInitialValue;

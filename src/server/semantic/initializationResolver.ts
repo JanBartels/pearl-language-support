@@ -11,12 +11,14 @@ import { SignedConstantExpressionNode } from '../ast/problem/expressions/signedC
 import type { Environment } from './environment';
 import {
     SemanticConstantKind,
+    SemanticInitialValueKind,
     type BitConstantValue,
     type CharacterConstantValue,
     type ClockConstantValue,
     type DurationConstantValue,
     type FloatConstantValue,
-    type SemanticConstantValue
+    type SemanticConstantValue,
+    type SemanticInitialValue
 } from './semanticConstantValue';
 import type {
     ArrayType,
@@ -27,6 +29,7 @@ import type {
 } from './semanticType';
 import { SemanticTypeKind } from './semanticType';
 import type { DataObjectSymbol } from './symbol';
+import { CharacterConstantEvaluator } from './characterConstantEvaluator';
 
 export interface InitializationResolverContext {
     resolveUnderlyingType(type: SemanticType): SemanticType | undefined;
@@ -63,7 +66,15 @@ export interface InitializationResolverContext {
         expectedTypeName: string
     ): SemanticConstantValue | undefined;
 
+    resolveReferenceInitializer(
+        identifier: SourceValue<string>,
+        expectedTargetType: SemanticType | undefined,
+        environment: Environment
+    ): DataObjectSymbol | undefined;
+
     registerNamedConstant(symbol: DataObjectSymbol, value: SemanticConstantValue): void;
+
+    registerInitialValues(symbol: DataObjectSymbol, value: SemanticInitialValue): void;
 
     reportInitializationElementCount(
         keyword: SourceValue<string>,
@@ -110,6 +121,8 @@ interface InitializationValueResolver {
 }
 
 export class InitializationResolver {
+    private readonly characterConstantEvaluator = new CharacterConstantEvaluator();
+
     constructor(
         private readonly context: InitializationResolverContext
     ) {}
@@ -133,6 +146,22 @@ export class InitializationResolver {
 
         if (!underlyingType) {
             return undefined;
+        }
+
+        if (underlyingType.kind === SemanticTypeKind.Reference) {
+            return this.resolveReferenceInitialization(
+                initialization,
+                underlyingType.target,
+                identifierCount
+            );
+        }
+
+        if (underlyingType.kind === SemanticTypeKind.VoidReference) {
+            return this.resolveReferenceInitialization(
+                initialization,
+                undefined,
+                identifierCount
+            );
         }
 
         const valueResolver = this.createValueResolver(underlyingType);
@@ -176,11 +205,17 @@ export class InitializationResolver {
                 const element = initialization.elements[identifierIndex];
                 const value = valueResolver.evaluate(element, environment);
 
-                if (
-                    value !== undefined
-                    && symbol.assignmentProtected
-                    && valueResolver.namedConstantTarget
-                ) {
+                if (value === undefined) {
+                    return;
+                }
+
+                this.context.registerInitialValues(symbol, {
+                    kind: SemanticInitialValueKind.Constant,
+                    values: [value],
+                    elementCount: BigInt(1)
+                });
+
+                if (symbol.assignmentProtected && valueResolver.namedConstantTarget) {
                     this.context.registerNamedConstant(symbol, value);
                 }
             }
@@ -199,6 +234,26 @@ export class InitializationResolver {
             return undefined;
         }
 
+        if (elementType.kind === SemanticTypeKind.Reference) {
+            return this.resolveReferenceArrayInitialization(
+                initialization,
+                type,
+                elementType.target,
+                identifierCount,
+                environment
+            );
+        }
+
+        if (elementType.kind === SemanticTypeKind.VoidReference) {
+            return this.resolveReferenceArrayInitialization(
+                initialization,
+                type,
+                undefined,
+                identifierCount,
+                environment
+            );
+        }
+
         const valueResolver = this.createValueResolver(elementType);
 
         if (!valueResolver) {
@@ -213,7 +268,8 @@ export class InitializationResolver {
             return undefined;
         }
 
-        const elementCount = this.semanticElementCount(type) * BigInt(identifierCount);
+        const elementsPerSymbol = this.semanticElementCount(type);
+        const elementCount = elementsPerSymbol * BigInt(identifierCount);
 
         if (BigInt(initialization.elements.length) > elementCount) {
             this.context.reportTooManyInitializationElements(
@@ -225,16 +281,162 @@ export class InitializationResolver {
             return undefined;
         }
 
+        const values: SemanticConstantValue[] = [];
+
         for (const element of initialization.elements) {
-            valueResolver.evaluate(element, environment);
+            const value = valueResolver.evaluate(element, environment);
+
+            if (value === undefined) {
+                return undefined;
+            }
+
+            values.push(value);
         }
 
-        /*
-         * Felder sind keine benannten Konstanten. Die explizit angegebenen
-         * INIT-Werte wurden semantisch geprüft; die PEARL-Wiederholungsregel
-         * für den letzten Wert verändert den Syntaxbaum nicht.
-         */
-        return undefined;
+        if (values.length === 0) {
+            return undefined;
+        }
+
+        return {
+            apply: (symbol, identifierIndex) => {
+                this.context.registerInitialValues(symbol, {
+                    kind: SemanticInitialValueKind.Constant,
+                    ...this.arrayInitialValue(values, elementsPerSymbol, identifierIndex)
+                });
+            }
+        };
+    }
+
+
+    private resolveReferenceInitialization(
+        initialization: InitializationAttributeNode,
+        expectedTargetType: SemanticType | undefined,
+        identifierCount: number
+    ): DataObjectInitialization | undefined {
+        if (initialization.elements.length !== identifierCount) {
+            this.context.reportInitializationElementCount(
+                initialization.keyword,
+                'REF',
+                identifierCount,
+                initialization.elements.length
+            );
+            return undefined;
+        }
+
+        if (!initialization.elements.every(element => element.value.kind === 'identifier')) {
+            this.context.reportInvalidInitialization(initialization.keyword, 'REF');
+            return undefined;
+        }
+
+        return {
+            apply: (symbol, identifierIndex, environment) => {
+                const element = initialization.elements[identifierIndex];
+
+                if (element.value.kind !== 'identifier') {
+                    return;
+                }
+
+                const target = this.context.resolveReferenceInitializer(
+                    element.value.identifier,
+                    expectedTargetType,
+                    environment
+                );
+
+                if (!target) {
+                    return;
+                }
+
+                this.context.registerInitialValues(symbol, {
+                    kind: SemanticInitialValueKind.Reference,
+                    values: [target],
+                    elementCount: BigInt(1)
+                });
+            }
+        };
+    }
+
+    private resolveReferenceArrayInitialization(
+        initialization: InitializationAttributeNode,
+        type: ArrayType,
+        expectedTargetType: SemanticType | undefined,
+        identifierCount: number,
+        environment: Environment
+    ): DataObjectInitialization | undefined {
+        if (!initialization.elements.every(element => element.value.kind === 'identifier')) {
+            this.context.reportInvalidInitialization(initialization.keyword, 'REF');
+            return undefined;
+        }
+
+        const elementsPerSymbol = this.semanticElementCount(type);
+        const elementCount = elementsPerSymbol * BigInt(identifierCount);
+
+        if (BigInt(initialization.elements.length) > elementCount) {
+            this.context.reportTooManyInitializationElements(
+                initialization.keyword,
+                'REF',
+                elementCount,
+                initialization.elements.length
+            );
+            return undefined;
+        }
+
+        const targets: DataObjectSymbol[] = [];
+
+        for (const element of initialization.elements) {
+            if (element.value.kind !== 'identifier') {
+                return undefined;
+            }
+
+            const target = this.context.resolveReferenceInitializer(
+                element.value.identifier,
+                expectedTargetType,
+                environment
+            );
+
+            if (!target) {
+                return undefined;
+            }
+
+            targets.push(target);
+        }
+
+        if (targets.length === 0) {
+            return undefined;
+        }
+
+        return {
+            apply: (symbol, identifierIndex) => {
+                this.context.registerInitialValues(symbol, {
+                    kind: SemanticInitialValueKind.Reference,
+                    ...this.arrayInitialValue(targets, elementsPerSymbol, identifierIndex)
+                });
+            }
+        };
+    }
+
+
+    private arrayInitialValue<T>(
+        values: readonly T[],
+        elementCount: bigint,
+        identifierIndex: number
+    ): { readonly values: readonly T[]; readonly elementCount: bigint } {
+        const start = elementCount * BigInt(identifierIndex);
+        const end = start + elementCount;
+        const explicitCount = BigInt(values.length);
+        let localValues: readonly T[];
+
+        if (start >= explicitCount) {
+            localValues = [values[values.length - 1]];
+        } else {
+            const startIndex = Number(start);
+            const endIndex = end >= explicitCount ? values.length : Number(end);
+            localValues = values.slice(startIndex, endIndex);
+        }
+
+        return {
+            values: localValues,
+            elementCount
+        };
     }
 
     private createValueResolver(type: SemanticType): InitializationValueResolver | undefined {
@@ -431,7 +633,7 @@ export class InitializationResolver {
                 switch (element.value.kind) {
                     case 'characterString':
                         source = element.value.literal;
-                        value = this.parseCharacterConstant(element.value.literal.value);
+                        value = this.characterConstantEvaluator.evaluate(element.value.literal.value);
                         break;
 
                     case 'identifier': {
@@ -623,54 +825,6 @@ export class InitializationResolver {
         return {
             kind: SemanticConstantKind.Bit,
             bits
-        };
-    }
-
-    private parseCharacterConstant(literal: string): CharacterConstantValue | undefined {
-        if (literal.length < 2 || literal[0] !== "'" || literal[literal.length - 1] !== "'") {
-            return undefined;
-        }
-
-        const body = literal.substring(1, literal.length - 1);
-        let value = '';
-
-        for (let index = 0; index < body.length;) {
-            const character = body[index];
-
-            if (character === "'" && body[index + 1] === "'") {
-                value += "'";
-                index += 2;
-                continue;
-            }
-
-            if (character === '\\') {
-                const end = body.indexOf('\\', index + 1);
-
-                if (end < 0) {
-                    return undefined;
-                }
-
-                const hex = body.substring(index + 1, end);
-
-                if (hex.length === 0 || hex.length % 2 !== 0 || !/^[0-9A-Fa-f]+$/.test(hex)) {
-                    return undefined;
-                }
-
-                for (let hexIndex = 0; hexIndex < hex.length; hexIndex += 2) {
-                    value += String.fromCharCode(Number.parseInt(hex.substring(hexIndex, hexIndex + 2), 16));
-                }
-
-                index = end + 1;
-                continue;
-            }
-
-            value += character;
-            index++;
-        }
-
-        return {
-            kind: SemanticConstantKind.Character,
-            value
         };
     }
 

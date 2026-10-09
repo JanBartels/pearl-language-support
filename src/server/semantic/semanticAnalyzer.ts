@@ -6,6 +6,9 @@ import type { AstNode } from '../ast/astNode';
 import type { SourceValue } from '../core/sourceValue';
 import type { CompilerModeNode } from '../ast/module/compilerModeNode';
 import type { ModuleNode } from '../ast/module/moduleNode';
+import { AlphicDationSystemDeclarationNode } from '../ast/system/declarations/alphicDationSystemDeclationNode';
+import { BasicDationSystemDeclarationNode } from '../ast/system/declarations/basicDationSystemDeclarationNode';
+import { InterruptSystemDeclarationNode } from '../ast/system/declarations/interruptSystemDeclarationNode';
 import { TypeDeclarationNode } from '../ast/problem/declarations/typeDeclarationNode';
 import { DclDeclarationNode } from '../ast/problem/declarations/dclDeclarationNode';
 import { DclDeclarationSentenceNode } from '../ast/problem/declarations/dclDeclarationSentenceNode';
@@ -18,6 +21,8 @@ import { SpcDeclarationSentenceNode } from '../ast/problem/specifications/spcDec
 import { SpcProblemDataAttributeNode } from '../ast/problem/specifications/spcProblemDataAttributeNode';
 import { SpcSemaAttributeNode } from '../ast/problem/specifications/spcSemaAttributeNode';
 import { SpcBoltAttributeNode } from '../ast/problem/specifications/spcBoltAttributeNode';
+import { SpcDationAttributeNode } from '../ast/problem/specifications/spcDationAttributeNode';
+import { SpcInterruptAttributeNode } from '../ast/problem/specifications/spcInterruptAttributeNode';
 import type { OneIdentifierOrListNode } from '../ast/problem/identifiers/oneIdentifierOrListNode';
 import type { ClockConstantNode } from '../ast/problem/expressions/clockConstantNode';
 import { ConstantFixedExpressionNode } from '../ast/problem/expressions/constantFixedExpressionNode';
@@ -36,6 +41,7 @@ import type {
     DurationConstantValue,
     FixedConstantValue,
     SemanticConstantValue,
+    SemanticInitialValue,
     TimeConstantValue
 } from './semanticConstantValue';
 import type { SemanticDiagnostic } from './semanticDiagnostic';
@@ -44,6 +50,8 @@ import {
     SemanticDiagnosticSeverity
 } from './semanticDiagnostic';
 import {
+    DationClass,
+    DationDirection,
     SemanticType,
     SemanticTypeKind
 } from './semanticType';
@@ -61,6 +69,7 @@ import {
 } from './scope';
 import { DeclarationIndex, IndexedDeclaration } from './declarationIndex';
 import { TypeIndex } from './typeIndex';
+import { SystemObjectDeclaration, SystemObjectIndex } from './systemObjectIndex';
 import {
     SemanticTypeResolver,
     SemanticTypeResolverContext
@@ -95,6 +104,7 @@ class SemanticAnalysisState implements
     readonly constantFixedExpressionValues = new Map<ConstantFixedExpressionNode, FixedConstantValue>();
     readonly constantFixedValues = new Map<AstNode, FixedConstantValue>();
     readonly namedConstantValues = new Map<DataObjectSymbol, SemanticConstantValue>();
+    readonly initialValues = new Map<DataObjectSymbol, SemanticInitialValue>();
     readonly timeConstantValues = new Map<AstNode, TimeConstantValue>();
     readonly semaPresetValues = new Map<DataObjectSymbol, readonly FixedConstantValue[]>();
     readonly moduleConfigurations = new Map<ModuleNode, ModuleConfiguration>();
@@ -102,6 +112,7 @@ class SemanticAnalysisState implements
     readonly declarationIndex = new DeclarationIndex();
     readonly localDataSpecifications = new Map<Scope, Map<string, DataObjectSymbol>>();
     readonly typeIndex = new TypeIndex();
+    readonly systemObjectIndex = new SystemObjectIndex();
     readonly scopes = new Map<AstNode, Scope>();
     readonly typeSymbols = new Map<TypeDeclarationNode, TypeSymbol>();
     readonly unresolvedReferenceTargets = new Map<Scope, Map<string, TypeSymbol>>();
@@ -118,6 +129,7 @@ class SemanticAnalysisState implements
             this.diagnostics,
             this.constantFixedExpressionValues,
             this.namedConstantValues,
+            this.initialValues,
             this.constantFixedValues,
             this.timeConstantValues,
             this.semaPresetValues,
@@ -264,6 +276,10 @@ class SemanticAnalysisState implements
         this.namedConstantValues.set(symbol, value);
     }
 
+    registerInitialValues(symbol: DataObjectSymbol, value: SemanticInitialValue): void {
+        this.initialValues.set(symbol, value);
+    }
+
     timeResolution(environment: Environment): TimeResolution {
         let scope: Scope | undefined = environment.scope;
 
@@ -332,6 +348,97 @@ class SemanticAnalysisState implements
         }
 
         return value;
+    }
+
+    resolveReferenceInitializer(
+        identifier: SourceValue<string>,
+        expectedTargetType: SemanticType | undefined,
+        environment: Environment
+    ): DataObjectSymbol | undefined {
+        const symbol = resolveSymbol(environment, identifier.value);
+
+        if (!symbol) {
+            this.reportUnknownIdentifier(identifier);
+            return undefined;
+        }
+
+        this.bind(identifier, symbol);
+
+        if (symbol.kind !== SymbolKind.DataObject) {
+            this.reportInvalidInitialization(identifier, 'REF');
+            return undefined;
+        }
+
+        if (expectedTargetType && !this.semanticTypesEqual(expectedTargetType, symbol.type)) {
+            this.reportInvalidInitialization(identifier, 'REF');
+            return undefined;
+        }
+
+        return symbol;
+    }
+
+    private semanticTypesEqual(left: SemanticType, right: SemanticType): boolean {
+        if (left.kind !== right.kind) {
+            return false;
+        }
+
+        switch (left.kind) {
+            case SemanticTypeKind.Fixed:
+                return right.kind === SemanticTypeKind.Fixed && left.precision === right.precision;
+
+            case SemanticTypeKind.Float:
+                return right.kind === SemanticTypeKind.Float && left.precision === right.precision;
+
+            case SemanticTypeKind.Bit:
+                return right.kind === SemanticTypeKind.Bit && left.length === right.length;
+
+            case SemanticTypeKind.Character:
+                return right.kind === SemanticTypeKind.Character && left.length === right.length;
+
+            case SemanticTypeKind.Clock:
+            case SemanticTypeKind.Duration:
+            case SemanticTypeKind.Sema:
+            case SemanticTypeKind.Bolt:
+            case SemanticTypeKind.Interrupt:
+            case SemanticTypeKind.VoidReference:
+                return true;
+
+            case SemanticTypeKind.Dation:
+                return right.kind === SemanticTypeKind.Dation
+                    && left.direction === right.direction
+                    && left.dationClass === right.dationClass;
+
+            case SemanticTypeKind.Array:
+                return right.kind === SemanticTypeKind.Array
+                    && left.dimensions.length === right.dimensions.length
+                    && left.dimensions.every((dimension, index) => {
+                        const other = right.dimensions[index];
+                        return dimension.lowerBound === other.lowerBound
+                            && dimension.upperBound === other.upperBound;
+                    })
+                    && this.semanticTypesEqual(left.elementType, right.elementType);
+
+            case SemanticTypeKind.VirtualArray:
+                return right.kind === SemanticTypeKind.VirtualArray
+                    && left.rank === right.rank
+                    && this.semanticTypesEqual(left.elementType, right.elementType);
+
+            case SemanticTypeKind.Struct:
+                return right.kind === SemanticTypeKind.Struct
+                    && left.components.length === right.components.length
+                    && left.components.every((component, index) => {
+                        const other = right.components[index];
+                        return component.name.value === other.name.value
+                            && this.semanticTypesEqual(component.type, other.type);
+                    });
+
+            case SemanticTypeKind.Reference:
+                return right.kind === SemanticTypeKind.Reference
+                    && this.semanticTypesEqual(left.target, right.target);
+
+            case SemanticTypeKind.Named:
+                return right.kind === SemanticTypeKind.Named && left.symbol === right.symbol;
+        }
     }
 
     lookupForwardType(name: string, environment: Environment): TypeSymbol | undefined {
@@ -475,6 +582,31 @@ class SemanticAnalysisState implements
         });
     }
 
+    reportSystemSpecificationMismatch(
+        name: SourceValue<string>,
+        systemDeclaration: SystemObjectDeclaration
+    ): void {
+        this.diagnostics.push({
+            code: SemanticDiagnosticCode.SystemSpecificationMismatch,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: name.location,
+            message: `Die SPC-Spezifikation '${name.value}' stimmt nicht mit der SYSTEM-Vereinbarung überein.`,
+            relatedLocations: [{
+                location: systemDeclaration.name.location,
+                message: 'Die zugehörige SYSTEM-Vereinbarung befindet sich hier.'
+            }]
+        });
+    }
+
+    reportMissingSystemDeclarationForSpecification(name: SourceValue<string>, typeName: string): void {
+        this.diagnostics.push({
+            code: SemanticDiagnosticCode.MissingSystemDeclarationForSpecification,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: name.location,
+            message: `Für die lokale ${typeName}-Spezifikation '${name.value}' fehlt eine Vereinbarung im SYSTEM-Teil.`
+        });
+    }
+
     reportInvalidDeclarationScope(keyword: SourceValue<string>, typeName: string): void {
         this.diagnostics.push({
             code: SemanticDiagnosticCode.InvalidDeclarationScope,
@@ -517,6 +649,16 @@ class SemanticAnalysisState implements
             severity: SemanticDiagnosticSeverity.Error,
             location: identifier.location,
             message: `'${identifier.value}' ist keine benannte FIXED-Konstante.`
+        });
+    }
+
+    reportInvariantWithoutInitialization(identifier: SourceValue<string>): void {
+        this.diagnostics.push({
+            code: SemanticDiagnosticCode.InvariantWithoutInitialization,
+            severity: SemanticDiagnosticSeverity.Warning,
+            location: identifier.location,
+            message: `Das INV-Objekt '${identifier.value}' besitzt kein INIT; nach der Deklaration kann ihm `
+                + 'kein Wert mehr zugewiesen werden.'
         });
     }
 
@@ -765,6 +907,16 @@ export class SemanticAnalyzer {
             this.indexDclDeclaration(node as DclDeclarationNode, scope, state);
         }
 
+        if (node.kind === AstKind.AlphicDationSystemDeclaration
+            || node.kind === AstKind.BasicDationSystemDeclaration
+            || node.kind === AstKind.InterruptSystemDeclaration) {
+            if (!scope) {
+                throw new Error('SYSTEM declaration outside semantic scope.');
+            }
+
+            this.indexSystemObject(node, scope, state);
+        }
+
         for (const child of node.getChildren()) {
             this.indexNode(child, scope, state);
         }
@@ -780,7 +932,8 @@ export class SemanticAnalyzer {
 
         const symbol: TypeSymbol = {
             kind: SymbolKind.Type,
-            name: node.name
+            name: node.name,
+            definition: node.name
         };
 
         state.typeSymbols.set(node, symbol);
@@ -816,6 +969,66 @@ export class SemanticAnalyzer {
                     state.reportDuplicateDeclaration(identifier, existing);
                 }
             }
+        }
+    }
+
+    private indexSystemObject(node: AstNode, scope: Scope, state: SemanticAnalysisState): void {
+        let declaration: SystemObjectDeclaration;
+
+        switch (node.kind) {
+            case AstKind.AlphicDationSystemDeclaration: {
+                const dation = node as AlphicDationSystemDeclarationNode;
+                declaration = {
+                    name: dation.name,
+                    type: {
+                        kind: SemanticTypeKind.Dation,
+                        direction: this.systemDationDirection(dation.direction.value),
+                        dationClass: 'ALPHIC'
+                    }
+                };
+                break;
+            }
+
+            case AstKind.BasicDationSystemDeclaration: {
+                const dation = node as BasicDationSystemDeclarationNode;
+                declaration = {
+                    name: dation.name,
+                    type: {
+                        kind: SemanticTypeKind.Dation,
+                        direction: this.systemDationDirection(dation.direction.value),
+                        dationClass: 'BASIC'
+                    }
+                };
+                break;
+            }
+
+            case AstKind.InterruptSystemDeclaration: {
+                const interrupt = node as InterruptSystemDeclarationNode;
+                declaration = {
+                    name: interrupt.name,
+                    type: { kind: SemanticTypeKind.Interrupt }
+                };
+                break;
+            }
+
+            default:
+                throw new Error(`Unexpected SYSTEM object AST kind: ${node.kind}`);
+        }
+
+        const existing = state.systemObjectIndex.index(scope, declaration);
+        if (existing) {
+            state.reportDuplicateDeclaration(declaration.name, { kind: SymbolKind.DataObject, name: existing.name });
+        }
+    }
+
+    private systemDationDirection(direction: string): DationDirection {
+        switch (direction) {
+            case '<-':
+                return 'IN';
+            case '->':
+                return 'OUT';
+            default:
+                return 'INOUT';
         }
     }
 
@@ -961,6 +1174,12 @@ export class SemanticAnalyzer {
 
         if (attribute.global && environment.scope.kind !== ScopeKind.Module) {
             state.reportGlobalDeclarationOutsideModule(attribute.global.keyword);
+        }
+
+        if (attribute.inv && !attribute.initialization) {
+            for (const identifier of node.identifiers.identifiers) {
+                state.reportInvariantWithoutInitialization(identifier);
+            }
         }
 
         const initialization = attribute.initialization;
@@ -1110,6 +1329,22 @@ export class SemanticAnalyzer {
                     state
                 );
 
+            case AstKind.SpcDationAttribute:
+                return this.analyzeDationSpecification(
+                    node,
+                    node.attribute as SpcDationAttributeNode,
+                    environment,
+                    state
+                );
+
+            case AstKind.SpcInterruptAttribute:
+                return this.analyzeInterruptSpecification(
+                    node,
+                    node.attribute as SpcInterruptAttributeNode,
+                    environment,
+                    state
+                );
+
             default:
                 return environment;
         }
@@ -1175,6 +1410,65 @@ export class SemanticAnalyzer {
             environment,
             state
         );
+    }
+
+    private analyzeDationSpecification(
+        node: SpcDeclarationSentenceNode,
+        attribute: SpcDationAttributeNode,
+        environment: Environment,
+        state: SemanticAnalysisState
+    ): Environment {
+        if (environment.scope.kind !== ScopeKind.Module) {
+            state.reportInvalidDeclarationScope(attribute.keyword, 'DATION');
+        }
+
+        if (!attribute.direction || !attribute.dationClass) {
+            return environment;
+        }
+
+        const direction = this.dationDirection(attribute.direction.value);
+        const dationClass = this.dationClass(attribute.dationClass.value);
+
+        if (!direction || !dationClass) {
+            return environment;
+        }
+
+        return this.introduceSpecifiedSystemObjects(
+            node.identifiers,
+            { kind: SemanticTypeKind.Dation, direction, dationClass },
+            this.globalSymbolAttribute(attribute.global),
+            'DATION',
+            environment,
+            state
+        );
+    }
+
+    private analyzeInterruptSpecification(
+        node: SpcDeclarationSentenceNode,
+        attribute: SpcInterruptAttributeNode,
+        environment: Environment,
+        state: SemanticAnalysisState
+    ): Environment {
+        if (environment.scope.kind !== ScopeKind.Module) {
+            state.reportInvalidDeclarationScope(attribute.keyword, 'INTERRUPT');
+        }
+
+        return this.introduceSpecifiedSystemObjects(
+            node.identifiers,
+            { kind: SemanticTypeKind.Interrupt },
+            this.globalSymbolAttribute(attribute.global),
+            'INTERRUPT',
+            environment,
+            state
+        );
+    }
+
+    private dationDirection(value: string): DationDirection | undefined {
+        return value === 'IN' || value === 'OUT' || value === 'INOUT' ? value : undefined;
+    }
+
+    private dationClass(value: string): DationClass | undefined {
+        return value === 'ALPHIC' || value === 'BASIC' || value === 'ALL' ? value : undefined;
     }
 
     private evaluateSemaPresetValues(
@@ -1257,6 +1551,7 @@ export class SemanticAnalyzer {
             const symbol: DataObjectSymbol = {
                 kind: SymbolKind.DataObject,
                 name: identifier,
+                definition: identifier,
                 type,
                 assignmentProtected,
                 global
@@ -1316,6 +1611,7 @@ export class SemanticAnalyzer {
             const symbol: DataObjectSymbol = {
                 kind: SymbolKind.DataObject,
                 name: identifier,
+                definition: identifier,
                 type,
                 assignmentProtected,
                 global
@@ -1332,6 +1628,79 @@ export class SemanticAnalyzer {
         }
 
         return current;
+    }
+
+    private introduceSpecifiedSystemObjects(
+        identifiers: OneIdentifierOrListNode,
+        type: SemanticType,
+        global: GlobalSymbolAttribute | undefined,
+        typeName: 'DATION' | 'INTERRUPT',
+        environment: Environment,
+        state: SemanticAnalysisState
+    ): Environment {
+        let current = environment;
+
+        for (const identifier of identifiers.identifiers) {
+            const existing = this.resolveSymbolInCurrentScope(current, identifier.value);
+            if (existing) {
+                state.reportDuplicateDeclaration(identifier, { kind: existing.kind, name: existing.name });
+                continue;
+            }
+
+            const indexed = state.declarationIndex.lookupInScope(environment.scope, identifier.value);
+            if (indexed) {
+                state.reportDuplicateDeclaration(identifier, indexed);
+                continue;
+            }
+
+            const systemDeclaration = state.systemObjectIndex.lookupInScope(environment.scope, identifier.value);
+            if (systemDeclaration) {
+                if (!this.systemSpecificationMatchesDeclaration(type, systemDeclaration.type)) {
+                    state.reportSystemSpecificationMismatch(identifier, systemDeclaration);
+                }
+            } else if (!global) {
+                state.reportMissingSystemDeclarationForSpecification(identifier, typeName);
+            }
+
+            const symbol: DataObjectSymbol = {
+                kind: SymbolKind.DataObject,
+                name: identifier,
+                definition: systemDeclaration?.name ?? identifier,
+                type,
+                assignmentProtected: false,
+                global: systemDeclaration ? (global ?? { moduleName: undefined }) : global
+            };
+
+            state.bind(identifier, symbol);
+            if (systemDeclaration) {
+                state.bind(systemDeclaration.name, symbol);
+            }
+
+            (environment.scope as MutableScope).symbols.push(symbol);
+            current = this.introduceSymbol(current, symbol);
+        }
+
+        return current;
+    }
+
+    private systemSpecificationMatchesDeclaration(
+        specification: SemanticType,
+        declaration: SemanticType
+    ): boolean {
+        if (specification.kind !== declaration.kind) {
+            return false;
+        }
+
+        if (specification.kind === SemanticTypeKind.Interrupt) {
+            return true;
+        }
+
+        if (specification.kind !== SemanticTypeKind.Dation || declaration.kind !== SemanticTypeKind.Dation) {
+            return false;
+        }
+
+        const directionMatches = declaration.direction === 'INOUT' || declaration.direction === specification.direction;
+        return directionMatches && declaration.dationClass === specification.dationClass;
     }
 
     private resolveSymbolInCurrentScope(environment: Environment, name: string): SemanticSymbol | undefined {
@@ -1393,8 +1762,14 @@ export class SemanticAnalyzer {
             case SemanticTypeKind.Duration:
             case SemanticTypeKind.Sema:
             case SemanticTypeKind.Bolt:
+            case SemanticTypeKind.Interrupt:
             case SemanticTypeKind.VoidReference:
                 return true;
+
+            case SemanticTypeKind.Dation:
+                return declaration.kind === SemanticTypeKind.Dation
+                    && specification.direction === declaration.direction
+                    && specification.dationClass === declaration.dationClass;
 
             case SemanticTypeKind.Array:
                 return declaration.kind === SemanticTypeKind.Array

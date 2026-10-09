@@ -45,6 +45,8 @@ export enum AstKind {
     SpcProblemDataAttribute,
     SpcSemaAttribute,
     SpcBoltAttribute,
+    SpcDationAttribute,
+    SpcInterruptAttribute,
     ProcedureDeclaration,
     TaskDeclaration,
 

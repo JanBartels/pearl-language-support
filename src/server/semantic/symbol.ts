@@ -10,6 +10,17 @@ export interface SymbolBase {
     readonly kind: SymbolKind;
 
     readonly name: SourceValue<string>;
+
+    /**
+     * Source location of the object represented by this symbol if it differs from the name which introduced the
+     * symbol in the current semantic scope.
+     *
+     * Examples:
+     * - a normal DCL/TYPE uses `name` as its definition,
+     * - a GLOBAL SPC without a local declaration also uses `name`,
+     * - an SPC for a SYSTEM dation or interrupt points to the corresponding SYSTEM declaration.
+     */
+    readonly definition?: SourceValue<string>;
 }
 
 export interface ModuleSymbol extends SymbolBase {

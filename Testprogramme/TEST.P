@@ -56,6 +56,7 @@ DCL AFoldingTest /* eine
 tolle
 Variable */ FIXED;
 
+/*
 PP2: PROC( A FIXED, B FIXED );
   A := 1;
 END;
@@ -65,7 +66,7 @@ END;
 PP3: PROC( A FIXED, B FIXED );
   A := 1;
 END;
-
+*/
 
 #define PPC
 #define abc "123"
@@ -154,6 +155,7 @@ DCL EinStringKeinMacro CHAR(255) INIT('VarMacro');
 DCL MyTestStruct TestStruct;
 
 DCL InitializedFloat FLOAT INIT(5.0);
+DCL InitializedInvFloat INV FLOAT INIT(5.0);
 
 #define BUFSIZE "50"
 DCL BufSema SEMA;

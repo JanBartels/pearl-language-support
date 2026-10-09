@@ -57,6 +57,7 @@ import { MacroDocumentationProvider } from './documentation/macroDocumentationPr
 import { CompilerOptionDocumentationProvider } from './documentation/compilerOptionDocumentProvider';
 import { PreprocessorConditionalBlockDocumentationProvider } from './documentation/preprocessorConditionalBlockDocumentationProvider';
 import { AstLookupResultDocumentationProvider } from './documentation/astLookupResultDocumentationProvider';
+import { lookupSymbolDefinition } from './semantic/bindingIndex';
 import { FoldingRegionCollection } from './folding/foldingRegionCollection';
 import { mapFoldingRegion } from './lsp/foldingMapper';
 import { CommentFoldingCollector } from './lexer/commentFoldingCollector';
@@ -214,10 +215,22 @@ connection.onDefinition(params => {
     }
 
     //
-    // AST / semantic definitions (later)
+    // AST / semantic definitions
     //
+    const lookup = analysisResult.rootAnalysis.ast.lookupSourceValue(offset);
+    const semanticContext = analysisResult.rootAnalysis.semanticContext;
 
-    return undefined;
+    if (!lookup || !semanticContext) {
+      return undefined;
+    }
+
+    const definition = lookupSymbolDefinition(semanticContext.bindings, lookup.element);
+
+    if (!definition?.location) {
+      return undefined;
+    }
+
+    return mapLspLocation(definition.location, documentRegistry);
 });
 
 // ------------------------------

@@ -3,7 +3,12 @@
 
 import type { DecimalTimeValue } from '../semantic/decimalTimeValue';
 import { decimalTimeScaleFactor } from '../semantic/decimalTimeValue';
-import { SemanticConstantKind, SemanticConstantValue } from '../semantic/semanticConstantValue';
+import {
+    SemanticConstantKind,
+    SemanticConstantValue,
+    SemanticInitialValue,
+    SemanticInitialValueKind
+} from '../semantic/semanticConstantValue';
 
 export function appendSemanticConstantValue(
     documentation: string,
@@ -17,6 +22,117 @@ export function appendSemanticConstantValue(
 
 **Evaluated value:** \`${formatSemanticConstantValue(value)}\`
 `;
+}
+
+export function appendSemanticInitialValue(
+    documentation: string,
+    value: SemanticInitialValue | undefined
+): string {
+    if (!value || value.values.length === 0) {
+        return documentation;
+    }
+
+    const formatted = value.kind === SemanticInitialValueKind.Constant
+        ? formatRepeatedValues(value.values, value.elementCount)
+        : formatRepeatedReferenceValues(value.values, value.elementCount);
+
+    if (value.elementCount === BigInt(1)) {
+        return `${documentation.trimEnd()}
+
+**Initial value:** \`${formatted}\`
+`;
+    }
+
+    return `${documentation.trimEnd()}
+
+**Initial values:** \`${formatted}\`
+`;
+}
+
+export function appendSemanticPresetValues(
+    documentation: string,
+    values: readonly SemanticConstantValue[] | undefined
+): string {
+    if (!values || values.length === 0) {
+        return documentation;
+    }
+
+    if (values.length === 1) {
+        return `${documentation.trimEnd()}
+
+**PRESET value:** \`${formatSemanticConstantValue(values[0])}\`
+`;
+    }
+
+    return `${documentation.trimEnd()}
+
+**PRESET values:** \`${formatValues(values)}\`
+`;
+}
+
+function formatRepeatedValues(
+    values: readonly SemanticConstantValue[],
+    elementCount: bigint
+): string {
+    return formatRepeatedSequence(values, elementCount, formatSemanticConstantValue);
+}
+
+function formatRepeatedReferenceValues(
+    values: readonly { readonly name: { readonly value: string } }[],
+    elementCount: bigint
+): string {
+    return formatRepeatedSequence(values, elementCount, value => value.name.value);
+}
+
+function formatRepeatedSequence<T>(
+    values: readonly T[],
+    elementCount: bigint,
+    formatValue: (value: T) => string
+): string {
+    const maximumExpandedValues = 16;
+
+    if (elementCount <= BigInt(maximumExpandedValues)) {
+        const count = Number(elementCount);
+        const last = values[values.length - 1];
+        const expanded = Array.from(
+            { length: count },
+            (_, index) => values[index] ?? last
+        );
+
+        return expanded.map(formatValue).join(', ');
+    }
+
+    if (values.length === 1) {
+        return `${formatValue(values[0])} (repeated ${elementCount} times)`;
+    }
+
+    const displayed = values.slice(0, maximumExpandedValues).map(formatValue).join(', ');
+    const prefix = values.length > maximumExpandedValues ? `${displayed}, ...` : displayed;
+    const explicitCount = BigInt(values.length);
+
+    if (explicitCount < elementCount) {
+        const remaining = elementCount - explicitCount;
+        const valueWord = values.length === 1 ? 'value' : 'values';
+        const elementWord = remaining === BigInt(1) ? 'element' : 'elements';
+
+        return `${prefix} (${values.length} explicit ${valueWord}; last value repeated for remaining `
+            + `${remaining} ${elementWord})`;
+    }
+
+    if (explicitCount === elementCount) {
+        return `${prefix} (${elementCount} explicitly initialized elements)`;
+    }
+
+    return `${prefix} (${values.length} explicit values for ${elementCount} elements)`;
+}
+
+function formatValues(values: readonly SemanticConstantValue[]): string {
+    const maximumValues = 16;
+    const displayed = values.slice(0, maximumValues).map(formatSemanticConstantValue);
+
+    return values.length <= maximumValues
+        ? displayed.join(', ')
+        : `${displayed.join(', ')}, ... (${values.length} values)`;
 }
 
 function formatSemanticConstantValue(

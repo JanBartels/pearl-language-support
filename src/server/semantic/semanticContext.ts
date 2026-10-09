@@ -5,7 +5,13 @@ import type { AstNode } from '../ast/astNode';
 import type { ModuleNode } from '../ast/module/moduleNode';
 import type { ConstantFixedExpressionNode } from '../ast/problem/expressions/constantFixedExpressionNode';
 import type { BindingIndex } from './bindingIndex';
-import type { FixedConstantValue, SemanticConstantValue, TimeConstantValue } from './semanticConstantValue';
+import { SemanticInitialValueKind } from './semanticConstantValue';
+import type {
+    FixedConstantValue,
+    SemanticConstantValue,
+    SemanticInitialValue,
+    TimeConstantValue
+} from './semanticConstantValue';
 import type { SemanticDiagnostic } from './semanticDiagnostic';
 import type { ModuleConfiguration } from './moduleConfiguration';
 import type { SemanticType } from './semanticType';
@@ -17,6 +23,7 @@ export class SemanticContext {
     readonly diagnostics: readonly SemanticDiagnostic[];
     readonly constantFixedExpressionValues: ReadonlyMap<ConstantFixedExpressionNode, FixedConstantValue>;
     readonly namedConstantValues: ReadonlyMap<DataObjectSymbol, SemanticConstantValue>;
+    readonly initialValues: ReadonlyMap<DataObjectSymbol, SemanticInitialValue>;
     readonly constantFixedValues: ReadonlyMap<AstNode, FixedConstantValue>;
     readonly timeConstantValues: ReadonlyMap<AstNode, TimeConstantValue>;
     readonly semaPresetValues: ReadonlyMap<DataObjectSymbol, readonly FixedConstantValue[]>;
@@ -28,6 +35,7 @@ export class SemanticContext {
         diagnostics: readonly SemanticDiagnostic[] = [],
         constantFixedExpressionValues: ReadonlyMap<ConstantFixedExpressionNode, FixedConstantValue> = new Map(),
         namedConstantValues: ReadonlyMap<DataObjectSymbol, SemanticConstantValue> = new Map(),
+        initialValues: ReadonlyMap<DataObjectSymbol, SemanticInitialValue> = new Map(),
         constantFixedValues: ReadonlyMap<AstNode, FixedConstantValue> = new Map(),
         timeConstantValues: ReadonlyMap<AstNode, TimeConstantValue> = new Map(),
         semaPresetValues: ReadonlyMap<DataObjectSymbol, readonly FixedConstantValue[]> = new Map(),
@@ -38,6 +46,23 @@ export class SemanticContext {
         this.diagnostics = [...diagnostics];
         this.constantFixedExpressionValues = new Map(constantFixedExpressionValues);
         this.namedConstantValues = new Map(namedConstantValues);
+        this.initialValues = new Map(
+            [...initialValues].map(([symbol, value]): [DataObjectSymbol, SemanticInitialValue] => {
+                if (value.kind === SemanticInitialValueKind.Constant) {
+                    return [symbol, {
+                        kind: SemanticInitialValueKind.Constant,
+                        values: [...value.values],
+                        elementCount: value.elementCount
+                    }];
+                }
+
+                return [symbol, {
+                    kind: SemanticInitialValueKind.Reference,
+                    values: [...value.values],
+                    elementCount: value.elementCount
+                }];
+            })
+        );
         this.constantFixedValues = new Map(constantFixedValues);
         this.timeConstantValues = new Map(timeConstantValues);
         this.semaPresetValues = new Map(
@@ -70,6 +95,7 @@ export class SemanticContext {
             [...this.diagnostics, ...diagnostics],
             this.constantFixedExpressionValues,
             this.namedConstantValues,
+            this.initialValues,
             this.constantFixedValues,
             this.timeConstantValues,
             this.semaPresetValues,
