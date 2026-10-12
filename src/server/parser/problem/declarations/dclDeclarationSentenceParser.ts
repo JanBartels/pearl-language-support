@@ -5,48 +5,47 @@ import { ParserBase } from "../../parserBase";
 
 import { DclDeclarationSentenceNode } from "../../../ast/problem/declarations/dclDeclarationSentenceNode";
 
-import { OneIdentifierOrListParser } from "../identifiers/oneIdentifierOrListParser";
 import { DimensionAttributeParser } from "../dimensions/dimensionAttributeParser";
+import { OneIdentifierOrListParser } from "../identifiers/oneIdentifierOrListParser";
 
 import { DclAttributeParser } from "./dclAttributeParser";
 
 export class DclDeclarationSentenceParser extends ParserBase {
 
-    override parse():
-        DclDeclarationSentenceNode | undefined {
-
+    override parse(): DclDeclarationSentenceNode | undefined {
         this.skipTrivia();
 
-        const identifiers =
-            new OneIdentifierOrListParser(
-                this.context
-            ).parse();
+        const identifiers = new OneIdentifierOrListParser(
+            this.context
+        ).parse();
 
         if (!identifiers) {
             return undefined;
         }
 
-        const dimension =
-            new DimensionAttributeParser(
-                this.context
-            ).parse();
+        const dimension = new DimensionAttributeParser(
+            this.context
+        ).parse();
 
-        const attribute =
-            new DclAttributeParser(
-                this.context
-            ).parse();
+        const checkpoint = this.problemCheckpoint();
+        const attribute = new DclAttributeParser(
+            this.context
+        ).parse();
 
         if (!attribute) {
-
-            this.problems.error(
-                this.location(),
-                "Expected declaration attribute."
-            );
+            if (!this.hasProblemsSince(checkpoint)) {
+                this.problems.error(
+                    this.location(),
+                    "Expected declaration attribute."
+                );
+            }
 
             this.synchronize([
                 ",",
                 ";"
             ]);
+
+            return undefined;
         }
 
         return new DclDeclarationSentenceNode(
@@ -55,5 +54,4 @@ export class DclDeclarationSentenceParser extends ParserBase {
             attribute
         );
     }
-
 }

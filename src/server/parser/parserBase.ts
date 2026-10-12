@@ -162,6 +162,14 @@ export abstract class ParserBase {
         return this.context.problems;
     }
 
+    protected problemCheckpoint(): number {
+        return this.problems.size();
+    }
+
+    protected hasProblemsSince(checkpoint: number): boolean {
+        return this.problems.size() > checkpoint;
+    }
+
     /*
     ** Hilfsmethoden für den TokenStream
     */

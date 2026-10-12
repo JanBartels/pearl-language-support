@@ -572,6 +572,15 @@ class SemanticAnalysisState implements
         });
     }
 
+    reportDataSpecificationRequiresGlobal(name: SourceValue<string>): void {
+        this.diagnostics.push({
+            code: SemanticDiagnosticCode.DataSpecificationRequiresGlobal,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: name.location,
+            message: `Die SPC-Spezifikation '${name.value}' für ein Datenobjekt benötigt in RTOS-UH GLOBAL.`
+        });
+    }
+
     reportMissingDeclarationForSpecification(name: SourceValue<string>): void {
         this.diagnostics.push({
             code: SemanticDiagnosticCode.MissingDeclarationForSpecification,
@@ -655,9 +664,9 @@ class SemanticAnalysisState implements
     reportInvariantWithoutInitialization(identifier: SourceValue<string>): void {
         this.diagnostics.push({
             code: SemanticDiagnosticCode.InvariantWithoutInitialization,
-            severity: SemanticDiagnosticSeverity.Warning,
+            severity: SemanticDiagnosticSeverity.Error,
             location: identifier.location,
-            message: `Das INV-Objekt '${identifier.value}' besitzt kein INIT; nach der Deklaration kann ihm `
+            message: `Das INV-Objekt '${identifier.value}' benötigt ein INIT; nach der Deklaration kann ihm `
                 + 'kein Wert mehr zugewiesen werden.'
         });
     }
@@ -1379,6 +1388,7 @@ export class SemanticAnalyzer {
             type,
             attribute.inv !== undefined,
             this.globalSymbolAttribute(attribute.global),
+            true,
             environment,
             state
         );
@@ -1407,6 +1417,7 @@ export class SemanticAnalyzer {
             type,
             false,
             this.globalSymbolAttribute(attribute.global),
+            false,
             environment,
             state
         );
@@ -1583,6 +1594,7 @@ export class SemanticAnalyzer {
         type: SemanticType,
         assignmentProtected: boolean,
         global: GlobalSymbolAttribute | undefined,
+        requireGlobal: boolean,
         environment: Environment,
         state: SemanticAnalysisState
     ): Environment {
@@ -1593,6 +1605,27 @@ export class SemanticAnalyzer {
 
             if (existing) {
                 state.reportDuplicateDeclaration(identifier, { kind: existing.kind, name: existing.name });
+                continue;
+            }
+
+            if (requireGlobal && global === undefined) {
+                state.reportDataSpecificationRequiresGlobal(identifier);
+                continue;
+            }
+
+            if (requireGlobal) {
+                const symbol: DataObjectSymbol = {
+                    kind: SymbolKind.DataObject,
+                    name: identifier,
+                    definition: identifier,
+                    type,
+                    assignmentProtected,
+                    global
+                };
+
+                state.bind(identifier, symbol);
+                (environment.scope as MutableScope).symbols.push(symbol);
+                current = this.introduceSymbol(current, symbol);
                 continue;
             }
 

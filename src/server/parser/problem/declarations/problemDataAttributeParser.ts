@@ -15,7 +15,6 @@ export class ProblemDataAttributeParser extends ParserBase {
         this.skipTrivia();
 
         const invToken = this.acceptKeyword("INV");
-
         const type = new ProblemDataTypeParser(
             this.context
         ).parse();
@@ -27,15 +26,11 @@ export class ProblemDataAttributeParser extends ParserBase {
 
             this.problems.error(
                 this.location(),
-                "Expected problem data type after 'INV'."
+                "Expected data type after 'INV'."
             );
 
-            return new ProblemDataAttributeNode(
-                this.tokenValue(invToken),
-                undefined,
-                undefined,
-                undefined
-            );
+            this.synchronizeProblemDataAttribute();
+            return undefined;
         }
 
         const global = new GlobalAttributeParser(
@@ -46,6 +41,22 @@ export class ProblemDataAttributeParser extends ParserBase {
             this.context
         ).parse();
 
+        this.skipTrivia();
+
+        if (initialization && this.isKeyword("GLOBAL")) {
+            this.problems.error(
+                this.location(),
+                "GLOBAL attribute must precede INIT."
+            );
+
+            new GlobalAttributeParser(
+                this.context
+            ).parse();
+
+            this.synchronizeProblemDataAttribute();
+            return undefined;
+        }
+
         return new ProblemDataAttributeNode(
             invToken
                 ? this.tokenValue(invToken)
@@ -54,5 +65,18 @@ export class ProblemDataAttributeParser extends ParserBase {
             global,
             initialization
         );
+    }
+
+    private synchronizeProblemDataAttribute(): void {
+        this.synchronize([
+            ",",
+            ";",
+            "TYPE",
+            "DCL",
+            "DECLARE",
+            "SPC",
+            "SPECIFY",
+            "MODEND"
+        ]);
     }
 }

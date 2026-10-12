@@ -16,6 +16,7 @@ export enum SemanticDiagnosticCode {
     DuplicateType = 'semantic.duplicate-type',
     DuplicateDeclaration = 'semantic.duplicate-declaration',
     SpecificationMismatch = 'semantic.specification-mismatch',
+    DataSpecificationRequiresGlobal = 'semantic.data-specification-requires-global',
     MissingDeclarationForSpecification = 'semantic.missing-declaration-for-specification',
     SystemSpecificationMismatch = 'semantic.system-specification-mismatch',
     MissingSystemDeclarationForSpecification = 'semantic.missing-system-declaration-for-specification',

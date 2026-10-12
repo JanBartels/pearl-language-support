@@ -1,47 +1,89 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
-import { SpcDeclarationNode } from '../../../ast/problem/specifications/spcDeclarationNode';
-import { SpcDeclarationSentenceNode } from '../../../ast/problem/specifications/spcDeclarationSentenceNode';
-import { ParserBase } from '../../parserBase';
-import { SpcDeclarationSentenceParser } from './spcDeclarationSentenceParser';
+import { SpcDeclarationNode } from "../../../ast/problem/specifications/spcDeclarationNode";
+import { SpcDeclarationSentenceNode } from "../../../ast/problem/specifications/spcDeclarationSentenceNode";
+import { ParserBase } from "../../parserBase";
+import { SpcDeclarationSentenceParser } from "./spcDeclarationSentenceParser";
 
 export class SpcDeclarationParser extends ParserBase {
+
     override parse(): SpcDeclarationNode | undefined {
         this.skipTrivia();
 
-        const keyword = this.acceptKeyword(['SPC', 'SPECIFY']);
+        const keyword = this.acceptKeyword([
+            "SPC",
+            "SPECIFY"
+        ]);
+
         if (!keyword) {
             return undefined;
         }
 
         const specifications: SpcDeclarationSentenceNode[] = [];
-        const first = new SpcDeclarationSentenceParser(this.context).parse();
+        const firstCheckpoint = this.problemCheckpoint();
+        const first = new SpcDeclarationSentenceParser(
+            this.context
+        ).parse();
 
         if (!first) {
-            this.problems.error(this.location(), 'Expected specification after SPC.');
-            this.synchronize([';']);
+            if (!this.hasProblemsSince(firstCheckpoint)) {
+                this.problems.error(
+                    this.location(),
+                    "Expected specification after SPC."
+                );
+            }
+
+            this.synchronize([
+                ";"
+            ]);
         } else {
             specifications.push(first);
 
             while (this.acceptComma()) {
-                const specification = new SpcDeclarationSentenceParser(this.context).parse();
-                if (specification) {
-                    specifications.push(specification);
-                    continue;
+                const checkpoint = this.problemCheckpoint();
+                const specification = new SpcDeclarationSentenceParser(
+                    this.context
+                ).parse();
+
+                if (!specification) {
+                    if (!this.hasProblemsSince(checkpoint)) {
+                        this.problems.error(
+                            this.location(),
+                            "Expected specification after ','."
+                        );
+                    }
+
+                    this.synchronize([
+                        ";"
+                    ]);
+
+                    break;
                 }
 
-                this.problems.error(this.location(), "Expected specification after ','.");
-                this.synchronize([';']);
-                break;
+                specifications.push(specification);
             }
         }
 
         if (!this.expectSemicolon()) {
-            this.synchronize([';', 'TYPE', 'DCL', 'DECLARE', 'SPC', 'SPECIFY', 'MODEND']);
+            specifications.length = 0;
+
+            this.synchronize([
+                ";",
+                "TYPE",
+                "DCL",
+                "DECLARE",
+                "SPC",
+                "SPECIFY",
+                "MODEND"
+            ]);
+
             this.acceptSemicolon();
         }
 
-        return new SpcDeclarationNode(this.tokenValue(keyword), specifications);
+        return new SpcDeclarationNode(
+            this.tokenValue(keyword),
+            specifications
+        );
     }
 }

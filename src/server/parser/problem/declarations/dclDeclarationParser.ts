@@ -11,55 +11,50 @@ import { DclDeclarationSentenceParser } from "./dclDeclarationSentenceParser";
 export class DclDeclarationParser extends ParserBase {
 
     override parse(): DclDeclarationNode | undefined {
-
         this.skipTrivia();
 
-        const keyword =
-            this.acceptKeyword([
-                "DCL",
-                "DECLARE"
-            ]);
+        const keyword = this.acceptKeyword([
+            "DCL",
+            "DECLARE"
+        ]);
 
         if (!keyword) {
             return undefined;
         }
 
-        const declarations:
-            DclDeclarationSentenceNode[] = [];
-
-        const first =
-            new DclDeclarationSentenceParser(
-                this.context
-            ).parse();
+        const declarations: DclDeclarationSentenceNode[] = [];
+        const firstCheckpoint = this.problemCheckpoint();
+        const first = new DclDeclarationSentenceParser(
+            this.context
+        ).parse();
 
         if (!first) {
-
-            this.problems.error(
-                this.location(),
-                "Expected declaration after DCL."
-            );
+            if (!this.hasProblemsSince(firstCheckpoint)) {
+                this.problems.error(
+                    this.location(),
+                    "Expected declaration after DCL."
+                );
+            }
 
             this.synchronize([
                 ";"
             ]);
-
         } else {
-
             declarations.push(first);
 
             while (this.acceptComma()) {
-
-                const declaration =
-                    new DclDeclarationSentenceParser(
-                        this.context
-                    ).parse();
+                const checkpoint = this.problemCheckpoint();
+                const declaration = new DclDeclarationSentenceParser(
+                    this.context
+                ).parse();
 
                 if (!declaration) {
-
-                    this.problems.error(
-                        this.location(),
-                        "Expected declaration after ','."
-                    );
+                    if (!this.hasProblemsSince(checkpoint)) {
+                        this.problems.error(
+                            this.location(),
+                            "Expected declaration after ','."
+                        );
+                    }
 
                     this.synchronize([
                         ";"
@@ -73,6 +68,7 @@ export class DclDeclarationParser extends ParserBase {
         }
 
         if (!this.expectSemicolon()) {
+            declarations.length = 0;
 
             this.synchronize([
                 ";",
