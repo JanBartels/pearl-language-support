@@ -68,15 +68,18 @@ export class SpcDeclarationParser extends ParserBase {
         if (!this.expectSemicolon()) {
             specifications.length = 0;
 
-            this.synchronize([
-                ";",
-                "TYPE",
-                "DCL",
-                "DECLARE",
-                "SPC",
-                "SPECIFY",
-                "MODEND"
-            ]);
+            if (!this.isIdentifier()) {
+                this.synchronize([
+                    ";",
+                    "TYPE",
+                    "DCL",
+                    "DECLARE",
+                    "SPC",
+                    "SPECIFY",
+                    "END",
+                    "MODEND"
+                ]);
+            }
 
             this.acceptSemicolon();
         }

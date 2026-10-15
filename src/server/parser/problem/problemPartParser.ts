@@ -8,6 +8,7 @@ import { ProblemPartNode } from "../../ast/problem/problemPartNode";
 import { TypeDeclarationParser } from "./declarations/typeDeclarationParser";
 import { DclDeclarationParser } from "./declarations/dclDeclarationParser";
 import { SpcDeclarationParser } from "./specifications/spcDeclarationParser";
+import { ProblemNamedDeclarationParser } from "./declarations/problemNamedDeclarationParser";
 
 export class ProblemPartParser extends ParserBase {
 
@@ -26,7 +27,7 @@ export class ProblemPartParser extends ParserBase {
             this.tokenValue(problemKeyword)
         );
 
-        if (!this.expectSemicolon()) {
+        if (!this.expectSemicolon() && !this.isIdentifier()) {
             this.synchronize([
                 "TYPE",
                 "DCL",
@@ -72,6 +73,19 @@ export class ProblemPartParser extends ParserBase {
 
             if (spcDeclaration) {
                 node.addChild(spcDeclaration);
+                continue;
+            }
+
+            if (this.isIdentifier()) {
+                const namedDeclaration =
+                    new ProblemNamedDeclarationParser(
+                        this.context
+                    ).parse();
+
+                if (namedDeclaration) {
+                    node.addChild(namedDeclaration);
+                }
+
                 continue;
             }
 

@@ -50,6 +50,7 @@ export class SpcDeclarationSentenceParser extends ParserBase {
         if (virtualDimensions && (
             attribute.kind === AstKind.SpcDationAttribute
             || attribute.kind === AstKind.SpcInterruptAttribute
+            || attribute.kind === AstKind.SpcTaskAttribute
         )) {
             this.problems.error(
                 virtualDimensionLocation,

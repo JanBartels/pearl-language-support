@@ -10,6 +10,7 @@ import { AstNode } from "../../astNode";
 import { DocumentationProvider } from "../../../documentation/documentationProvider";
 import { RefTypeDocumentationProvider } from "../../../documentation/problem/types/refTypeDocumentationProvider";
 
+import { TaskReferenceTargetNode } from "./taskReferenceTargetNode";
 import { SimpleTypeNode } from "./simpleTypeNode";
 import { NamedTypeNode } from "./namedTypeNode";
 import { StructTypeNode } from "./structTypeNode";
@@ -18,6 +19,7 @@ export type RefTargetTypeNode =
     | SimpleTypeNode
     | NamedTypeNode
     | StructTypeNode
+    | TaskReferenceTargetNode
     ;
 
 export class RefTypeNode extends AstNode {

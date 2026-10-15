@@ -244,6 +244,9 @@ export class SemanticTypeResolver {
 
         switch (node.kind) {
 
+            case AstKind.TaskReferenceTarget:
+                return { kind: SemanticTypeKind.Task };
+
             case AstKind.SimpleType:
                 return this.resolveSimpleType( node as SimpleTypeNode, environment );
 

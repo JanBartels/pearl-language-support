@@ -35,6 +35,7 @@ export enum SemanticDiagnosticCode {
     InitializationValueTooLong = 'semantic.initialization-value-too-long',
     InvalidClockConstant = 'semantic.invalid-clock-constant',
     TimeResolutionLoss = 'semantic.time-resolution-loss',
+    InvalidTaskPriority = 'semantic.invalid-task-priority',
     UnknownCompilerMode = 'semantic.unknown-compiler-mode',
     MarkerOptionWithoutNoLineStop = 'semantic.marker-option-without-nolstop',
 }

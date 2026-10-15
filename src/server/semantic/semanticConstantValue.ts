@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import type { DecimalTimeValue } from './decimalTimeValue';
-import type { DataObjectSymbol } from './symbol';
+import type { DataObjectSymbol, TaskSymbol } from './symbol';
 
 export enum SemanticConstantKind {
     Fixed,
@@ -82,7 +82,7 @@ export interface SemanticConstantInitialValue {
 
 export interface SemanticReferenceInitialValue {
     readonly kind: SemanticInitialValueKind.Reference;
-    readonly values: readonly DataObjectSymbol[];
+    readonly values: readonly (DataObjectSymbol | TaskSymbol)[];
     readonly elementCount: bigint;
 }
 

@@ -3,6 +3,7 @@
 
 import { SpcAttributeNode } from '../../../ast/problem/specifications/spcAttributeNode';
 import { ParserBase } from '../../parserBase';
+import { SpcTaskAttributeParser } from "./spcTaskAttributeParser";
 import { SpcBoltAttributeParser } from './spcBoltAttributeParser';
 import { SpcDationAttributeParser } from './spcDationAttributeParser';
 import { SpcInterruptAttributeParser } from './spcInterruptAttributeParser';
@@ -13,7 +14,8 @@ export class SpcAttributeParser extends ParserBase {
     override parse(): SpcAttributeNode | undefined {
         this.skipTrivia();
 
-        return new SpcSemaAttributeParser(this.context).parse()
+        return new SpcTaskAttributeParser(this.context).parse()
+            ?? new SpcSemaAttributeParser(this.context).parse()
             ?? new SpcBoltAttributeParser(this.context).parse()
             ?? new SpcDationAttributeParser(this.context).parse()
             ?? new SpcInterruptAttributeParser(this.context).parse()

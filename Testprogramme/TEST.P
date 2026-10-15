@@ -160,6 +160,22 @@ DCL InitializedInvFloat INV FLOAT INIT(5.0);
 #define BUFSIZE "50"
 DCL BufSema SEMA;
 
+SPC HuhuTask TASK;
+
+HuhuTask: TASK PRIO 23;
+DCL HuhuA FIXED;
+DCL Var FLOAT;
+
+END;
+
+DCL RefTask REF TASK;
+
+DCL RefTaskInit REF TASK INIT(HuhuTask);
+SPC RefTask2 REF TASK GLOBAL;
+DCL RefTask2 REF TASK GLOBAL;
+
+!DCL HuhuA FIXED;
+
 somethingGlobal: PROC RETURNS( FIXED ) GLOBAL;
 DCL MyArr(2) FIXED;
 DCL SpecialChar CHAR(20);

@@ -23,6 +23,7 @@ export enum SemanticTypeKind {
     Reference,
     Named,
     VoidReference,
+    Task,
 }
 
 
@@ -148,6 +149,10 @@ export interface StructComponentType {
 }
 
 
+export interface TaskType {
+    readonly kind: SemanticTypeKind.Task;
+}
+
 export interface ReferenceType {
 
     readonly kind: SemanticTypeKind.Reference;
@@ -187,4 +192,5 @@ export type SemanticType =
     | ReferenceType
     | NamedType
     | VoidReferenceType
+    | TaskType
     ;

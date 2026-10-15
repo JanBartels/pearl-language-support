@@ -12,10 +12,12 @@ import { InterruptSystemDeclarationNode } from '../ast/system/declarations/inter
 import { TypeDeclarationNode } from '../ast/problem/declarations/typeDeclarationNode';
 import { DclDeclarationNode } from '../ast/problem/declarations/dclDeclarationNode';
 import { DclDeclarationSentenceNode } from '../ast/problem/declarations/dclDeclarationSentenceNode';
+import { TaskDeclarationNode } from '../ast/problem/declarations/taskDeclarationNode';
 import { ProblemDataAttributeNode } from '../ast/problem/declarations/problemDataAttributeNode';
 import { SemaAttributeNode } from '../ast/problem/declarations/semaAttributeNode';
 import { BoltAttributeNode } from '../ast/problem/declarations/boltAttributeNode';
 import type { GlobalAttributeNode } from '../ast/problem/declarations/globalAttributeNode';
+import { SpcTaskAttributeNode } from "../ast/problem/specifications/spcTaskAttributeNode";
 import { SpcDeclarationNode } from '../ast/problem/specifications/spcDeclarationNode';
 import { SpcDeclarationSentenceNode } from '../ast/problem/specifications/spcDeclarationSentenceNode';
 import { SpcProblemDataAttributeNode } from '../ast/problem/specifications/spcProblemDataAttributeNode';
@@ -59,6 +61,7 @@ import {
     DataObjectSymbol,
     GlobalSymbolAttribute,
     SemanticSymbol,
+    TaskSymbol,
     TypeSymbol
 } from './symbol';
 import { SymbolKind } from './symbolKind';
@@ -110,11 +113,13 @@ class SemanticAnalysisState implements
     readonly moduleConfigurations = new Map<ModuleNode, ModuleConfiguration>();
     readonly moduleConfigurationsByScope = new Map<Scope, ModuleConfiguration>();
     readonly declarationIndex = new DeclarationIndex();
-    readonly localDataSpecifications = new Map<Scope, Map<string, DataObjectSymbol>>();
     readonly typeIndex = new TypeIndex();
     readonly systemObjectIndex = new SystemObjectIndex();
     readonly scopes = new Map<AstNode, Scope>();
     readonly typeSymbols = new Map<TypeDeclarationNode, TypeSymbol>();
+    readonly taskSymbols = new Map<TaskDeclarationNode, TaskSymbol>();
+    readonly dataDeclarationScopes = new Map<SourceValue<string>, Scope>();
+    readonly rejectedDataDeclarations = new Set<SourceValue<string>>();
     readonly unresolvedReferenceTargets = new Map<Scope, Map<string, TypeSymbol>>();
     readonly forwardReferences = new Map<TypeSymbol, SourceValue<string>[]>();
     readonly typeResolver = new SemanticTypeResolver(this);
@@ -354,7 +359,7 @@ class SemanticAnalysisState implements
         identifier: SourceValue<string>,
         expectedTargetType: SemanticType | undefined,
         environment: Environment
-    ): DataObjectSymbol | undefined {
+    ): DataObjectSymbol | TaskSymbol | undefined {
         const symbol = resolveSymbol(environment, identifier.value);
 
         if (!symbol) {
@@ -363,6 +368,16 @@ class SemanticAnalysisState implements
         }
 
         this.bind(identifier, symbol);
+
+        // A TASK is a referenceable object, but not a data object.
+        if (symbol.kind === SymbolKind.Task) {
+            if (expectedTargetType?.kind !== SemanticTypeKind.Task) {
+                this.reportInvalidInitialization(identifier, 'REF');
+                return undefined;
+            }
+
+            return symbol;
+        }
 
         if (symbol.kind !== SymbolKind.DataObject) {
             this.reportInvalidInitialization(identifier, 'REF');
@@ -400,6 +415,7 @@ class SemanticAnalysisState implements
             case SemanticTypeKind.Sema:
             case SemanticTypeKind.Bolt:
             case SemanticTypeKind.Interrupt:
+            case SemanticTypeKind.Task:
             case SemanticTypeKind.VoidReference:
                 return true;
 
@@ -486,25 +502,6 @@ class SemanticAnalysisState implements
         references.push(source);
     }
 
-    registerLocalDataSpecification(scope: Scope, symbol: DataObjectSymbol): void {
-        let specifications = this.localDataSpecifications.get(scope);
-
-        if (!specifications) {
-            specifications = new Map<string, DataObjectSymbol>();
-            this.localDataSpecifications.set(scope, specifications);
-        }
-
-        specifications.set(symbol.name.value, symbol);
-    }
-
-    localDataSpecification(scope: Scope, name: string): DataObjectSymbol | undefined {
-        return this.localDataSpecifications.get(scope)?.get(name);
-    }
-
-    completeLocalDataSpecification(scope: Scope, name: string): void {
-        this.localDataSpecifications.get(scope)?.delete(name);
-    }
-
     replaceSymbolBindings(previous: SemanticSymbol, replacement: SemanticSymbol): void {
         for (const [source, symbol] of this.bindings) {
             if (symbol === previous) {
@@ -555,19 +552,6 @@ class SemanticAnalysisState implements
             relatedLocations: [{
                 location: existing.name.location,
                 message: 'Die erste Deklaration befindet sich hier.'
-            }]
-        });
-    }
-
-    reportSpecificationMismatch(name: SourceValue<string>, specification: DataObjectSymbol): void {
-        this.diagnostics.push({
-            code: SemanticDiagnosticCode.SpecificationMismatch,
-            severity: SemanticDiagnosticSeverity.Error,
-            location: name.location,
-            message: `Die Deklaration '${name.value}' stimmt nicht mit der vorherigen SPC-Spezifikation überein.`,
-            relatedLocations: [{
-                location: specification.name.location,
-                message: 'Die zugehörige SPC-Spezifikation befindet sich hier.'
             }]
         });
     }
@@ -631,6 +615,18 @@ class SemanticAnalysisState implements
             severity: SemanticDiagnosticSeverity.Error,
             location: keyword.location,
             message: 'Das GLOBAL-Attribut ist nur für Vereinbarungen auf Modulebene zulässig.'
+        });
+    }
+
+    reportInvalidTaskPriority(
+        source: SourceValue<string>,
+        value: bigint
+    ): void {
+        this.diagnostics.push({
+            code: SemanticDiagnosticCode.InvalidTaskPriority,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: source.location,
+            message: `Die Task-Priorität ${value} liegt außerhalb des zulässigen Bereichs 1..32767.`
         });
     }
 
@@ -829,6 +825,7 @@ export class SemanticAnalyzer {
         const state = new SemanticAnalysisState();
 
         this.indexNode(root, undefined, state);
+        this.validateDataDeclarationShadowing(state);
         this.collectModuleConfigurations(root, state);
         this.analyzeNode(root, undefined, state);
         state.finalize();
@@ -887,6 +884,18 @@ export class SemanticAnalyzer {
     }
 
     private indexNode(node: AstNode, parentScope: Scope | undefined, state: SemanticAnalysisState): void {
+        if (node.kind === AstKind.TaskDeclaration) {
+            if (!parentScope) {
+                throw new Error('TASK declaration outside semantic scope.');
+            }
+
+            this.indexTaskDeclaration(
+                node as TaskDeclarationNode,
+                parentScope,
+                state
+            );
+        }
+
         let scope = parentScope;
         const scopeKind = this.scopeKindFor(node);
 
@@ -976,8 +985,63 @@ export class SemanticAnalyzer {
 
                 if (existing) {
                     state.reportDuplicateDeclaration(identifier, existing);
+                    continue;
                 }
+
+                state.dataDeclarationScopes.set(identifier, scope);
             }
+        }
+    }
+
+    private indexTaskDeclaration(
+        node: TaskDeclarationNode,
+        scope: Scope,
+        state: SemanticAnalysisState
+    ): void {
+        const declaration: IndexedDeclaration = {
+            kind: SymbolKind.Task,
+            name: node.name
+        };
+
+        const existing = state.declarationIndex.index(scope, declaration);
+
+        const symbol: TaskSymbol = {
+            kind: SymbolKind.Task,
+            name: node.name,
+            definition: node.name,
+            global: this.globalSymbolAttribute(node.global)
+        };
+
+        state.taskSymbols.set(node, symbol);
+
+        if (existing) {
+            state.reportDuplicateDeclaration(node.name, existing);
+            return;
+        }
+
+        (scope as MutableScope).symbols.push(symbol);
+    }
+
+    private validateDataDeclarationShadowing(state: SemanticAnalysisState): void {
+        /*
+         * RTOS-UH rejects ordinary DCL shadowing across scope boundaries.
+         * Keep this rule on DCL declarations instead of making DeclarationIndex
+         * globally shadowing-free: procedure parameters may later shadow outer
+         * names, while a DCL in the same or a nested scope must still conflict
+         * with that parameter. Labels use a separate namespace.
+         */
+        for (const [identifier, scope] of state.dataDeclarationScopes) {
+            const outer = state.declarationIndex.lookupInOuterScopes(
+                scope,
+                identifier.value
+            );
+
+            if (!outer) {
+                continue;
+            }
+
+            state.reportDuplicateDeclaration(identifier, outer);
+            state.rejectedDataDeclarations.add(identifier);
         }
     }
 
@@ -1046,6 +1110,18 @@ export class SemanticAnalyzer {
         environment: Environment | undefined,
         state: SemanticAnalysisState
     ): Environment | undefined {
+        if (node.kind === AstKind.TaskDeclaration) {
+            if (!environment) {
+                throw new Error('TASK declaration without semantic environment.');
+            }
+
+            return this.analyzeTaskDeclaration(
+                node as TaskDeclarationNode,
+                environment,
+                state
+            );
+        }
+
         const scope = state.scopes.get(node);
 
         if (scope) {
@@ -1084,6 +1160,69 @@ export class SemanticAnalyzer {
             default:
                 return this.analyzeChildren(node, environment, state);
         }
+    }
+
+    private analyzeTaskDeclaration(
+        node: TaskDeclarationNode,
+        environment: Environment,
+        state: SemanticAnalysisState
+    ): Environment {
+        const taskScope = state.scopes.get(node);
+        if (!taskScope) {
+            throw new Error(`TASK '${node.name.value}' has no semantic scope.`);
+        }
+
+        const symbol = state.taskSymbols.get(node);
+        if (!symbol) {
+            throw new Error(`TASK '${node.name.value}' was not indexed.`);
+        }
+
+        state.bind(node.name, symbol);
+
+        if (node.priority) {
+            const priority = state.evaluateConstantFixedExpression(
+                node.priority,
+                environment
+            );
+
+            if (priority !== undefined
+                && (priority < BigInt(1) || priority > BigInt(32767))) {
+                state.reportInvalidTaskPriority(
+                    node.priorityKeyword ?? node.taskKeyword,
+                    priority
+                );
+            }
+        }
+
+        const indexed = state.declarationIndex.lookupInScope(
+            environment.scope,
+            node.name.value
+        );
+
+        const accepted = indexed?.kind === SymbolKind.Task
+            && indexed.name === node.name;
+
+        const previous = this.resolveSymbolInCurrentScope(environment, node.name.value);
+        let outerEnvironment = environment;
+
+        if (accepted) {
+            if (previous?.kind === SymbolKind.Task && previous.definition === node.name) {
+                state.replaceSymbolBindings(previous, symbol);
+                this.replaceScopeSymbol(environment.scope, previous, symbol);
+            } else if (previous) {
+                state.reportDuplicateDeclaration(node.name, { kind: previous.kind, name: previous.name });
+            }
+            outerEnvironment = this.introduceSymbol(environment, symbol);
+        }
+
+        const taskEnvironment = this.createEnvironment(
+            taskScope,
+            outerEnvironment
+        );
+
+        this.analyzeChildren(node, taskEnvironment, state);
+
+        return outerEnvironment;
     }
 
     private analyzeChildren(
@@ -1310,6 +1449,11 @@ export class SemanticAnalyzer {
         }
 
         switch (node.attribute.kind) {
+            case AstKind.SpcTaskAttribute:
+                return this.analyzeTaskSpecification(
+                    node, node.attribute as SpcTaskAttributeNode, environment, state
+                );
+
             case AstKind.SpcProblemDataAttribute:
                 return this.analyzeProblemDataSpecification(
                     node,
@@ -1357,6 +1501,50 @@ export class SemanticAnalyzer {
             default:
                 return environment;
         }
+    }
+
+    private analyzeTaskSpecification(
+        node: SpcDeclarationSentenceNode,
+        attribute: SpcTaskAttributeNode,
+        environment: Environment,
+        state: SemanticAnalysisState
+    ): Environment {
+        if (environment.scope.kind !== ScopeKind.Module) {
+            state.reportInvalidDeclarationScope(attribute.keyword, "TASK");
+        }
+
+        let current = environment;
+        for (const identifier of node.identifiers.identifiers) {
+            const existing = this.resolveSymbolInCurrentScope(current, identifier.value);
+            if (existing) {
+                state.reportDuplicateDeclaration(identifier, { kind: existing.kind, name: existing.name });
+                continue;
+            }
+
+            const indexed = state.declarationIndex.lookupInScope(environment.scope, identifier.value);
+            if (indexed && indexed.kind !== SymbolKind.Task) {
+                state.reportDuplicateDeclaration(identifier, indexed);
+                continue;
+            }
+
+            if (!indexed && !attribute.global) {
+                state.reportMissingDeclarationForSpecification(identifier);
+            }
+
+            const definition = indexed?.kind === SymbolKind.Task ? indexed.name : identifier;
+            const symbol: TaskSymbol = {
+                kind: SymbolKind.Task,
+                name: identifier,
+                definition,
+                global: this.globalSymbolAttribute(attribute.global)
+            };
+
+            state.bind(identifier, symbol);
+            (environment.scope as MutableScope).symbols.push(symbol);
+            current = this.introduceSymbol(current, symbol);
+        }
+
+        return current;
     }
 
     private analyzeProblemDataSpecification(
@@ -1545,16 +1733,22 @@ export class SemanticAnalyzer {
 
         for (let index = 0; index < identifiers.identifiers.length; index++) {
             const identifier = identifiers.identifiers[index];
+
+            if (state.rejectedDataDeclarations.has(identifier)) {
+                continue;
+            }
+
             const indexed = state.declarationIndex.lookupInScope(environment.scope, identifier.value);
 
             if (!indexed || indexed.name !== identifier || indexed.kind !== SymbolKind.DataObject) {
                 continue;
             }
 
-            const specification = state.localDataSpecification(environment.scope, identifier.value);
             const existing = this.resolveSymbolInCurrentScope(current, identifier.value);
 
-            if (existing && existing !== specification) {
+            // RTOS-UH does not complete a data-object SPC with a later DCL.
+            // A same-name symbol is a duplicate, independent of its reference target type.
+            if (existing) {
                 state.reportDuplicateDeclaration(identifier, { kind: existing.kind, name: existing.name });
                 continue;
             }
@@ -1568,18 +1762,7 @@ export class SemanticAnalyzer {
                 global
             };
 
-            if (specification) {
-                if (specification.assignmentProtected !== assignmentProtected
-                    || !this.specificationTypeMatchesDeclaration(specification.type, type)) {
-                    state.reportSpecificationMismatch(identifier, specification);
-                }
-
-                state.replaceSymbolBindings(specification, symbol);
-                this.replaceScopeSymbol(environment.scope, specification, symbol);
-                state.completeLocalDataSpecification(environment.scope, identifier.value);
-            } else {
-                (environment.scope as MutableScope).symbols.push(symbol);
-            }
+            (environment.scope as MutableScope).symbols.push(symbol);
 
             state.bind(identifier, symbol);
             beforeIntroduce?.(symbol, index, current);
@@ -1652,10 +1835,6 @@ export class SemanticAnalyzer {
 
             state.bind(identifier, symbol);
             (environment.scope as MutableScope).symbols.push(symbol);
-
-            if (localSpecification) {
-                state.registerLocalDataSpecification(environment.scope, symbol);
-            }
 
             current = this.introduceSymbol(current, symbol);
         }
@@ -1761,88 +1940,6 @@ export class SemanticAnalyzer {
         } else {
             symbols.push(replacement);
         }
-    }
-
-    private specificationTypeMatchesDeclaration(specification: SemanticType, declaration: SemanticType): boolean {
-        if (specification.kind === SemanticTypeKind.VirtualArray) {
-            return declaration.kind === SemanticTypeKind.Array
-                && specification.rank === declaration.dimensions.length
-                && this.specificationTypeMatchesDeclaration(specification.elementType, declaration.elementType);
-        }
-
-        if (specification.kind !== declaration.kind) {
-            return false;
-        }
-
-        switch (specification.kind) {
-            case SemanticTypeKind.Fixed:
-                return declaration.kind === SemanticTypeKind.Fixed
-                    && this.optionalSizeMatches(specification.precision, declaration.precision);
-
-            case SemanticTypeKind.Float:
-                return declaration.kind === SemanticTypeKind.Float
-                    && this.optionalSizeMatches(specification.precision, declaration.precision);
-
-            case SemanticTypeKind.Bit:
-                return declaration.kind === SemanticTypeKind.Bit
-                    && this.optionalSizeMatches(specification.length, declaration.length);
-
-            case SemanticTypeKind.Character:
-                return declaration.kind === SemanticTypeKind.Character
-                    && this.optionalSizeMatches(specification.length, declaration.length);
-
-            case SemanticTypeKind.Clock:
-            case SemanticTypeKind.Duration:
-            case SemanticTypeKind.Sema:
-            case SemanticTypeKind.Bolt:
-            case SemanticTypeKind.Interrupt:
-            case SemanticTypeKind.VoidReference:
-                return true;
-
-            case SemanticTypeKind.Dation:
-                return declaration.kind === SemanticTypeKind.Dation
-                    && specification.direction === declaration.direction
-                    && specification.dationClass === declaration.dationClass;
-
-            case SemanticTypeKind.Array:
-                return declaration.kind === SemanticTypeKind.Array
-                    && this.arrayDimensionsMatch(specification.dimensions, declaration.dimensions)
-                    && this.specificationTypeMatchesDeclaration(specification.elementType, declaration.elementType);
-
-            case SemanticTypeKind.Struct:
-                if (declaration.kind !== SemanticTypeKind.Struct
-                    || specification.components.length !== declaration.components.length) {
-                    return false;
-                }
-
-                return specification.components.every((component, index) => {
-                    const declaredComponent = declaration.components[index];
-                    return component.name.value === declaredComponent.name.value
-                        && this.specificationTypeMatchesDeclaration(component.type, declaredComponent.type);
-                });
-
-            case SemanticTypeKind.Reference:
-                return declaration.kind === SemanticTypeKind.Reference
-                    && this.specificationTypeMatchesDeclaration(specification.target, declaration.target);
-
-            case SemanticTypeKind.Named:
-                return declaration.kind === SemanticTypeKind.Named && specification.symbol === declaration.symbol;
-        }
-    }
-
-    private optionalSizeMatches(specification: number | undefined, declaration: number | undefined): boolean {
-        return specification === undefined || declaration === undefined || specification === declaration;
-    }
-
-    private arrayDimensionsMatch(
-        specification: readonly { lowerBound: bigint; upperBound: bigint }[],
-        declaration: readonly { lowerBound: bigint; upperBound: bigint }[]
-    ): boolean {
-        return specification.length === declaration.length && specification.every((dimension, index) => {
-            const declaredDimension = declaration[index];
-            return dimension.lowerBound === declaredDimension.lowerBound
-                && dimension.upperBound === declaredDimension.upperBound;
-        });
     }
 
     private globalSymbolAttribute(

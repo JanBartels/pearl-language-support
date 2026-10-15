@@ -8,6 +8,7 @@ import {
     RefTypeNode
 } from "../../../ast/problem/types/refTypeNode";
 
+import { TaskReferenceTargetNode } from "../../../ast/problem/types/taskReferenceTargetNode";
 import { SimpleTypeParser } from "./simpleTypeParser";
 import { StructTypeParser } from "./structTypeParser";
 import { NamedTypeParser } from "./namedTypeParser";
@@ -37,6 +38,12 @@ export class RefTypeParser extends ParserBase {
     }
 
     private parseTarget(): RefTargetTypeNode | undefined {
+        this.skipTrivia();
+        const task = this.acceptKeyword("TASK");
+        if (task) {
+            return new TaskReferenceTargetNode(this.tokenValue(task));
+        }
+
 
         const simpleType = new SimpleTypeParser( this.context ).parse();
 

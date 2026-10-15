@@ -53,6 +53,8 @@ export enum AstKind {
     StructType,
     StructComponent,
     RefType,
+    TaskReferenceTarget,
+    SpcTaskAttribute,
 
     Block,
 

@@ -47,6 +47,9 @@ export function formatSemanticType(type: SemanticType): string {
                 .map(component => `${component.name.value} ${formatSemanticType(component.type)}`)
                 .join(', ')}]`;
 
+        case SemanticTypeKind.Task:
+            return "TASK";
+
         case SemanticTypeKind.Reference:
             return `REF ${formatSemanticType(type.target)}`;
 

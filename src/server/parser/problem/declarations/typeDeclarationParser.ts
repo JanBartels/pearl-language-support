@@ -74,15 +74,18 @@ export class TypeDeclarationParser extends ParserBase {
 
         if (!this.expectSemicolon()) {
 
-            this.synchronize([
-                ";",
-                "TYPE",
-                "DCL",
-                "DECLARE",
-                "SPC",
-                "SPECIFY",
-                "MODEND"
-            ]);
+            if (!this.isIdentifier()) {
+                this.synchronize([
+                    ";",
+                    "TYPE",
+                    "DCL",
+                    "DECLARE",
+                    "SPC",
+                    "SPECIFY",
+                    "END",
+                    "MODEND"
+                ]);
+            }
 
             this.acceptSemicolon();
         }

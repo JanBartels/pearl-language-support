@@ -34,4 +34,20 @@ export class DeclarationIndex {
     lookupInScope(scope: Scope, name: string): IndexedDeclaration | undefined {
         return this.declarationsByScope.get(scope)?.get(name);
     }
+
+    lookupInOuterScopes(scope: Scope, name: string): IndexedDeclaration | undefined {
+        let current = scope.parent;
+
+        while (current) {
+            const declaration = this.lookupInScope(current, name);
+
+            if (declaration) {
+                return declaration;
+            }
+
+            current = current.parent;
+        }
+
+        return undefined;
+    }
 }
