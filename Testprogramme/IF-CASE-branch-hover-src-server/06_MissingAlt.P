@@ -1,0 +1,19 @@
+MODULE CondMissingAlt;
+PROBLEM;
+
+DCL Flag BIT(1);
+DCL Selection FIXED;
+
+T: TASK;
+    CASE Selection
+        OUT
+            BEGIN
+                DCL InOut FIXED;
+            END;
+    FIN;
+    BEGIN
+        DCL Survives FIXED;
+    END;
+END;
+
+MODEND;

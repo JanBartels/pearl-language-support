@@ -1,0 +1,17 @@
+MODULE RepeatEndBeforeIfFin;
+PROBLEM;
+DCL Flag BIT(1);
+
+T: TASK;
+    REPEAT
+        IF Flag THEN
+            BEGIN
+                DCL InThen FIXED;
+            END;
+    END;  ! Fehler: Die Wiederholung endet vor IF-FIN.
+    FIN;
+    BEGIN
+        DCL Survives FIXED;
+    END;
+END;
+MODEND;

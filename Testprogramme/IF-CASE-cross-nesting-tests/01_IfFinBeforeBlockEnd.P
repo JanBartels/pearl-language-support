@@ -1,0 +1,21 @@
+MODULE IfFinBeforeBlockEnd;
+PROBLEM;
+DCL Flag BIT(1);
+
+T: TASK;
+    IF Flag THEN
+        BEGIN
+            DCL InBlock FIXED;
+        FIN;  ! Fehler: FIN vor dem END des BEGIN-Blocks.
+        END;
+    BEGIN
+        DCL Survives FIXED;
+    END;
+END;
+
+NextTask: TASK;
+    BEGIN
+        DCL NextSurvives FIXED;
+    END;
+END;
+MODEND;

@@ -1,0 +1,28 @@
+MODULE CondValid;
+PROBLEM;
+
+DCL Flag BIT(1);
+DCL Selection FIXED;
+
+T: TASK;
+    IF Flag THEN
+        CASE Selection
+            ALT (1, 3)
+                BEGIN
+                    DCL InAlt FIXED;
+                END;
+            OUT
+                REPEAT
+                END;
+        FIN;
+    ELSE
+        BEGIN
+            DCL InElse FIXED;
+        END;
+    FIN;
+    BEGIN
+        DCL Survives FIXED;
+    END;
+END;
+
+MODEND;

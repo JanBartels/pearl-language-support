@@ -60,6 +60,10 @@ export enum AstKind {
     Repetition,
     RepetitionForClause,
     RepetitionExpressionClause,
+    IfStatement,
+    CaseStatement,
+    CaseAlternative,
+    CaseOut,
 
     Assignment,
     Operator,

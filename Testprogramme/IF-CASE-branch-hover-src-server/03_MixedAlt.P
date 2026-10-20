@@ -1,0 +1,23 @@
+MODULE CondMixedAlt;
+PROBLEM;
+
+DCL Flag BIT(1);
+DCL Selection FIXED;
+
+T: TASK;
+    CASE Selection
+        ALT
+            BEGIN
+                DCL First FIXED;
+            END;
+        ALT (1:3)
+            BEGIN
+                DCL Second FIXED;
+            END;
+    FIN;
+    BEGIN
+        DCL Survives FIXED;
+    END;
+END;
+
+MODEND;

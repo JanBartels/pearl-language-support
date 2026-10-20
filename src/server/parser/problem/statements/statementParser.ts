@@ -5,11 +5,10 @@ import { AstNode } from "../../../ast/astNode";
 import { ParserBase } from "../../parserBase";
 import { BlockParser } from "./blockParser";
 import { RepetitionParser } from "./repetitionParser";
+import { IfStatementParser } from "./ifStatementParser";
+import { CaseStatementParser } from "./caseStatementParser";
 
-/**
- * Common statement entry point. Only BEGIN and repetitions have AST nodes yet.
- * Other statements are skipped without consuming nested structural constructs.
- */
+/** All nested statement constructs are dispatched through this common entry point. */
 export class StatementParser extends ParserBase {
 
     override parse(): AstNode | undefined {
@@ -23,6 +22,22 @@ export class StatementParser extends ParserBase {
             return new RepetitionParser(this.context).parse();
         }
 
+        if (this.isKeyword("IF")) {
+            return new IfStatementParser(this.context).parse();
+        }
+
+        if (this.isKeyword("CASE")) {
+            return new CaseStatementParser(this.context).parse();
+        }
+
+        // An unmatched conditional delimiter must not trap the parser in a loop.
+        if (this.isKeyword(["THEN", "ELSE", "ALT", "OUT", "FIN"])) {
+            this.problems.error(this.location(),
+                `Unexpected '${this.tokenText()}' outside its conditional statement.`);
+            this.next();
+            return undefined;
+        }
+
         this.skipUnsupportedStatement();
         return undefined;
     }
@@ -31,13 +46,14 @@ export class StatementParser extends ParserBase {
         while (!this.eof()) {
             this.skipTrivia();
 
-            if (this.eof() || this.isKeyword(["END", "MODEND"])) {
+            if (this.eof() || this.isKeyword([
+                "END", "MODEND", "THEN", "ELSE", "ALT", "OUT", "FIN"
+            ])) {
                 return;
             }
 
-            // Never skip a BEGIN or a repetition hidden in an unsupported IF/CASE.
-            // FROM/BY/TO are deliberately omitted: they also occur inside other statements.
-            if (this.isKeyword(["BEGIN", "FOR", "WHILE", "REPEAT"])) {
+            // Leave any nested structured statement to the shared statement parser.
+            if (this.isKeyword(["BEGIN", "FOR", "WHILE", "REPEAT", "IF", "CASE"])) {
                 return;
             }
 

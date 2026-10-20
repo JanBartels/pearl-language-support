@@ -1,0 +1,42 @@
+MODULE CrossValid;
+PROBLEM;
+DCL Flag BIT(1);
+DCL Choice FIXED;
+
+T: TASK;
+    IF Flag THEN
+        BEGIN
+            FOR I TO 3 REPEAT
+                CASE Choice
+                    ALT
+                        BEGIN
+                            DCL A FIXED;
+                        END;
+                    OUT
+                        REPEAT
+                            DCL B FIXED;
+                        END;
+                FIN;
+            END;
+        END;
+    ELSE
+        WHILE Flag REPEAT
+            IF Flag THEN
+                BEGIN
+                    DCL C FIXED;
+                END;
+            FIN;
+        END;
+    FIN;
+
+    BEGIN
+        DCL Survives FIXED;
+    END;
+END;
+
+NextTask: TASK;
+    BEGIN
+        DCL NextSurvives FIXED;
+    END;
+END;
+MODEND;

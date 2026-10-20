@@ -1,0 +1,28 @@
+MODULE AltBeforeNestedIfFin;
+PROBLEM;
+DCL Flag BIT(1);
+DCL Choice FIXED;
+
+T: TASK;
+    CASE Choice
+        ALT
+            IF Flag THEN
+                BEGIN
+                    DCL InThen FIXED;
+                END;
+        ALT  ! Fehler: Neues ALT, obwohl dem IF das FIN fehlt.
+            BEGIN
+                DCL LateAlt FIXED;
+            END;
+    FIN;
+    BEGIN
+        DCL Survives FIXED;
+    END;
+END;
+
+NextTask: TASK;
+    BEGIN
+        DCL NextSurvives FIXED;
+    END;
+END;
+MODEND;

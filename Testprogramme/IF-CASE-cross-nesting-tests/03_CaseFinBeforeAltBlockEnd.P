@@ -1,0 +1,21 @@
+MODULE CaseFinBeforeAltBlockEnd;
+PROBLEM;
+DCL Choice FIXED;
+
+T: TASK;
+    CASE Choice
+        ALT
+            BEGIN
+                DCL InAlt FIXED;
+            FIN;  ! Fehler: FIN vor END des ALT-Blocks.
+            END;
+        OUT
+            BEGIN
+                DCL InOut FIXED;
+            END;
+    FIN;
+    BEGIN
+        DCL Survives FIXED;
+    END;
+END;
+MODEND;

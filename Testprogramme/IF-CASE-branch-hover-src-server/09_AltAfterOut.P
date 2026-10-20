@@ -1,0 +1,26 @@
+MODULE CondAltAfterOut;
+PROBLEM;
+
+DCL Flag BIT(1);
+DCL Selection FIXED;
+
+T: TASK;
+    CASE Selection
+        ALT
+            BEGIN
+            END;
+        OUT
+            BEGIN
+                DCL InOut FIXED;
+            END;
+        ALT
+            BEGIN
+                DCL LateAlt FIXED;
+            END;
+    FIN;
+    BEGIN
+        DCL Survives FIXED;
+    END;
+END;
+
+MODEND;

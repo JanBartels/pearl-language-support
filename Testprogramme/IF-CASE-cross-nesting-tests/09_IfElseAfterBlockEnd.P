@@ -1,0 +1,27 @@
+MODULE IfElseAfterBlockEnd;
+PROBLEM;
+DCL Flag BIT(1);
+
+T: TASK;
+    BEGIN
+        IF Flag THEN
+            BEGIN
+                DCL InThen FIXED;
+            END;
+    END;  ! Fehler: Der auessere BEGIN-Block endet vor ELSE/FIN.
+    ELSE
+        BEGIN
+            DCL MisplacedElse FIXED;
+        END;
+    FIN;
+    BEGIN
+        DCL Survives FIXED;
+    END;
+END;
+
+NextTask: TASK;
+    BEGIN
+        DCL NextSurvives FIXED;
+    END;
+END;
+MODEND;

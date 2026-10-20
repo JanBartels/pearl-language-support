@@ -1,0 +1,20 @@
+MODULE CondMissingIfFin;
+PROBLEM;
+
+DCL Flag BIT(1);
+DCL Selection FIXED;
+
+T: TASK;
+    IF Flag THEN
+        BEGIN
+            DCL InThen FIXED;
+        END;
+END; ! Beendet die TASK, nicht IF.
+
+NextTask: TASK;
+    BEGIN
+        DCL Survives FIXED;
+    END;
+END;
+
+MODEND;

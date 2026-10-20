@@ -1,0 +1,18 @@
+MODULE BlockEndBeforeCaseFin;
+PROBLEM;
+DCL Choice FIXED;
+
+T: TASK;
+    BEGIN
+        CASE Choice
+            ALT
+                BEGIN
+                    DCL InAlt FIXED;
+                END;
+    END;  ! Fehler: Der BEGIN-Block endet vor CASE-FIN.
+    FIN;
+    BEGIN
+        DCL Survives FIXED;
+    END;
+END;
+MODEND;

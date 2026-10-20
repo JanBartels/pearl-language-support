@@ -1,0 +1,21 @@
+MODULE ElseBeforeNestedRepeatEnd;
+PROBLEM;
+DCL Flag BIT(1);
+
+T: TASK;
+    IF Flag THEN
+        REPEAT
+            BEGIN
+                DCL InLoop FIXED;
+            END;
+        ELSE  ! Fehler: ELSE vor dem END der Wiederholung.
+            BEGIN
+                DCL WrongBranch FIXED;
+            END;
+        END;
+    FIN;
+    BEGIN
+        DCL Survives FIXED;
+    END;
+END;
+MODEND;

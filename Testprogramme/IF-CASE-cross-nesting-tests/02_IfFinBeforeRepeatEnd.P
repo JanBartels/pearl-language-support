@@ -1,0 +1,22 @@
+MODULE IfFinBeforeRepeatEnd;
+PROBLEM;
+DCL Flag BIT(1);
+
+T: TASK;
+    IF Flag THEN
+        FOR I TO 3 REPEAT
+            BEGIN
+                DCL InLoop FIXED;
+            END;
+        FIN;  ! Fehler: FIN vor dem END der Wiederholung.
+        END;
+    ELSE
+        BEGIN
+            DCL InElse FIXED;
+        END;
+    FIN;
+    BEGIN
+        DCL Survives FIXED;
+    END;
+END;
+MODEND;

@@ -1,0 +1,21 @@
+MODULE CaseFinBeforeOutRepeatEnd;
+PROBLEM;
+DCL Choice FIXED;
+DCL Flag BIT(1);
+
+T: TASK;
+    CASE Choice
+        ALT
+            BEGIN
+            END;
+        OUT
+            WHILE Flag REPEAT
+                DCL InOutLoop FIXED;
+            FIN;  ! Fehler: FIN vor dem END der Wiederholung.
+            END;
+    FIN;
+    BEGIN
+        DCL Survives FIXED;
+    END;
+END;
+MODEND;

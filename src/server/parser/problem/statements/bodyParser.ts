@@ -10,32 +10,41 @@ import { StatementParser } from "./statementParser";
 export class BodyParser extends ParserBase {
 
     override parse(): AstNode | undefined {
-        throw new Error("Use BodyParser.parseBody().");
+        throw new Error("Use BodyParser.parseBody() or parseStatements().");
     }
 
     parseBody(): AstNode[] {
+        return this.readStatements(["END", "MODEND"], true);
+    }
+
+    /** THEN/ELSE and ALT/OUT contain statements, not declarations or new scopes. */
+    parseStatements(terminators: readonly string[]): AstNode[] {
+        return this.readStatements(["END", "MODEND", ...terminators], false);
+    }
+
+    private readStatements(terminators: readonly string[], allowDeclarations: boolean): AstNode[] {
         const nodes: AstNode[] = [];
         const declarations = new DeclarationListParser(this.context);
         let statementsStarted = false;
 
         while (!this.eof()) {
             this.skipTrivia();
-
-            // END belongs to the caller (TASK, BEGIN or REPEAT).
-            if (this.eof() || this.isKeyword(["END", "MODEND"])) {
+            if (this.eof() || this.isKeyword(terminators)) {
                 break;
             }
 
             if (declarations.isDeclarationStart()) {
-                if (statementsStarted) {
-                    this.problems.error(
-                        this.location(),
-                        "Declarations must precede statements in this body."
-                    );
+                if (!allowDeclarations) {
+                    this.problems.error(this.location(),
+                        "Declarations inside IF/CASE branches require BEGIN ... END.");
+                } else if (statementsStarted) {
+                    this.problems.error(this.location(),
+                        "Declarations must precede statements in this body.");
                 }
 
                 const declaration = declarations.parse();
-                if (declaration) {
+                // Invalid branch declarations must not enter the semantic declaration index.
+                if (declaration && allowDeclarations) {
                     nodes.push(declaration);
                 }
                 continue;
@@ -46,7 +55,7 @@ export class BodyParser extends ParserBase {
             if (statement) {
                 nodes.push(statement);
             }
-            // The statement parser must consume input even for unsupported statements.
+            // StatementParser must advance even when it finds an unsupported statement.
         }
 
         return nodes;

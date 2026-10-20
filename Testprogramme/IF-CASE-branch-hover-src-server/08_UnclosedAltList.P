@@ -1,0 +1,23 @@
+MODULE CondUnclosedAltList;
+PROBLEM;
+
+DCL Flag BIT(1);
+DCL Selection FIXED;
+
+T: TASK;
+    CASE Selection
+        ALT (1:3;
+            BEGIN
+                DCL InAlt FIXED;
+            END;
+        OUT
+            BEGIN
+                DCL InOut FIXED;
+            END;
+    FIN;
+    BEGIN
+        DCL Survives FIXED;
+    END;
+END;
+
+MODEND;

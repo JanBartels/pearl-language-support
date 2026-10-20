@@ -1,0 +1,21 @@
+MODULE CondMissingCaseFin;
+PROBLEM;
+
+DCL Flag BIT(1);
+DCL Selection FIXED;
+
+T: TASK;
+    CASE Selection
+        ALT
+            BEGIN
+                DCL InAlt FIXED;
+            END;
+END; ! Beendet die TASK, nicht CASE.
+
+NextTask: TASK;
+    BEGIN
+        DCL Survives FIXED;
+    END;
+END;
+
+MODEND;

@@ -1,0 +1,51 @@
+MODULE ConditionalTest;
+PROBLEM;
+
+DCL Flag BIT(1);
+DCL Selection FIXED;
+
+T: TASK;
+    IF Flag 
+    THEN
+        BEGIN
+            DCL A FIXED;
+
+            FOR I TO 3 REPEAT
+                CASE Selection
+                    ALT
+                        BEGIN
+                            DCL X FIXED;
+                        END;
+                    ALT
+                        WHILE Flag REPEAT
+                            DCL Y FIXED;
+                        END;
+                    OUT
+                        BEGIN
+                            DCL Z FIXED;
+                        END;
+                FIN;
+            END;
+        END;
+    ELSE
+        CASE Selection - 1
+            ALT (1:3, 5)
+                REPEAT
+                    DCL R FIXED;
+                END;
+            ALT (7)
+                IF Flag THEN
+                    BEGIN
+                    END;
+                ELSE
+                    BEGIN
+                    END;
+                FIN;
+            OUT
+                BEGIN
+                END;
+        FIN;
+    FIN;
+END;
+
+MODEND;

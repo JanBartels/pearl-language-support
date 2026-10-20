@@ -1,0 +1,20 @@
+MODULE CondDirectDcl;
+PROBLEM;
+
+DCL Flag BIT(1);
+DCL Selection FIXED;
+
+T: TASK;
+    IF Flag THEN
+        DCL InvalidHere FIXED;
+    ELSE
+        BEGIN
+            DCL ValidHere FIXED;
+        END;
+    FIN;
+    BEGIN
+        DCL Survives FIXED;
+    END;
+END;
+
+MODEND;
