@@ -1,0 +1,17 @@
+MODULE RecoveryLateDeclaration;
+PROBLEM;
+
+T: TASK;
+    BEGIN
+        REPEAT
+        END;
+
+        DCL Late FIXED; ! Deklaration steht nach der ersten Anweisung.
+
+        BEGIN
+            DCL Survives FIXED;
+        END;
+    END;
+END;
+
+MODEND;
