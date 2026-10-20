@@ -1,0 +1,14 @@
+MODULE RecoverySemicolon;
+PROBLEM;
+
+T: TASK;
+    BEGIN
+        DCL First FIXED;
+    END
+
+    BEGIN
+        DCL Survives FIXED;
+    END;
+END;
+
+MODEND;

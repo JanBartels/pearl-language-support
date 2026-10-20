@@ -1,0 +1,61 @@
+MODULE BlockTest;
+PROBLEM;
+
+DCL GlobalA FIXED;
+
+TestTask: TASK PRIO 23;
+    DCL TaskA FIXED;
+
+    ! Erster Block
+    BEGIN
+        DCL A FIXED;
+
+        ! Verschachtelter Block
+        BEGIN
+            DCL B FIXED;
+
+            ! FOR-Schleife mit eigenem Scope
+            FOR I FROM 1 TO 3 REPEAT
+                DCL C FIXED;
+
+                BEGIN
+                    DCL D FIXED;
+                END InnerBlock;
+
+            END ForLoop;
+
+        END;
+
+        ! WHILE-Schleife mit verschachteltem REPEAT
+        WHILE '0'B REPEAT
+            DCL E FIXED;
+
+            REPEAT
+                DCL F FIXED;
+            END;
+
+        END;
+
+    END OuterBlock;
+
+    ! Noch nicht implementierte Zuweisung
+    TaskA := 1;
+
+    ! Geschwisterblock: A darf erneut deklariert werden
+    BEGIN
+        DCL A FIXED;
+    END;
+
+    ! Fehlerhafte Deklarationen
+    BEGIN
+        DCL TaskA FIXED;  ! Fehler 1: TASK-Scope
+
+        REPEAT
+            DCL GlobalA FIXED;  ! Fehler 2: Modul-Scope
+        END;
+
+    END;
+
+END;
+
+MODEND;

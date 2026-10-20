@@ -2031,6 +2031,9 @@ export class SemanticAnalyzer {
             case AstKind.Block:
                 return ScopeKind.Block;
 
+            case AstKind.Repetition:
+                return ScopeKind.Repetition;
+
             default:
                 return undefined;
         }

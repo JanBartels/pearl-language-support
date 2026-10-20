@@ -37,7 +37,16 @@ export class DclDeclarationParser extends ParserBase {
             }
 
             this.synchronize([
-                ";"
+                ";",
+                "BEGIN",
+                "FOR",
+                "FROM",
+                "BY",
+                "TO",
+                "WHILE",
+                "REPEAT",
+                "END",
+                "MODEND"
             ]);
         } else {
             declarations.push(first);
@@ -57,7 +66,16 @@ export class DclDeclarationParser extends ParserBase {
                     }
 
                     this.synchronize([
-                        ";"
+                        ";",
+                        "BEGIN",
+                        "FOR",
+                        "FROM",
+                        "BY",
+                        "TO",
+                        "WHILE",
+                        "REPEAT",
+                        "END",
+                        "MODEND"
                     ]);
 
                     break;
@@ -78,6 +96,13 @@ export class DclDeclarationParser extends ParserBase {
                     "DECLARE",
                     "SPC",
                     "SPECIFY",
+                    "BEGIN",
+                    "FOR",
+                    "FROM",
+                    "BY",
+                    "TO",
+                    "WHILE",
+                    "REPEAT",
                     "END",
                     "MODEND"
                 ]);

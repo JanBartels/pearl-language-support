@@ -1,0 +1,12 @@
+MODULE RecoveryRepeat;
+PROBLEM;
+
+T: TASK;
+    FOR I TO 10;
+
+    BEGIN
+        DCL Survives FIXED;
+    END;
+END;
+
+MODEND;

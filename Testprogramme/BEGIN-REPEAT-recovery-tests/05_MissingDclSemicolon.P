@@ -1,0 +1,14 @@
+MODULE RecoveryDcl;
+PROBLEM;
+
+T: TASK;
+    BEGIN
+        DCL Incomplete FIXED
+
+        BEGIN
+            DCL Survives FIXED;
+        END;
+    END;
+END;
+
+MODEND;

@@ -1,17 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
-import { AstNode } from "../../../ast/astNode";
 import { TaskDeclarationNode } from "../../../ast/problem/declarations/taskDeclarationNode";
 import { ConstantFixedExpressionNode } from "../../../ast/problem/expressions/constantFixedExpressionNode";
 import { SourceValue } from "../../../core/sourceValue";
 
 import { TailParser } from "../../tailParser";
 
-import { DclDeclarationParser } from "./dclDeclarationParser";
 import { GlobalAttributeParser } from "./globalAttributeParser";
-import { TypeDeclarationParser } from "./typeDeclarationParser";
 import { ConstantFixedExpressionParser } from "../expressions/constantFixedExpressionParser";
+import { BodyParser } from "../statements/bodyParser";
 
 export class TaskDeclarationTailParser extends TailParser {
 
@@ -65,50 +63,7 @@ export class TaskDeclarationTailParser extends TailParser {
             this.acceptSemicolon();
         }
 
-        const body: AstNode[] = [];
-
-        while (!this.eof()) {
-            this.skipTrivia();
-
-            if (this.isKeyword(["END", "MODEND"])) {
-                break;
-            }
-
-            const typeDeclaration = new TypeDeclarationParser(
-                this.context
-            ).parse();
-
-            if (typeDeclaration) {
-                body.push(typeDeclaration);
-                continue;
-            }
-
-            const dclDeclaration = new DclDeclarationParser(
-                this.context
-            ).parse();
-
-            if (dclDeclaration) {
-                body.push(dclDeclaration);
-                continue;
-            }
-
-            this.problems.error(
-                this.location(),
-                `Unsupported TASK body element '${this.tokenText()}'.`
-            );
-
-            /*
-             * Statements and further local declaration forms are not implemented
-             * yet. Do not search for TYPE/DCL tokens inside such a construct,
-             * because they could belong to nested syntax.
-             */
-            this.synchronize([
-                "END",
-                "MODEND"
-            ]);
-
-            break;
-        }
+        const body = new BodyParser(this.context).parseBody();
 
         this.skipTrivia();
 
@@ -149,6 +104,11 @@ export class TaskDeclarationTailParser extends TailParser {
             "TYPE",
             "DCL",
             "DECLARE",
+            "SPC",
+            "SPECIFY",
+            "BEGIN",
+            "FOR",
+            "REPEAT",
             "END",
             "MODEND"
         ]);

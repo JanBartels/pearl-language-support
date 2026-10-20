@@ -1,0 +1,18 @@
+MODULE RecoveryValid;
+PROBLEM;
+
+T: TASK;
+    DCL A(1:10) FIXED;
+
+    FOR I TO 10 WHILE A(I) /= 0 REPEAT
+        BEGIN
+            DCL Inside FIXED;
+        END;
+    END Loop;
+
+    BEGIN
+        DCL AfterLoop FIXED;
+    END;
+END;
+
+MODEND;

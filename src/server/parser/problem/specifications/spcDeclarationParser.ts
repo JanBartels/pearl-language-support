@@ -35,7 +35,16 @@ export class SpcDeclarationParser extends ParserBase {
             }
 
             this.synchronize([
-                ";"
+                ";",
+                "BEGIN",
+                "FOR",
+                "FROM",
+                "BY",
+                "TO",
+                "WHILE",
+                "REPEAT",
+                "END",
+                "MODEND"
             ]);
         } else {
             specifications.push(first);
@@ -55,7 +64,16 @@ export class SpcDeclarationParser extends ParserBase {
                     }
 
                     this.synchronize([
-                        ";"
+                        ";",
+                        "BEGIN",
+                        "FOR",
+                        "FROM",
+                        "BY",
+                        "TO",
+                        "WHILE",
+                        "REPEAT",
+                        "END",
+                        "MODEND"
                     ]);
 
                     break;
@@ -76,6 +94,13 @@ export class SpcDeclarationParser extends ParserBase {
                     "DECLARE",
                     "SPC",
                     "SPECIFY",
+                    "BEGIN",
+                    "FOR",
+                    "FROM",
+                    "BY",
+                    "TO",
+                    "WHILE",
+                    "REPEAT",
                     "END",
                     "MODEND"
                 ]);

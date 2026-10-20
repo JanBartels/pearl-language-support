@@ -57,6 +57,7 @@ export enum AstKind {
     SpcTaskAttribute,
 
     Block,
+    Repetition,
 
     Assignment,
     Operator,

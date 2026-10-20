@@ -35,7 +35,16 @@ export class TypeDeclarationParser extends ParserBase {
         if (!identifier) {
 
             this.synchronize([
-                ";"
+                ";",
+                "BEGIN",
+                "FOR",
+                "FROM",
+                "BY",
+                "TO",
+                "WHILE",
+                "REPEAT",
+                "END",
+                "MODEND"
             ]);
 
             this.acceptSemicolon();
@@ -68,7 +77,16 @@ export class TypeDeclarationParser extends ParserBase {
             this.problems.error( this.location(), "Expected type definition." );
 
             this.synchronize([
-                ";"
+                ";",
+                "BEGIN",
+                "FOR",
+                "FROM",
+                "BY",
+                "TO",
+                "WHILE",
+                "REPEAT",
+                "END",
+                "MODEND"
             ]);
         }
 
@@ -82,6 +100,13 @@ export class TypeDeclarationParser extends ParserBase {
                     "DECLARE",
                     "SPC",
                     "SPECIFY",
+                    "BEGIN",
+                    "FOR",
+                    "FROM",
+                    "BY",
+                    "TO",
+                    "WHILE",
+                    "REPEAT",
                     "END",
                     "MODEND"
                 ]);

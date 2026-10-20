@@ -1,0 +1,11 @@
+MODULE RecoveryExtraEnd;
+PROBLEM;
+
+T: TASK;
+    BEGIN
+        DCL A FIXED;
+    END;
+END;
+END;  ! Dieses END ist ueberzaehlig.
+
+MODEND;

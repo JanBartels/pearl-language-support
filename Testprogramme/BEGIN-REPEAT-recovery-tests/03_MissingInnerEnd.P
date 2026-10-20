@@ -1,0 +1,12 @@
+MODULE RecoveryMissingEnd;
+PROBLEM;
+
+T: TASK;
+    BEGIN
+        REPEAT
+            DCL Inside FIXED;
+        ! Hier fehlt absichtlich das END der Wiederholung.
+    END;  ! Soll nach Absicht des Autors BEGIN abschliessen.
+END;      ! Soll nach Absicht des Autors TASK abschliessen.
+
+MODEND;
