@@ -13,16 +13,16 @@ export class RepetitionDocumentationProvider extends DocumentationProvider<Repet
             return md`
 # REPEAT
 
-Starts a repetition body with its own scope. Loop header expressions are not yet analyzed.
+Starts a repetition body with its own scope. Expression semantics are not yet implemented.
 `;
         }
 
         if (lookup.element === node.endKeyword) {
             return md`
-# END
+# END – Repetition
 
-Closes this repetition.
-`;
+Closes the repetition introduced by:
+` + `\n\n\`\`\`pearl\n${node.headerText()}\n\`\`\`\n`;
         }
 
         if (lookup.element === node.endIdentifier) {
@@ -30,14 +30,6 @@ Closes this repetition.
 # Repetition identifier
 
 Names this repetition for EXIT statements. Label resolution is not yet implemented.
-`;
-        }
-
-        if (node.header.some(token => token === lookup.element)) {
-            return md`
-# Repetition header
-
-Part of the repetition control. Expression semantics are not yet implemented.
 `;
         }
 

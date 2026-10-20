@@ -1,0 +1,30 @@
+MODULE LoopTest;
+PROBLEM;
+
+DCL Outer FIXED;
+
+T: TASK;
+
+    FOR I TO 10 REPEAT
+        DCL A FIXED;
+
+        BEGIN
+            DCL B FIXED;
+        END;
+    END;
+
+    FOR I TO 5 REPEAT
+        DCL C FIXED;
+    END;
+
+    FOR J TO 10 REPEAT
+        DCL Outer FIXED;  ! Fehler 1
+    END;
+
+    FOR K TO 10 REPEAT
+        DCL K FIXED;      ! Fehler 2
+    END;
+
+END;
+
+MODEND;

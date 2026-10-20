@@ -58,6 +58,8 @@ export enum AstKind {
 
     Block,
     Repetition,
+    RepetitionForClause,
+    RepetitionExpressionClause,
 
     Assignment,
     Operator,

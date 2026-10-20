@@ -1,0 +1,66 @@
+MODULE RepeatTest;
+PROBLEM;
+
+DCL Values(1:10) FIXED;
+DCL Flag BIT(1);
+
+TestTask: TASK;
+
+    ! 1. Einfache Endlosschleife
+    REPEAT
+        DCL A FIXED;
+    END SimpleLoop;
+
+    ! 2. Schleife nur mit WHILE
+    WHILE Flag REPEAT
+        DCL B FIXED;
+    END WhileLoop;
+
+    ! 3. FOR mit TO
+!    FOR I TO 10 REPEAT
+    FOR J FROM BY 2 TO 10 REPEAT 
+        DCL C FIXED;
+    END ForLoop;
+
+    ! 4. Saemtliche Schleifenkopfattribute
+    FOR J FROM 1 BY 2 TO 10
+        WHILE Values(J) /= 0
+    REPEAT
+        DCL D FIXED;
+
+        BEGIN
+            DCL E FIXED;
+        END InnerBlock;
+
+    END CombinedLoop;
+
+    ! 5. Geklammerte Ausdruecke
+    FOR K FROM (1 + 2) BY (2 * 3) TO (10 + 5)
+        WHILE (Values(K) /= 0)
+    REPEAT
+        DCL F FIXED;
+    END ExpressionLoop;
+
+    ! 6. Verschachtelte Schleifen
+    FOR L TO 5 REPEAT
+        DCL G FIXED;
+
+        FOR M TO 3 REPEAT
+            DCL H FIXED;
+
+            BEGIN
+                DCL N FIXED;
+            END;
+
+        END InnerLoop;
+
+    END OuterLoop;
+
+    ! 7. Nachfolgender Block
+    BEGIN
+        DCL AfterLoops FIXED;
+    END;
+
+END;
+
+MODEND;

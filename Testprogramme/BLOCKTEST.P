@@ -12,7 +12,7 @@ TestTask: TASK PRIO 23;
 
         ! Verschachtelter Block
         BEGIN
-            DCL B FIXED;
+            DCL B (3) FIXED;
 
             ! FOR-Schleife mit eigenem Scope
             FOR I FROM 1 TO 3 REPEAT
@@ -20,9 +20,18 @@ TestTask: TASK PRIO 23;
 
                 BEGIN
                     DCL D FIXED;
+                    DCL I FLOAT;
+                    D := B(I);
                 END InnerBlock;
 
             END ForLoop;
+            BEGIN
+                DCL D FIXED;
+                DCL I FLOAT;
+                D := B(I);
+            END AfterLoop;
+
+            B(1) = I;
 
         END;
 

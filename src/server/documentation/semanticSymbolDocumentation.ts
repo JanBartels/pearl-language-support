@@ -36,7 +36,8 @@ export function appendSemanticSymbolDocumentation(
             return `${documentation}\n\n**Symbol:** task`;
 
         case SymbolKind.LoopControlVariable:
-            return `${documentation}\n\n**Symbol:** loop control variable`;
+            return `${documentation}\n\n**Symbol:** loop control variable`
+                + `\n\n**Type:** \`${formatSemanticType(symbol.type)}\``;
 
         case SymbolKind.Label:
             return `${documentation}\n\n**Symbol:** label`;

@@ -13,6 +13,7 @@ import { TypeDeclarationNode } from '../ast/problem/declarations/typeDeclaration
 import { DclDeclarationNode } from '../ast/problem/declarations/dclDeclarationNode';
 import { DclDeclarationSentenceNode } from '../ast/problem/declarations/dclDeclarationSentenceNode';
 import { TaskDeclarationNode } from '../ast/problem/declarations/taskDeclarationNode';
+import { RepetitionNode } from '../ast/problem/statements/repetitionNode';
 import { ProblemDataAttributeNode } from '../ast/problem/declarations/problemDataAttributeNode';
 import { SemaAttributeNode } from '../ast/problem/declarations/semaAttributeNode';
 import { BoltAttributeNode } from '../ast/problem/declarations/boltAttributeNode';
@@ -60,6 +61,7 @@ import {
 import {
     DataObjectSymbol,
     GlobalSymbolAttribute,
+    LoopControlVariableSymbol,
     SemanticSymbol,
     TaskSymbol,
     TypeSymbol
@@ -118,6 +120,9 @@ class SemanticAnalysisState implements
     readonly scopes = new Map<AstNode, Scope>();
     readonly typeSymbols = new Map<TypeDeclarationNode, TypeSymbol>();
     readonly taskSymbols = new Map<TaskDeclarationNode, TaskSymbol>();
+    readonly loopControlSymbols = new Map<RepetitionNode, LoopControlVariableSymbol>();
+    readonly loopControlScopes = new Map<SourceValue<string>, Scope>();
+    readonly rejectedLoopControlVariables = new Set<SourceValue<string>>();
     readonly dataDeclarationScopes = new Map<SourceValue<string>, Scope>();
     readonly rejectedDataDeclarations = new Set<SourceValue<string>>();
     readonly unresolvedReferenceTargets = new Map<Scope, Map<string, TypeSymbol>>();
@@ -826,6 +831,7 @@ export class SemanticAnalyzer {
 
         this.indexNode(root, undefined, state);
         this.validateDataDeclarationShadowing(state);
+        this.validateLoopControlVariables(state);
         this.collectModuleConfigurations(root, state);
         this.analyzeNode(root, undefined, state);
         state.finalize();
@@ -907,6 +913,14 @@ export class SemanticAnalyzer {
             };
 
             state.scopes.set(node, scope);
+        }
+
+        if (node.kind === AstKind.Repetition) {
+            if (!scope) {
+                throw new Error('REPEAT declaration outside semantic scope.');
+            }
+
+            this.indexLoopControlVariable(node as RepetitionNode, scope, state);
         }
 
         if (node.kind === AstKind.TypeDeclaration) {
@@ -1022,6 +1036,52 @@ export class SemanticAnalyzer {
         (scope as MutableScope).symbols.push(symbol);
     }
 
+    private indexLoopControlVariable(
+        node: RepetitionNode,
+        scope: Scope,
+        state: SemanticAnalysisState
+    ): void {
+        const identifier = node.forClause?.variable;
+        if (!identifier) {
+            return;
+        }
+
+        const declaration: IndexedDeclaration = {
+            kind: SymbolKind.LoopControlVariable,
+            name: identifier
+        };
+        const existing = state.declarationIndex.index(scope, declaration);
+        if (existing) {
+            state.reportDuplicateDeclaration(identifier, existing);
+            return;
+        }
+
+        const symbol: LoopControlVariableSymbol = {
+            kind: SymbolKind.LoopControlVariable,
+            name: identifier,
+            definition: identifier,
+            type: { kind: SemanticTypeKind.Fixed, precision: undefined }
+        };
+
+        state.loopControlSymbols.set(node, symbol);
+        state.loopControlScopes.set(identifier, scope);
+        (scope as MutableScope).symbols.push(symbol);
+    }
+
+    private validateLoopControlVariables(state: SemanticAnalysisState): void {
+        // A FOR variable is implicitly declared in the repetition scope. It must not
+        // redeclare a name from an enclosing scope, just like an ordinary local DCL.
+        for (const [identifier, scope] of state.loopControlScopes) {
+            const outer = state.declarationIndex.lookupInOuterScopes(scope, identifier.value);
+            if (!outer) {
+                continue;
+            }
+
+            state.reportDuplicateDeclaration(identifier, outer);
+            state.rejectedLoopControlVariables.add(identifier);
+        }
+    }
+
     private validateDataDeclarationShadowing(state: SemanticAnalysisState): void {
         /*
          * RTOS-UH rejects ordinary DCL shadowing across scope boundaries.
@@ -1120,6 +1180,14 @@ export class SemanticAnalyzer {
                 environment,
                 state
             );
+        }
+
+        if (node.kind === AstKind.Repetition) {
+            if (!environment) {
+                throw new Error('REPEAT statement without semantic environment.');
+            }
+
+            return this.analyzeRepetition(node as RepetitionNode, environment, state);
         }
 
         const scope = state.scopes.get(node);
@@ -1223,6 +1291,50 @@ export class SemanticAnalyzer {
         this.analyzeChildren(node, taskEnvironment, state);
 
         return outerEnvironment;
+    }
+
+    private analyzeRepetition(
+        node: RepetitionNode,
+        environment: Environment,
+        state: SemanticAnalysisState
+    ): Environment {
+        const scope = state.scopes.get(node);
+        if (!scope) {
+            throw new Error('REPEAT statement has no semantic scope.');
+        }
+
+        const innerEnvironment = this.createEnvironment(scope, environment);
+        const symbol = state.loopControlSymbols.get(node);
+        const identifier = node.forClause?.variable;
+        const accepted = symbol && identifier
+            && !state.rejectedLoopControlVariables.has(identifier);
+
+        if (accepted) {
+            state.bind(identifier, symbol);
+        }
+
+        const bodyEnvironment = accepted
+            ? this.introduceSymbol(innerEnvironment, symbol)
+            : innerEnvironment;
+
+        // FROM, BY and TO are evaluated before the control variable is available;
+        // WHILE may refer to it. Expression ASTs will be analyzed here later.
+        for (const clause of [node.forClause, node.fromClause, node.byClause, node.toClause]) {
+            if (clause) {
+                this.analyzeNode(clause, environment, state);
+            }
+        }
+        if (node.whileClause) {
+            this.analyzeNode(node.whileClause, bodyEnvironment, state);
+        }
+
+        let current: Environment | undefined = bodyEnvironment;
+        for (const child of node.body) {
+            current = this.analyzeNode(child, current, state);
+        }
+
+        // Declarations from a repetition must never escape to the enclosing scope.
+        return environment;
     }
 
     private analyzeChildren(

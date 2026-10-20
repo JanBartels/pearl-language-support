@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { SourceValue } from '../core/sourceValue';
-import type { SemanticType } from './semanticType';
+import type { FixedType, SemanticType } from './semanticType';
 import { SymbolKind } from './symbolKind';
 
 export interface SymbolBase {
@@ -75,6 +75,9 @@ export interface TaskSymbol extends GlobalSymbolBase {
 export interface LoopControlVariableSymbol extends SymbolBase {
 
     readonly kind: SymbolKind.LoopControlVariable;
+
+    /** The implicit control variable always has type FIXED. */
+    readonly type: FixedType;
 }
 
 export interface LabelSymbol extends SymbolBase {
