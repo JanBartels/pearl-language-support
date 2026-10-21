@@ -1,0 +1,8 @@
+MODULE GWithParameters;
+PROBLEM;
+Sum: PROC /*+G*/ ((A, B) FIXED) RETURNS(FIXED) GLOBAL;
+    RETURN(A);
+END;
+T: TASK;
+END;
+MODEND;

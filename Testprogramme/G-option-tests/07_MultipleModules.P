@@ -1,0 +1,15 @@
+MODULE GFirstModule;
+PROBLEM;
+First: PROC /*+G*/ GLOBAL;
+END;
+T1: TASK;
+END;
+MODEND;
+
+MODULE GSecondModule;
+PROBLEM;
+T2: TASK;
+END;
+Second: PROC /*+G*/ GLOBAL;
+END;
+MODEND;

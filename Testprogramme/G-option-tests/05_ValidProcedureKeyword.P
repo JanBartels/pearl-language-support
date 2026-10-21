@@ -1,0 +1,5 @@
+MODULE GProcedureKeyword;
+PROBLEM;
+P: PROCEDURE /*+G*/ GLOBAL;
+END;
+MODEND;

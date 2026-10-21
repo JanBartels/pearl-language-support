@@ -1,0 +1,7 @@
+MODULE GSecondFile;
+PROBLEM;
+T2: TASK;
+END;
+Second: PROC /*+G*/ GLOBAL;
+END;
+MODEND;

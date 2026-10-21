@@ -1,0 +1,7 @@
+MODULE GTwoErrors;
+PROBLEM;
+T: TASK;
+END;
+Late: PROC /*+G*/;
+END;
+MODEND;

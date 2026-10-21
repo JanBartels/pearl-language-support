@@ -1,0 +1,5 @@
+MODULE GInParameters;
+PROBLEM;
+P: PROC (A FIXED /*+G*/) GLOBAL;
+END;
+MODEND;

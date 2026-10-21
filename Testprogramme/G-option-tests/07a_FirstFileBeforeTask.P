@@ -1,0 +1,7 @@
+MODULE GFirstFile;
+PROBLEM;
+First: PROC /*+G*/ GLOBAL;
+END;
+T1: TASK;
+END;
+MODEND;

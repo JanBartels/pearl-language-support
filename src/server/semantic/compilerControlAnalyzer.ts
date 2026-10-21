@@ -4,6 +4,7 @@
 import { AstKind } from '../ast/astKind';
 import type { AstNode } from '../ast/astNode';
 import type { ModuleNode } from '../ast/module/moduleNode';
+import { ProcedureDeclarationNode } from '../ast/problem/declarations/procedureDeclarationNode';
 import type { Location } from '../core/location';
 import type { CommentToken } from '../lexer';
 import { CompilerOptionLookup } from '../lexer/compilerOptionLookup';
@@ -16,8 +17,8 @@ import {
 import type { SemanticDiagnostic } from './semanticDiagnostic';
 
 /**
- * Checks interactions between lexer-level compiler control comments and
- * module-global MODE settings.
+ * Validates lexer-level compiler control comments against AST context and
+ * semantic module settings.
  *
  * Compiler control comments deliberately remain lexer information; they are
  * not reconstructed in the AST. This pass combines that information with the
@@ -37,7 +38,16 @@ export class CompilerControlAnalyzer {
                 comment.location.span.start + 3
             );
 
-            if (!option || option.option.charAt(0) !== 'M' || !option.mode) {
+            if (!option) {
+                continue;
+            }
+
+            if (option.option.charAt(0) === 'G' && option.mode) {
+                this.analyzeGOption(root, comment, diagnostics);
+                continue;
+            }
+
+            if (option.option.charAt(0) !== 'M' || !option.mode) {
                 continue;
             }
 
@@ -61,6 +71,98 @@ export class CompilerControlAnalyzer {
         }
 
         return diagnostics;
+    }
+
+    /**
+     * +G is a lexer-level compiler option, not a PEARL grammar production.
+     * RTOS-UH recognizes it only between PROC/PROCEDURE and the next
+     * grammatical header token. The loader additionally requires +G
+     * procedures to precede the first TASK of the module: the loader scans
+     * 17-type slices in module heads, while the memory chain consists of
+     * module (MDLE) and TASK entries. This constraint follows from the loader
+     * structure, even though it is not stated explicitly as a placement rule
+     * in the RTOS-UH manual.
+     *
+     * RTOS-UH 5.4.6 additionally requires the PEARL GLOBAL attribute;
+     * the compiler option does not itself make a procedure global.
+     */
+    private analyzeGOption(
+        root: AstNode,
+        comment: CommentToken,
+        diagnostics: SemanticDiagnostic[]
+    ): void {
+        for (const module of this.modulesOf(root)) {
+            const declarations = module.problemPart?.children ?? [];
+            for (let index = 0; index < declarations.length; index++) {
+                const declaration = declarations[index];
+                if (declaration.kind !== AstKind.ProcedureDeclaration) {
+                    continue;
+                }
+
+                const procedure = declaration as ProcedureDeclarationNode;
+                if (!this.isGOptionInHeader(comment.location, procedure)) {
+                    continue;
+                }
+
+                if (!procedure.global) {
+                    diagnostics.push({
+                        code: SemanticDiagnosticCode.GProcedureRequiresGlobal,
+                        severity: SemanticDiagnosticSeverity.Error,
+                        location: comment.location,
+                        message: `PROC '${procedure.name.value}' mit /*+G*/ benötigt `
+                            + 'das Attribut GLOBAL (RTOS-UH, Abschnitt 5.4.6).'
+                    });
+                }
+
+                const firstTaskIndex = declarations.findIndex(
+                    child => child.kind === AstKind.TaskDeclaration
+                );
+                if (firstTaskIndex >= 0 && index > firstTaskIndex) {
+                    diagnostics.push({
+                        code: SemanticDiagnosticCode.GProcedureAfterFirstTask,
+                        severity: SemanticDiagnosticSeverity.Error,
+                        location: comment.location,
+                        message: `PROC '${procedure.name.value}' mit /*+G*/ muss vor der `
+                            + 'ersten TASK des Moduls stehen (RTOS-UH-Laderbedingung).'
+                    });
+                }
+                return;
+            }
+        }
+
+        diagnostics.push({
+            code: SemanticDiagnosticCode.GOptionOutsideProcedureHeader,
+            severity: SemanticDiagnosticSeverity.Warning,
+            location: comment.location,
+            message: '/*+G*/ wird von RTOS-UH nur unmittelbar hinter PROC oder PROCEDURE '
+                + 'im Prozedurkopf berücksichtigt.'
+        });
+    }
+
+    private isGOptionInHeader(
+        comment: Location,
+        procedure: ProcedureDeclarationNode
+    ): boolean {
+        const keyword = procedure.procKeyword.location;
+        const nextToken = procedure.firstHeaderTokenAfterProc()?.location;
+        if (!keyword || !nextToken || comment.source !== keyword.source
+            || nextToken.source !== keyword.source) {
+            return false;
+        }
+
+        return keyword.span.end <= comment.span.start
+            && comment.span.end <= nextToken.span.start;
+    }
+
+    private modulesOf(root: AstNode): readonly ModuleNode[] {
+        if (root.kind === AstKind.Module) {
+            return [root as ModuleNode];
+        }
+        if (root.kind !== AstKind.TranslationUnit) {
+            return [];
+        }
+        return root.getChildren()
+            .filter((node): node is ModuleNode => node.kind === AstKind.Module);
     }
 
     private moduleConfigurationAt(

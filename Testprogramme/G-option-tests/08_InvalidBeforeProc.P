@@ -1,0 +1,6 @@
+MODULE GBeforeProc;
+PROBLEM;
+/*+G*/
+P: PROC GLOBAL;
+END;
+MODEND;

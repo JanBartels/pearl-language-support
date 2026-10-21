@@ -1,0 +1,5 @@
+MODULE GAfterGlobal;
+PROBLEM;
+P: PROC GLOBAL /*+G*/;
+END;
+MODEND;

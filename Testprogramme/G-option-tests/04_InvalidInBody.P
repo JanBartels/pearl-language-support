@@ -1,0 +1,7 @@
+MODULE GInBody;
+PROBLEM;
+P: PROC GLOBAL;
+    /*+G*/
+    BEGIN END;
+END;
+MODEND;

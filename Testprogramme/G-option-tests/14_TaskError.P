@@ -1,0 +1,7 @@
+MODULE GTaskError;
+PROBLEM;
+T: TASK  /*+G*/ GLOBAL;
+END;
+P: PROC;
+END;
+MODEND;

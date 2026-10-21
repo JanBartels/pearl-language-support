@@ -1,0 +1,7 @@
+MODULE OrdinaryAfterTask;
+PROBLEM;
+T: TASK;
+END;
+Regular: PROC GLOBAL;
+END;
+MODEND;

@@ -38,6 +38,9 @@ export enum SemanticDiagnosticCode {
     InvalidTaskPriority = 'semantic.invalid-task-priority',
     UnknownCompilerMode = 'semantic.unknown-compiler-mode',
     MarkerOptionWithoutNoLineStop = 'semantic.marker-option-without-nolstop',
+    GOptionOutsideProcedureHeader = 'semantic.g-option-outside-proc-header',
+    GProcedureAfterFirstTask = 'semantic.g-procedure-after-first-task',
+    GProcedureRequiresGlobal = 'semantic.g-procedure-requires-global',
 }
 
 

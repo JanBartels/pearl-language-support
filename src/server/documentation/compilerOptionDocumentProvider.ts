@@ -90,7 +90,22 @@ Index–, Selektor– und Parametertest ausschalten
                     return md`
 # Compiler Option +G
 
-EPROM–Prozedur erzeugen
+RTOS-UH: Erzeugt für eine Prozedur einen vom Lader auffindbaren Eintrag
+(17er-Scheibe) für EPROM- bzw. Boot-Bibliotheken.
+
+Die Option muss unmittelbar **hinter PROC oder PROCEDURE** stehen,
+beispielsweise \`P: PROC /*+G*/ (...) GLOBAL;\`.
+
+Die Option macht die Prozedur **nicht** im PEARL-Sinne global.
+Für eine \`/*+G*/\`-Prozedur ist deshalb zusätzlich \`GLOBAL\` erforderlich
+(RTOS-UH, Abschnitt 5.4.6). Ohne \`GLOBAL\` wird ein Fehler gemeldet.
+
+**Laderbedingung:** Die erzeugte 17er-Scheibe muss in einem Modulkopf
+auffindbar sein. Da die Speicherverkettung aus Modulen (MDLE) und TASKs
+besteht, müssen \`/*+G*/\`-Prozeduren im PROBLEM-Teil **vor der ersten
+TASK des Moduls** stehen. Diese Bedingung folgt aus dem Speicher- und
+Laderaufbau; sie wird im Handbuch nicht ausdrücklich als Positionsregel
+formuliert.
 `;
                 }
                 // -G nicht erlaubt.

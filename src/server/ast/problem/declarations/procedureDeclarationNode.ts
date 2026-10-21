@@ -26,7 +26,9 @@ export class ProcedureDeclarationNode extends AstNode {
         public readonly resultType: ProblemDataTypeNode | undefined,
         public readonly global: GlobalAttributeNode | undefined,
         public readonly body: readonly AstNode[],
-        public readonly endKeyword: SourceValue<string> | undefined
+        public readonly endKeyword: SourceValue<string> | undefined,
+        public readonly parameterListOpen: SourceValue<string> | undefined,
+        public readonly headerSemicolon: SourceValue<string> | undefined
     ) {
         super(AstKind.ProcedureDeclaration);
         this.adoptAll(parameters);
@@ -47,7 +49,9 @@ export class ProcedureDeclarationNode extends AstNode {
         return this.lookupOwnSourceValue(offset, this.name)
             ?? this.lookupOwnSourceValue(offset, this.procKeyword)
             ?? this.lookupOwnSourceValue(offset, this.returnsKeyword)
-            ?? this.lookupOwnSourceValue(offset, this.endKeyword);
+            ?? this.lookupOwnSourceValue(offset, this.endKeyword)
+            ?? this.lookupOwnSourceValue(offset, this.parameterListOpen)
+            ?? this.lookupOwnSourceValue(offset, this.headerSemicolon);
     }
 
     override addFoldingRegionsTo(source: Source, regions: FoldingRegionCollection): void {
@@ -56,6 +60,14 @@ export class ProcedureDeclarationNode extends AstNode {
         if (!start || !end || start.source !== source || end.source !== source) return;
         const region = createInclusiveFoldingRegion(start, end);
         if (region) regions.add(region);
+    }
+
+    /** First grammatical token after PROC/PROCEDURE, excluding lexer trivia. */
+    firstHeaderTokenAfterProc(): SourceValue<string> | undefined {
+        return this.parameterListOpen
+            ?? this.returnsKeyword
+            ?? this.global?.keyword
+            ?? this.headerSemicolon;
     }
 
     override dumpLabel(): string {

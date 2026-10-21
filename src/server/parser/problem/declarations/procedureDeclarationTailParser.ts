@@ -17,6 +17,12 @@ export class ProcedureDeclarationTailParser extends TailParser {
             'Expected PROC after procedure name.');
         if (!proc) throw new Error('ProcedureDeclarationTailParser requires PROC.');
 
+        // Preserve punctuation from the grammar so the lexer-level +G option can
+        // be associated with the precise position immediately after PROC.
+        this.skipTrivia();
+        const parameterListOpen = this.isOperator('(')
+            ? this.tokenValue(this.current())
+            : undefined;
         const parameters = this.parseParameterList();
         this.skipTrivia();
         const returns = this.acceptKeyword('RETURNS');
@@ -34,6 +40,10 @@ export class ProcedureDeclarationTailParser extends TailParser {
         }
 
         const global = new GlobalAttributeParser(this.context).parse();
+        this.skipTrivia();
+        const headerSemicolon = this.isOperator(';')
+            ? this.tokenValue(this.current())
+            : undefined;
         if (!this.expectSemicolon("Expected ';' after PROC declaration.")) {
             this.synchronize([
                 ';', 'TYPE', 'DCL', 'DECLARE', 'SPC', 'SPECIFY',
@@ -54,7 +64,8 @@ export class ProcedureDeclarationTailParser extends TailParser {
             name, this.tokenValue(proc), parameters,
             returns ? this.tokenValue(returns) : undefined,
             resultType, global, body,
-            end ? this.tokenValue(end) : undefined
+            end ? this.tokenValue(end) : undefined,
+            parameterListOpen, headerSemicolon
         );
     }
 
