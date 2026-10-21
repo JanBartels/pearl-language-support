@@ -1,0 +1,5 @@
+MODULE ProcMissingEnd;
+PROBLEM;
+P: PROC;
+    BEGIN DCL Survives FIXED; END;
+MODEND;

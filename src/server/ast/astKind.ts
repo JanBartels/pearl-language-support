@@ -48,6 +48,8 @@ export enum AstKind {
     SpcDationAttribute,
     SpcInterruptAttribute,
     ProcedureDeclaration,
+    FormalParameter,
+    ProcedureParameterType,
     TaskDeclaration,
 
     StructType,
@@ -64,6 +66,7 @@ export enum AstKind {
     CaseStatement,
     CaseAlternative,
     CaseOut,
+    ReturnStatement,
 
     Assignment,
     Operator,

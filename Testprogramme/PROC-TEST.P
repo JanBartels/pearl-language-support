@@ -1,0 +1,37 @@
+MODULE ProcTest;
+PROBLEM;
+TYPE UserCount FIXED;
+DCL Shared FIXED;
+
+Empty: PROC;
+END;
+
+Sum: PROC(A FIXED, B FIXED) RETURNS(FIXED) GLOBAL;
+    DCL Temp FIXED;
+    RETURN(A);
+END;
+
+Shadow: PROC(Shared FIXED, Values(,) FLOAT IDENT,
+             Flag INV BIT(1));
+    BEGIN
+        DCL Local FIXED;
+    END;
+    FOR I TO 3 REPEAT
+        IF Flag THEN
+            RETURN;
+        FIN;
+    END;
+END;
+
+Grouped: PROCEDURE((First, Second) UserCount,
+                   Device DATION INOUT ALPHIC IDENT)
+          RETURNS(UserCount);
+    RETURN(First);
+END;
+
+Runner: TASK;
+    BEGIN
+        DCL L FIXED;
+    END;
+END;
+MODEND;

@@ -54,17 +54,23 @@ export interface DataObjectSymbol extends GlobalSymbolBase {
 
 export interface ParameterSymbol extends SymbolBase {
 
-    readonly kind: SymbolKind.Parameter;
+    readonly kind: SymbolKind.Parameter | SymbolKind.Identification;
+
+    readonly type?: SemanticType;
+
+    readonly assignmentProtected: boolean;
+
+    readonly byIdentification: boolean;
 }
 
-export interface IdentificationSymbol extends SymbolBase {
-
-    readonly kind: SymbolKind.Identification;
-}
+/** Identification is a formal parameter passed by reference. */
+export type IdentificationSymbol = ParameterSymbol & { readonly kind: SymbolKind.Identification };
 
 export interface ProcedureSymbol extends GlobalSymbolBase {
 
     readonly kind: SymbolKind.Procedure;
+
+    readonly resultType?: SemanticType;
 }
 
 export interface TaskSymbol extends GlobalSymbolBase {

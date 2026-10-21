@@ -1,0 +1,7 @@
+MODULE ProcBrokenParam;
+PROBLEM;
+P: PROC(A FIXED, B);
+    BEGIN DCL Survives FIXED; END;
+END;
+NextTask: TASK; END;
+MODEND;

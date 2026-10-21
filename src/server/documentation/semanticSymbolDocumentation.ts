@@ -24,13 +24,16 @@ export function appendSemanticSymbolDocumentation(
             return `${documentation}\n\n**Symbol:** module`;
 
         case SymbolKind.Parameter:
-            return `${documentation}\n\n**Symbol:** parameter`;
-
         case SymbolKind.Identification:
-            return `${documentation}\n\n**Symbol:** identification`;
+            return `${documentation}\n\n**Symbol:** ${symbol.byIdentification ? 'identification' : 'parameter'}`
+                + (symbol.type ? `\n\n**Type:** \`${formatSemanticType(symbol.type)}\`` : '')
+                + (symbol.assignmentProtected ? '\n\n**Assignment protection:** INV' : '');
 
         case SymbolKind.Procedure:
-            return `${documentation}\n\n**Symbol:** procedure`;
+            return `${documentation}\n\n**Symbol:** procedure`
+                + (symbol.resultType
+                    ? `\n\n**Result type:** \`${formatSemanticType(symbol.resultType)}\``
+                    : '');
 
         case SymbolKind.Task:
             return `${documentation}\n\n**Symbol:** task`;

@@ -1,0 +1,7 @@
+MODULE ProcDuplicate;
+PROBLEM;
+P: PROC(A FIXED, A FLOAT);
+    BEGIN DCL Survives FIXED; END;
+END;
+NextTask: TASK; END;
+MODEND;

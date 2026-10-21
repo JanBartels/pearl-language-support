@@ -6,6 +6,7 @@ import { AstNode } from "../../../ast/astNode";
 import { ParserBase } from "../../parserBase";
 
 import { TaskDeclarationTailParser } from "./taskDeclarationTailParser";
+import { ProcedureDeclarationTailParser } from "./procedureDeclarationTailParser";
 
 export class ProblemNamedDeclarationParser extends ParserBase {
 
@@ -32,6 +33,10 @@ export class ProblemNamedDeclarationParser extends ParserBase {
             return new TaskDeclarationTailParser(
                 this.context
             ).parseTail(name);
+        }
+
+        if (this.isKeyword(["PROC", "PROCEDURE"])) {
+            return new ProcedureDeclarationTailParser(this.context).parseTail(name);
         }
 
         this.problems.error(

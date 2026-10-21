@@ -13,6 +13,9 @@ import { TypeDeclarationNode } from '../ast/problem/declarations/typeDeclaration
 import { DclDeclarationNode } from '../ast/problem/declarations/dclDeclarationNode';
 import { DclDeclarationSentenceNode } from '../ast/problem/declarations/dclDeclarationSentenceNode';
 import { TaskDeclarationNode } from '../ast/problem/declarations/taskDeclarationNode';
+import { ProcedureDeclarationNode } from '../ast/problem/declarations/procedureDeclarationNode';
+import { ProcedureParameterTypeNode } from '../ast/problem/declarations/procedureParameterTypeNode';
+import { FormalParameterNode } from '../ast/problem/declarations/formalParameterNode';
 import { RepetitionNode } from '../ast/problem/statements/repetitionNode';
 import { ProblemDataAttributeNode } from '../ast/problem/declarations/problemDataAttributeNode';
 import { SemaAttributeNode } from '../ast/problem/declarations/semaAttributeNode';
@@ -62,6 +65,8 @@ import {
     DataObjectSymbol,
     GlobalSymbolAttribute,
     LoopControlVariableSymbol,
+    ParameterSymbol,
+    ProcedureSymbol,
     SemanticSymbol,
     TaskSymbol,
     TypeSymbol
@@ -120,6 +125,8 @@ class SemanticAnalysisState implements
     readonly scopes = new Map<AstNode, Scope>();
     readonly typeSymbols = new Map<TypeDeclarationNode, TypeSymbol>();
     readonly taskSymbols = new Map<TaskDeclarationNode, TaskSymbol>();
+    readonly procedureSymbols = new Map<ProcedureDeclarationNode, ProcedureSymbol>();
+    readonly parameterSymbols = new Map<SourceValue<string>, ParameterSymbol>();
     readonly loopControlSymbols = new Map<RepetitionNode, LoopControlVariableSymbol>();
     readonly loopControlScopes = new Map<SourceValue<string>, Scope>();
     readonly rejectedLoopControlVariables = new Set<SourceValue<string>>();
@@ -890,6 +897,13 @@ export class SemanticAnalyzer {
     }
 
     private indexNode(node: AstNode, parentScope: Scope | undefined, state: SemanticAnalysisState): void {
+        if (node.kind === AstKind.ProcedureDeclaration) {
+            if (!parentScope) {
+                throw new Error('PROC declaration outside semantic scope.');
+            }
+            this.indexProcedureDeclaration(node as ProcedureDeclarationNode, parentScope, state);
+        }
+
         if (node.kind === AstKind.TaskDeclaration) {
             if (!parentScope) {
                 throw new Error('TASK declaration outside semantic scope.');
@@ -913,6 +927,10 @@ export class SemanticAnalyzer {
             };
 
             state.scopes.set(node, scope);
+        }
+
+        if (node.kind === AstKind.ProcedureDeclaration && scope) {
+            this.indexFormalParameters(node as ProcedureDeclarationNode, scope, state);
         }
 
         if (node.kind === AstKind.Repetition) {
@@ -1034,6 +1052,52 @@ export class SemanticAnalyzer {
         }
 
         (scope as MutableScope).symbols.push(symbol);
+    }
+
+    private indexProcedureDeclaration(
+        node: ProcedureDeclarationNode,
+        scope: Scope,
+        state: SemanticAnalysisState
+    ): void {
+        const declaration: IndexedDeclaration = { kind: SymbolKind.Procedure, name: node.name };
+        const existing = state.declarationIndex.index(scope, declaration);
+        const symbol: ProcedureSymbol = {
+            kind: SymbolKind.Procedure,
+            name: node.name,
+            definition: node.name,
+            global: this.globalSymbolAttribute(node.global)
+        };
+        state.procedureSymbols.set(node, symbol);
+        if (existing) {
+            state.reportDuplicateDeclaration(node.name, existing);
+        } else {
+            (scope as MutableScope).symbols.push(symbol);
+        }
+    }
+
+    private indexFormalParameters(
+        node: ProcedureDeclarationNode,
+        scope: Scope,
+        state: SemanticAnalysisState
+    ): void {
+        for (const parameter of node.parameters) {
+            for (const name of parameter.identifiers.identifiers) {
+                const kind = parameter.identKeyword
+                    ? SymbolKind.Identification : SymbolKind.Parameter;
+                const existing = state.declarationIndex.index(scope, { kind, name });
+                if (existing) {
+                    state.reportDuplicateDeclaration(name, existing);
+                    continue;
+                }
+                const symbol: ParameterSymbol = {
+                    kind, name, definition: name,
+                    byIdentification: !!parameter.identKeyword,
+                    assignmentProtected: !!parameter.invKeyword
+                };
+                state.parameterSymbols.set(name, symbol);
+                (scope as MutableScope).symbols.push(symbol);
+            }
+        }
     }
 
     private indexLoopControlVariable(
@@ -1170,6 +1234,15 @@ export class SemanticAnalyzer {
         environment: Environment | undefined,
         state: SemanticAnalysisState
     ): Environment | undefined {
+        if (node.kind === AstKind.ProcedureDeclaration) {
+            if (!environment) {
+                throw new Error('PROC declaration without semantic environment.');
+            }
+            return this.analyzeProcedureDeclaration(
+                node as ProcedureDeclarationNode, environment, state
+            );
+        }
+
         if (node.kind === AstKind.TaskDeclaration) {
             if (!environment) {
                 throw new Error('TASK declaration without semantic environment.');
@@ -1291,6 +1364,106 @@ export class SemanticAnalyzer {
         this.analyzeChildren(node, taskEnvironment, state);
 
         return outerEnvironment;
+    }
+
+    private analyzeProcedureDeclaration(
+        node: ProcedureDeclarationNode,
+        environment: Environment,
+        state: SemanticAnalysisState
+    ): Environment {
+        const scope = state.scopes.get(node);
+        if (!scope) throw new Error(`PROC '${node.name.value}' has no semantic scope.`);
+        let symbol = state.procedureSymbols.get(node);
+        if (!symbol) throw new Error(`PROC '${node.name.value}' was not indexed.`);
+
+        const accepted = state.declarationIndex.lookupInScope(
+            environment.scope, node.name.value
+        )?.name === node.name;
+
+        // Result types and parameter types resolve against the enclosing scope.
+        const resultType = node.resultType
+            ? state.typeResolver.resolve(node.resultType, environment)
+            : undefined;
+        if (resultType) {
+            const resolved: ProcedureSymbol = { ...symbol, resultType };
+            state.replaceSymbolBindings(symbol, resolved);
+            this.replaceScopeSymbol(environment.scope, symbol, resolved);
+            symbol = resolved;
+            state.procedureSymbols.set(node, resolved);
+        }
+        state.bind(node.name, symbol);
+
+        let outerEnvironment = environment;
+        if (accepted) {
+            const previous = this.resolveSymbolInCurrentScope(environment, node.name.value);
+            if (previous?.kind === SymbolKind.Procedure && previous.definition === node.name) {
+                state.replaceSymbolBindings(previous, symbol);
+                this.replaceScopeSymbol(environment.scope, previous, symbol);
+            } else if (previous) {
+                state.reportDuplicateDeclaration(node.name, {
+                    kind: previous.kind, name: previous.name
+                });
+            }
+            outerEnvironment = this.introduceSymbol(environment, symbol);
+        }
+
+        let procedureEnvironment = this.createEnvironment(scope, outerEnvironment);
+        for (const parameter of node.parameters) {
+            let type = this.resolveFormalParameterType(parameter, environment, state);
+            if (type && parameter.dimension) {
+                type = {
+                    kind: SemanticTypeKind.VirtualArray,
+                    elementType: type,
+                    rank: parameter.dimension.rank
+                };
+            }
+            for (const name of parameter.identifiers.identifiers) {
+                const indexed = state.declarationIndex.lookupInScope(scope, name.value);
+                if (indexed?.name !== name) continue;
+                const original = state.parameterSymbols.get(name);
+                if (!original) continue;
+                const resolved: ParameterSymbol = { ...original, type };
+                state.parameterSymbols.set(name, resolved);
+                this.replaceScopeSymbol(scope, original, resolved);
+                state.bind(name, resolved);
+                procedureEnvironment = this.introduceSymbol(procedureEnvironment, resolved);
+            }
+        }
+        let current: Environment | undefined = procedureEnvironment;
+        for (const child of node.body) {
+            current = this.analyzeNode(child, current, state);
+        }
+        return outerEnvironment;
+    }
+
+    private resolveFormalParameterType(
+        node: FormalParameterNode,
+        environment: Environment,
+        state: SemanticAnalysisState
+    ): SemanticType | undefined {
+        if (!(node.type instanceof ProcedureParameterTypeNode)) {
+            return state.typeResolver.resolve(node.type, environment);
+        }
+        const special = node.type as ProcedureParameterTypeNode;
+        switch (special.keyword.value) {
+            case 'SEMA': return { kind: SemanticTypeKind.Sema };
+            case 'BOLT': return { kind: SemanticTypeKind.Bolt };
+            case 'IRPT':
+            case 'INTERRUPT': return { kind: SemanticTypeKind.Interrupt };
+            case 'DATION': {
+                const direction = special.qualifiers[0]?.value;
+                const dationClass = special.qualifiers[1]?.value;
+                // An omitted direction is preserved syntactically; do not invent a default.
+                if (direction === 'IN' || direction === 'OUT' || direction === 'INOUT') {
+                    if (dationClass === 'ALPHIC' || dationClass === 'BASIC' || dationClass === 'ALL') {
+                        return { kind: SemanticTypeKind.Dation, direction, dationClass };
+                    }
+                }
+                return undefined;
+            }
+            // SIGNAL is not represented in the current SemanticType union.
+            default: return undefined;
+        }
     }
 
     private analyzeRepetition(

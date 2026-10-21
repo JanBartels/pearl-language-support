@@ -1,0 +1,7 @@
+MODULE ProcMissingReturnType;
+PROBLEM;
+P: PROC(A FIXED) RETURNS();
+    BEGIN DCL Survives FIXED; END;
+END;
+NextTask: TASK; END;
+MODEND;

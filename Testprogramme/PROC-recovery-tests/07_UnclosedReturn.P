@@ -1,0 +1,8 @@
+MODULE ProcBrokenReturn;
+PROBLEM;
+P: PROC RETURNS(FIXED);
+    RETURN(1;
+    BEGIN DCL Survives FIXED; END;
+END;
+NextTask: TASK; END;
+MODEND;

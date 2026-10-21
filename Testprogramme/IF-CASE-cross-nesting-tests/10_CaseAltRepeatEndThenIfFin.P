@@ -1,0 +1,21 @@
+MODULE CaseAltRepeatEndThenIfFin;
+PROBLEM;
+DCL Flag BIT(1);
+DCL Choice FIXED;
+
+T: TASK;
+    FOR I TO 3 REPEAT
+        CASE Choice
+            ALT
+                IF Flag THEN
+                    BEGIN
+                        DCL InThen FIXED;
+                    END;
+            END;  ! Fehler: END der Schleife vor IF- und CASE-FIN.
+            FIN;
+        FIN;
+    BEGIN
+        DCL Survives FIXED;
+    END;
+END;
+MODEND;

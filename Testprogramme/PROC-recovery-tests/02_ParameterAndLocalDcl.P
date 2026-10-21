@@ -1,0 +1,8 @@
+MODULE ProcParamLocal;
+PROBLEM;
+P: PROC(A FIXED);
+    DCL A FLOAT;
+    BEGIN DCL Survives FIXED; END;
+END;
+NextTask: TASK; END;
+MODEND;
