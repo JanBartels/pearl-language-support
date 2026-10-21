@@ -1,0 +1,9 @@
+MODULE TestC01;
+PROBLEM;
+P: PROC(Value FIXED);
+    RETURN;
+END;
+T: TASK;
+    P(3);
+END;
+MODEND;

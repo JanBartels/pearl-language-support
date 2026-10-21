@@ -1,0 +1,9 @@
+MODULE TestC03;
+PROBLEM;
+Target: PROC(Value FLOAT);
+    RETURN;
+END;
+DCL Callback REF PROC(FIXED) INIT(Target);
+T: TASK;
+END;
+MODEND;

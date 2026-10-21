@@ -1,0 +1,9 @@
+MODULE GMovedTask;
+PROBLEM;
+T1: TASK;
+END;
+P: PROC /*+G*/ GLOBAL;
+END;
+T2: TASK;
+END;
+MODEND;

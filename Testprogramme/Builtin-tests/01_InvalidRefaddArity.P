@@ -1,0 +1,6 @@
+MODULE BuiltinRefaddArity;
+PROBLEM;
+Runner: TASK;
+    CALL REFADD(1);
+END;
+MODEND;

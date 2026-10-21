@@ -1,0 +1,7 @@
+MODULE GNoGlobal;
+PROBLEM;
+P: PROC /*+G*/;
+END;
+T: TASK;
+END;
+MODEND;

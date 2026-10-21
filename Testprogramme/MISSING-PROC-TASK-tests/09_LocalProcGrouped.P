@@ -1,0 +1,8 @@
+MODULE SpcProcGrouped;
+PROBLEM;
+SPC (First, Second) ENTRY(FIXED);
+First: PROC(A FIXED);
+END;
+Second: PROC(B FIXED);
+END;
+MODEND;

@@ -1,0 +1,8 @@
+MODULE SpcTaskDefined;
+PROBLEM;
+SPC Later TASK;
+First: TASK;
+END;
+Later: TASK;
+END;
+MODEND;

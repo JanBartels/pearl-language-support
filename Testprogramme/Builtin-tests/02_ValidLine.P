@@ -1,0 +1,6 @@
+MODULE BuiltinLine;
+PROBLEM;
+Runner: TASK;
+    CALL LINE(1, 2, 3, 4, 5);
+END;
+MODEND;

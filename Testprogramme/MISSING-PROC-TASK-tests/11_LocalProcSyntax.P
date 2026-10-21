@@ -1,0 +1,6 @@
+MODULE SpcProcSyntax;
+PROBLEM;
+SPC Later PROC(FIXED);
+Later: PROC(Value FIXED);
+END;
+MODEND;

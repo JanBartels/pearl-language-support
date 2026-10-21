@@ -1,0 +1,7 @@
+MODULE OneOnly;
+PROBLEM;
+P: PROC;
+END;
+T: TASK;
+END;
+MODEND;

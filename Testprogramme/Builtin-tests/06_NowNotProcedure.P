@@ -1,0 +1,6 @@
+MODULE BuiltinNow;
+PROBLEM;
+Runner: TASK;
+    CALL NOW;
+END;
+MODEND;

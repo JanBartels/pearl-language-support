@@ -1,0 +1,8 @@
+MODULE BuiltinRefadd;
+PROBLEM;
+DCL Pointer REF FIXED;
+DCL Offset FIXED;
+Runner: TASK;
+    CALL REFADD(Pointer, Offset);
+END;
+MODEND;

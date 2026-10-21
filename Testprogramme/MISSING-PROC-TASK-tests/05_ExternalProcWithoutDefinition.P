@@ -1,0 +1,7 @@
+MODULE SpcExternalProc;
+PROBLEM;
+SPC External ENTRY(FIXED) GLOBAL;
+T: TASK;
+    CALL External(2);
+END;
+MODEND;

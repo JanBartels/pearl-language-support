@@ -1,0 +1,9 @@
+MODULE TestC04;
+PROBLEM;
+T: TASK;
+    CALL Later(3);
+END;
+Later: PROC(Value FIXED);
+    RETURN;
+END;
+MODEND;

@@ -1,0 +1,7 @@
+MODULE GAfter;
+PROBLEM;
+T: TASK;
+END;
+P: PROC /*+G*/ GLOBAL;
+END;
+MODEND;

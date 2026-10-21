@@ -1,0 +1,6 @@
+MODULE SpcProcConflict;
+PROBLEM;
+SPC Later ENTRY(FIXED);
+Later: TASK;
+END;
+MODEND;

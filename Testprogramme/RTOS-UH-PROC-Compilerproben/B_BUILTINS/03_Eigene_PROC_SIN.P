@@ -1,0 +1,10 @@
+MODULE TestB03;
+PROBLEM;
+SIN: PROC(Value FIXED) RETURNS(FIXED);
+    RETURN(Value);
+END;
+DCL Result FIXED;
+T: TASK;
+    Result = SIN(1);
+END;
+MODEND;

@@ -1,0 +1,4 @@
+MODULE SpcEntryNoGlobal;
+PROBLEM;
+SPC External ENTRY(FIXED);
+MODEND;

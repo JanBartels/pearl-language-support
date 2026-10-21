@@ -1,0 +1,10 @@
+MODULE TestA06;
+PROBLEM;
+DCL Pointer REF FIXED;
+T: TASK;
+    BEGIN
+        DCL REFADD FIXED;
+    END;
+    CALL REFADD(Pointer, 1);
+END;
+MODEND;

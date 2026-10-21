@@ -1,0 +1,6 @@
+MODULE SpcExternalTask;
+PROBLEM;
+SPC External TASK GLOBAL;
+T: TASK;
+END;
+MODEND;

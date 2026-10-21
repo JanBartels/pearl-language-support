@@ -1,0 +1,6 @@
+MODULE SpcProcMissing;
+PROBLEM;
+SPC Later ENTRY(FIXED);
+T: TASK;
+END;
+MODEND;

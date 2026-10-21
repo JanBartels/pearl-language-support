@@ -1,0 +1,7 @@
+MODULE RegularAfter;
+PROBLEM;
+T: TASK;
+END;
+P: PROC GLOBAL;
+END;
+MODEND;

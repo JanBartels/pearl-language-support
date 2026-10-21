@@ -1,0 +1,10 @@
+MODULE TestC02;
+PROBLEM;
+Target: PROC(Value FIXED);
+    RETURN;
+END;
+DCL Callback REF PROC(FIXED) INIT(Target);
+T: TASK;
+    Callback(3);
+END;
+MODEND;

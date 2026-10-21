@@ -1,0 +1,8 @@
+MODULE TestB11;
+PROBLEM;
+DCL Text CHAR(200);
+DCL Result FIXED;
+T: TASK;
+    Result = LEN(Text);
+END;
+MODEND;

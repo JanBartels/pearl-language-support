@@ -1,0 +1,7 @@
+MODULE GBefore;
+PROBLEM;
+P: PROC /*+G*/ GLOBAL;
+END;
+T: TASK;
+END;
+MODEND;

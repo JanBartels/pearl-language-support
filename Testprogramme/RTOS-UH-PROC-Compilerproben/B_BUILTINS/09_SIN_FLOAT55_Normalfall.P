@@ -1,0 +1,7 @@
+MODULE TestB09;
+PROBLEM;
+DCL Result FLOAT(55);
+T: TASK;
+    Result = SIN(1.0(55));
+END;
+MODEND;

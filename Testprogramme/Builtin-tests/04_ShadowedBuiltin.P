@@ -1,0 +1,7 @@
+MODULE BuiltinShadow;
+PROBLEM;
+DCL REFADD FIXED;
+Runner: TASK;
+    CALL REFADD(1, 2);
+END;
+MODEND;

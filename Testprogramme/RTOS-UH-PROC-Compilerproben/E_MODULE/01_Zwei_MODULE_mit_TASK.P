@@ -1,0 +1,15 @@
+MODULE FirstModule;
+PROBLEM;
+P1: PROC;
+END;
+T1: TASK;
+END;
+MODEND;
+
+MODULE SecondModule;
+PROBLEM;
+P2: PROC;
+END;
+T2: TASK;
+END;
+MODEND;

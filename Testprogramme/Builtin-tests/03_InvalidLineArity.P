@@ -1,0 +1,6 @@
+MODULE BuiltinLineArity;
+PROBLEM;
+Runner: TASK;
+    CALL LINE(1, 2, 3);
+END;
+MODEND;

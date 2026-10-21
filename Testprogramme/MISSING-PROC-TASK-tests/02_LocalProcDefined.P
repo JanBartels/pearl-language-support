@@ -1,0 +1,9 @@
+MODULE SpcProcDefined;
+PROBLEM;
+SPC Later ENTRY(FIXED);
+T: TASK;
+    CALL Later(2);
+END;
+Later: PROC(Value FIXED);
+END;
+MODEND;

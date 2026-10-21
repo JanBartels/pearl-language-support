@@ -1,0 +1,6 @@
+MODULE SpcTaskMissing;
+PROBLEM;
+SPC Later TASK;
+First: TASK;
+END;
+MODEND;

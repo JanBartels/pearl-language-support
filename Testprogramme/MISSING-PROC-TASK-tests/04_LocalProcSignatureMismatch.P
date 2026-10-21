@@ -1,0 +1,6 @@
+MODULE SpcProcMismatch;
+PROBLEM;
+SPC Later ENTRY(FLOAT);
+Later: PROC(Value FIXED);
+END;
+MODEND;

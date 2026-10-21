@@ -1,0 +1,6 @@
+MODULE SpcProcLateSpecification;
+PROBLEM;
+Later: PROC(Value FIXED);
+END;
+SPC Later ENTRY(FIXED);
+MODEND;

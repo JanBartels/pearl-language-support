@@ -1,0 +1,11 @@
+MODULE FirstModule;
+PROBLEM;
+P1: PROC;
+END;
+MODEND;
+
+MODULE SecondModule;
+PROBLEM;
+P2: PROC;
+END;
+MODEND;

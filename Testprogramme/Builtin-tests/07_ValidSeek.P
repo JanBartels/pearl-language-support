@@ -1,0 +1,6 @@
+MODULE BuiltinSeek;
+PROBLEM;
+Runner: TASK;
+    CALL SEEK(Station, 100);
+END;
+MODEND;
