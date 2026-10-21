@@ -1,0 +1,5 @@
+SHELLMODULE ShellUndeclared;
+PROBLEM;
+Exec: PROC{'Not accessible'};
+END;
+MODEND;

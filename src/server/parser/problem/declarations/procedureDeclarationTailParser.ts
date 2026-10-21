@@ -17,6 +17,21 @@ export class ProcedureDeclarationTailParser extends TailParser {
             'Expected PROC after procedure name.');
         if (!proc) throw new Error('ProcedureDeclarationTailParser requires PROC.');
 
+        // RTOS-UH 3.3: optional XHELP text directly after PROC, as PROC{'text'}.
+        this.skipTrivia();
+        const xhelpOpen = this.acceptOperator('{');
+        let xhelpText: SourceValue<string> | undefined;
+        if (xhelpOpen) {
+            this.skipTrivia();
+            const literal = this.expectStringLiteral('Expected XHELP string literal.');
+            if (literal) xhelpText = this.tokenValue(literal);
+            this.skipTrivia();
+            if (!this.expectOperator('}', "Expected '}' after XHELP string.")) {
+                this.synchronize(['}', '(', 'RETURNS', 'GLOBAL', ';', 'MODEND']);
+                this.acceptOperator('}');
+            }
+        }
+
         // Preserve punctuation from the grammar so the lexer-level +G option can
         // be associated with the precise position immediately after PROC.
         this.skipTrivia();
@@ -65,7 +80,8 @@ export class ProcedureDeclarationTailParser extends TailParser {
             returns ? this.tokenValue(returns) : undefined,
             resultType, global, body,
             end ? this.tokenValue(end) : undefined,
-            parameterListOpen, headerSemicolon
+            parameterListOpen, headerSemicolon,
+            xhelpOpen ? this.tokenValue(xhelpOpen) : undefined, xhelpText
         );
     }
 

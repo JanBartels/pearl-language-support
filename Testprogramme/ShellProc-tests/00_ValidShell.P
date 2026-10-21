@@ -1,0 +1,8 @@
+SHELLMODULE ShellValid;
+Sages: 'ECHOTX';
+PROBLEM;
+Sages: PROC{'Gibt den Aufruftext aus.'} ((Input, Output, Errors) DATION INOUT ALPHIC IDENT,
+    Length FIXED, Text CHAR(255)) RETURNS(BIT(1));
+    RETURN('1'B);
+END;
+MODEND;

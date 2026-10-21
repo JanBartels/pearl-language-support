@@ -140,7 +140,9 @@ export class ModuleNode extends AstNode {
     }
 
     public override getChildren(): readonly AstNode[] {
-        const result: AstNode[] = [];
+        // Shell command declarations are real AST children: semantic passes,
+        // references and generic visitors must see the module header too.
+        const result: AstNode[] = [...this.shellCommands];
 
         if (this.systemPart) {
             result.push(this.systemPart);

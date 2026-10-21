@@ -1,0 +1,5 @@
+MODULE Ordinary;
+PROBLEM;
+Exec: PROC;
+END;
+MODEND;

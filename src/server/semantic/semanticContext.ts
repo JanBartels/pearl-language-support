@@ -3,6 +3,8 @@
 
 import type { AstNode } from '../ast/astNode';
 import type { ModuleNode } from '../ast/module/moduleNode';
+import type { ShellCommandNode } from '../ast/module/shellCommandNode';
+import type { ProcedureDeclarationNode } from '../ast/problem/declarations/procedureDeclarationNode';
 import type { ConstantFixedExpressionNode } from '../ast/problem/expressions/constantFixedExpressionNode';
 import type { BindingIndex } from './bindingIndex';
 import { SemanticInitialValueKind } from './semanticConstantValue';
@@ -28,6 +30,7 @@ export class SemanticContext {
     readonly timeConstantValues: ReadonlyMap<AstNode, TimeConstantValue>;
     readonly semaPresetValues: ReadonlyMap<DataObjectSymbol, readonly FixedConstantValue[]>;
     readonly moduleConfigurations: ReadonlyMap<ModuleNode, ModuleConfiguration>;
+    readonly shellCommandsByProcedure: ReadonlyMap<ProcedureDeclarationNode, ShellCommandNode>;
 
     constructor(
         typeDefinitions: ReadonlyMap<TypeSymbol, SemanticType> = new Map(),
@@ -39,7 +42,8 @@ export class SemanticContext {
         constantFixedValues: ReadonlyMap<AstNode, FixedConstantValue> = new Map(),
         timeConstantValues: ReadonlyMap<AstNode, TimeConstantValue> = new Map(),
         semaPresetValues: ReadonlyMap<DataObjectSymbol, readonly FixedConstantValue[]> = new Map(),
-        moduleConfigurations: ReadonlyMap<ModuleNode, ModuleConfiguration> = new Map()
+        moduleConfigurations: ReadonlyMap<ModuleNode, ModuleConfiguration> = new Map(),
+        shellCommandsByProcedure: ReadonlyMap<ProcedureDeclarationNode, ShellCommandNode> = new Map()
     ) {
         this.typeDefinitions = new Map(typeDefinitions);
         this.bindings = new Map(bindings);
@@ -68,6 +72,7 @@ export class SemanticContext {
         this.semaPresetValues = new Map(
             [...semaPresetValues].map(([symbol, values]) => [symbol, [...values]])
         );
+        this.shellCommandsByProcedure = new Map(shellCommandsByProcedure);
         this.moduleConfigurations = new Map(
             [...moduleConfigurations].map(([module, configuration]) => [
                 module,
@@ -99,7 +104,8 @@ export class SemanticContext {
             this.constantFixedValues,
             this.timeConstantValues,
             this.semaPresetValues,
-            this.moduleConfigurations
+            this.moduleConfigurations,
+            this.shellCommandsByProcedure
         );
     }
 

@@ -16,6 +16,14 @@ export class ProcedureDeclarationDocumentationProvider
         lookup: AstLookupResult,
         semanticContext?: SemanticContext
     ): string | undefined {
+        // The semantic shell mapping comes from SHELLMODULE validation.
+        // Do not inspect unrelated AST nodes or repeat name resolution here.
+        const shellCommand = semanticContext?.shellCommandsByProcedure.get(node);
+        const shellName = shellCommand?.commandName.value.replace(/^['"]|['"]$/g, '');
+        const shellDocumentation = shellName
+            ? md`\n\n**Shell command:** \`${shellName}\``
+            : '';
+
         if (lookup.element === node.name) {
             let text = md`# Procedure ${node.name.value}
 
@@ -25,15 +33,21 @@ formal parameter(s)${node.returnsKeyword ? ', with a result' : ', without a resu
             const symbol = semanticContext
                 ? lookupBoundSymbol(semanticContext.bindings, node.name)
                 : undefined;
+            text += shellDocumentation;
             return symbol && semanticContext
                 ? appendSemanticSymbolDocumentation(text, symbol, semanticContext)
                 : text;
+        }
+        if (lookup.element === node.xhelpText) {
+            return md`# XHELP
+
+Shell command help text: ${node.xhelpText?.value ?? ''}`;
         }
         if (lookup.element === node.procKeyword) {
             return md`# PROC
 
 Declares a procedure. Formal parameters belong to the procedure scope.
-The body contains local declarations followed by statements.`;
+The body contains local declarations followed by statements.` + shellDocumentation;
         }
         if (lookup.element === node.returnsKeyword) {
             return md`# RETURNS

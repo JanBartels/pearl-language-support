@@ -28,7 +28,9 @@ export class ProcedureDeclarationNode extends AstNode {
         public readonly body: readonly AstNode[],
         public readonly endKeyword: SourceValue<string> | undefined,
         public readonly parameterListOpen: SourceValue<string> | undefined,
-        public readonly headerSemicolon: SourceValue<string> | undefined
+        public readonly headerSemicolon: SourceValue<string> | undefined,
+        public readonly xhelpOpen?: SourceValue<string>,
+        public readonly xhelpText?: SourceValue<string>
     ) {
         super(AstKind.ProcedureDeclaration);
         this.adoptAll(parameters);
@@ -50,6 +52,8 @@ export class ProcedureDeclarationNode extends AstNode {
             ?? this.lookupOwnSourceValue(offset, this.procKeyword)
             ?? this.lookupOwnSourceValue(offset, this.returnsKeyword)
             ?? this.lookupOwnSourceValue(offset, this.endKeyword)
+            ?? this.lookupOwnSourceValue(offset, this.xhelpOpen)
+            ?? this.lookupOwnSourceValue(offset, this.xhelpText)
             ?? this.lookupOwnSourceValue(offset, this.parameterListOpen)
             ?? this.lookupOwnSourceValue(offset, this.headerSemicolon);
     }
@@ -64,7 +68,8 @@ export class ProcedureDeclarationNode extends AstNode {
 
     /** First grammatical token after PROC/PROCEDURE, excluding lexer trivia. */
     firstHeaderTokenAfterProc(): SourceValue<string> | undefined {
-        return this.parameterListOpen
+        return this.xhelpOpen
+            ?? this.parameterListOpen
             ?? this.returnsKeyword
             ?? this.global?.keyword
             ?? this.headerSemicolon;

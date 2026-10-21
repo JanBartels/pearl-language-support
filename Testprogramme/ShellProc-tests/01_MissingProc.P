@@ -1,0 +1,4 @@
+SHELLMODULE ShellMissing;
+Unknown: 'MISSING';
+PROBLEM;
+MODEND;

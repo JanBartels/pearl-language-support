@@ -6,6 +6,7 @@ import type { AstNode } from '../ast/astNode';
 import type { SourceValue } from '../core/sourceValue';
 import type { CompilerModeNode } from '../ast/module/compilerModeNode';
 import type { ModuleNode } from '../ast/module/moduleNode';
+import type { ShellCommandNode } from '../ast/module/shellCommandNode';
 import { AlphicDationSystemDeclarationNode } from '../ast/system/declarations/alphicDationSystemDeclationNode';
 import { BasicDationSystemDeclarationNode } from '../ast/system/declarations/basicDationSystemDeclarationNode';
 import { InterruptSystemDeclarationNode } from '../ast/system/declarations/interruptSystemDeclarationNode';
@@ -39,6 +40,7 @@ import type { VirtualDimensionListNode } from '../ast/problem/dimensions/virtual
 import { DimensionBoundariesNode } from '../ast/problem/dimensions/dimensionBoundariesNode';
 import type { Environment } from './environment';
 import { SemanticContext } from './semanticContext';
+import { validateShellProcedures } from './shellProcedureValidator';
 import { createModuleConfiguration, DEFAULT_TIME_RESOLUTION, isKnownCompilerMode } from './moduleConfiguration';
 import type { ModuleConfiguration, TimeResolution } from './moduleConfiguration';
 import { SemanticConstantKind } from './semanticConstantValue';
@@ -119,6 +121,7 @@ class SemanticAnalysisState implements
     readonly timeConstantValues = new Map<AstNode, TimeConstantValue>();
     readonly semaPresetValues = new Map<DataObjectSymbol, readonly FixedConstantValue[]>();
     readonly moduleConfigurations = new Map<ModuleNode, ModuleConfiguration>();
+    readonly shellCommandsByProcedure = new Map<ProcedureDeclarationNode, ShellCommandNode>();
     readonly moduleConfigurationsByScope = new Map<Scope, ModuleConfiguration>();
     readonly declarationIndex = new DeclarationIndex();
     readonly typeIndex = new TypeIndex();
@@ -151,7 +154,8 @@ class SemanticAnalysisState implements
             this.constantFixedValues,
             this.timeConstantValues,
             this.semaPresetValues,
-            this.moduleConfigurations
+            this.moduleConfigurations,
+            this.shellCommandsByProcedure
         );
     }
 
@@ -892,9 +896,36 @@ export class SemanticAnalyzer {
         this.validateLoopControlVariables(state);
         this.collectModuleConfigurations(root, state);
         this.analyzeNode(root, undefined, state);
+        this.validateShellModules(root, state);
         state.finalize();
 
         return state.createContext();
+    }
+
+    private validateShellModules(root: AstNode, state: SemanticAnalysisState): void {
+        const modules = root.kind === AstKind.Module
+            ? [root as ModuleNode]
+            : root.getChildren().filter((child): child is ModuleNode => child.kind === AstKind.Module);
+
+        for (const module of modules) {
+            const scope = state.scopes.get(module);
+            const acceptedProcedures = new Map<ProcedureDeclarationNode, ProcedureSymbol>();
+            if (scope) {
+                for (const [node, symbol] of state.procedureSymbols) {
+                    if (state.declarationIndex.lookupInScope(scope, node.name.value)?.name === node.name) {
+                        acceptedProcedures.set(node, symbol);
+                    }
+                }
+            }
+            const result = validateShellProcedures(module, acceptedProcedures);
+            state.diagnostics.push(...result.diagnostics);
+            for (const [source, symbol] of result.bindings) {
+                state.bind(source, symbol);
+            }
+            for (const [procedure, command] of result.commandsByProcedure) {
+                state.shellCommandsByProcedure.set(procedure, command);
+            }
+        }
     }
 
     private collectModuleConfigurations(root: AstNode, state: SemanticAnalysisState): void {
