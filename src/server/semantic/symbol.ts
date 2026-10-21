@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { SourceValue } from '../core/sourceValue';
-import type { FixedType, SemanticType } from './semanticType';
+import type { FixedType, ProcedureType, SemanticType } from './semanticType';
 import { SymbolKind } from './symbolKind';
 
 export interface SymbolBase {
@@ -71,6 +71,7 @@ export interface ProcedureSymbol extends GlobalSymbolBase {
     readonly kind: SymbolKind.Procedure;
 
     readonly resultType?: SemanticType;
+    readonly signature?: ProcedureType;
 }
 
 export interface TaskSymbol extends GlobalSymbolBase {

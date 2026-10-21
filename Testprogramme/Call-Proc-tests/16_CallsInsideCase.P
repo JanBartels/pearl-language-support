@@ -1,0 +1,12 @@
+MODULE CallsInsideCase;
+PROBLEM;
+SPC External ENTRY(FIXED) GLOBAL;
+DCL Selection FIXED;
+Runner: TASK;
+    CASE Selection
+        ALT CALL External(1);
+        ALT BEGIN CALL External(2); END;
+        OUT CALL External(3);
+    FIN;
+END;
+MODEND;

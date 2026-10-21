@@ -3,6 +3,10 @@
 
 import { SourceValue } from "../core/sourceValue";
 
+import { ProcedureSignatureNode } from '../ast/problem/procedures/procedureSignatureNode';
+import { ProcedureReferenceTargetNode } from '../ast/problem/types/procedureReferenceTargetNode';
+import { ProcedureParameterTypeNode } from '../ast/problem/declarations/procedureParameterTypeNode';
+import { FormalParameterTypeNode } from '../ast/problem/declarations/formalParameterNode';
 import { AstKind } from "../ast/astKind";
 
 import { ConstantFixedExpressionNode } from "../ast/problem/expressions/constantFixedExpressionNode";
@@ -25,6 +29,7 @@ import {
     FloatType,
     NamedType,
     ReferenceType,
+    ProcedureType,
     SemanticType,
     SemanticTypeKind,
     StructComponentType,
@@ -94,6 +99,53 @@ export class SemanticTypeResolver {
         }
     }
 
+
+    /** Also used for SPC signatures, keeping type resolution outside the parser. */
+    resolveProcedureParameterType(
+        node: FormalParameterTypeNode,
+        environment: Environment
+    ): SemanticType | undefined {
+        if (!(node instanceof ProcedureParameterTypeNode)) {
+            return this.resolve(node, environment);
+        }
+        switch (node.keyword.value) {
+            case 'SEMA': return { kind: SemanticTypeKind.Sema };
+            case 'BOLT': return { kind: SemanticTypeKind.Bolt };
+            case 'IRPT':
+            case 'INTERRUPT': return { kind: SemanticTypeKind.Interrupt };
+            case 'DATION': {
+                const values = node.qualifiers.map(value => value.value);
+                const direction = values.find(value => value === 'IN' || value === 'OUT' || value === 'INOUT');
+                const dationClass = values.find(value => value === 'ALPHIC' || value === 'BASIC' || value === 'ALL');
+                if ((direction === 'IN' || direction === 'OUT' || direction === 'INOUT')
+                    && (dationClass === 'ALPHIC' || dationClass === 'BASIC' || dationClass === 'ALL')) {
+                    return { kind: SemanticTypeKind.Dation, direction, dationClass };
+                }
+                return undefined;
+            }
+            default: return undefined; // SIGNAL is not yet a semantic type.
+        }
+    }
+
+    resolveProcedureSignature(
+        node: ProcedureSignatureNode,
+        environment: Environment
+    ): ProcedureType {
+        return {
+            kind: SemanticTypeKind.Procedure,
+            parameters: node.parameters.map(parameter => {
+                let type = this.resolveProcedureParameterType(parameter.type, environment);
+                if (type && parameter.dimensions) {
+                    type = { kind: SemanticTypeKind.VirtualArray,
+                        elementType: type, rank: parameter.dimensions.rank };
+                }
+                return { type, byIdentification: parameter.ident !== undefined };
+            }),
+            hasResult: node.returnsKeyword !== undefined,
+            resultType: node.resultType ? this.resolve(node.resultType, environment) : undefined,
+            callingConvention: node.keyword.value.endsWith('_C') ? 'C' : 'PEARL' 
+        };
+    }
 
     private resolveSimpleType( node: SimpleTypeNode, environment: Environment ): SemanticType | undefined {
 
@@ -246,6 +298,11 @@ export class SemanticTypeResolver {
 
             case AstKind.TaskReferenceTarget:
                 return { kind: SemanticTypeKind.Task };
+
+            case AstKind.ProcedureReferenceTarget:
+                return this.resolveProcedureSignature(
+                    (node as ProcedureReferenceTargetNode).signature, environment
+                );
 
             case AstKind.SimpleType:
                 return this.resolveSimpleType( node as SimpleTypeNode, environment );

@@ -1,0 +1,7 @@
+MODULE BrokenSpcSignature;
+PROBLEM;
+SPC External ENTRY(FIXED, , FLOAT) GLOBAL; ! Missing parameter type
+Runner: TASK;
+    BEGIN DCL Survives FIXED; END;
+END;
+MODEND;

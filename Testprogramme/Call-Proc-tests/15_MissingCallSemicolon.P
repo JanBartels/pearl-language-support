@@ -1,0 +1,10 @@
+MODULE MissingCallSemicolon;
+PROBLEM;
+SPC External ENTRY GLOBAL;
+Runner: TASK;
+    CALL External
+    BEGIN
+        DCL Survives FIXED;
+    END;
+END;
+MODEND;

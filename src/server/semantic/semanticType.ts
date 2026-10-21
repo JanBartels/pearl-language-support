@@ -24,6 +24,7 @@ export enum SemanticTypeKind {
     Named,
     VoidReference,
     Task,
+    Procedure,
 }
 
 
@@ -153,6 +154,21 @@ export interface TaskType {
     readonly kind: SemanticTypeKind.Task;
 }
 
+/** Signature of a procedure or a procedure-reference target. */
+export interface ProcedureParameterType {
+    readonly type: SemanticType | undefined;
+    readonly byIdentification: boolean;
+}
+
+export interface ProcedureType {
+    readonly kind: SemanticTypeKind.Procedure;
+    readonly parameters: readonly ProcedureParameterType[];
+    readonly hasResult: boolean;
+    readonly resultType: SemanticType | undefined;
+    /** RTOS-UH ENTRY_C / PROC_C use a different calling convention. */
+    readonly callingConvention: 'PEARL' | 'C';
+}
+
 export interface ReferenceType {
 
     readonly kind: SemanticTypeKind.Reference;
@@ -193,4 +209,5 @@ export type SemanticType =
     | NamedType
     | VoidReferenceType
     | TaskType
+    | ProcedureType
     ;

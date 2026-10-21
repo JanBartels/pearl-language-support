@@ -11,6 +11,9 @@ export enum SemanticDiagnosticSeverity {
 
 
 export enum SemanticDiagnosticCode {
+    ProcedureSpecificationRequiresGlobal = 'semantic.procedure-specification-requires-global',
+    InvalidCallTarget = 'semantic.invalid-call-target',
+    InvalidCallArity = 'semantic.invalid-call-arity',
     UnknownType = 'semantic.unknown-type',
     ExpectedType = 'semantic.expected-type',
     DuplicateType = 'semantic.duplicate-type',

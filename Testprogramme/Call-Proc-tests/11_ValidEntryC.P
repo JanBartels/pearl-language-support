@@ -1,0 +1,7 @@
+MODULE ValidEntryC;
+PROBLEM;
+SPC ForeignProc ENTRY_C(FIXED IDENT) GLOBAL;
+Runner: TASK;
+    CALL ForeignProc(10);
+END;
+MODEND;

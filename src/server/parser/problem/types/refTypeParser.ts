@@ -8,6 +8,8 @@ import {
     RefTypeNode
 } from "../../../ast/problem/types/refTypeNode";
 
+import { ProcedureReferenceTargetNode } from "../../../ast/problem/types/procedureReferenceTargetNode";
+import { ProcedureSignatureParser } from "../procedures/procedureSignatureParser";
 import { TaskReferenceTargetNode } from "../../../ast/problem/types/taskReferenceTargetNode";
 import { SimpleTypeParser } from "./simpleTypeParser";
 import { StructTypeParser } from "./structTypeParser";
@@ -44,6 +46,11 @@ export class RefTypeParser extends ParserBase {
             return new TaskReferenceTargetNode(this.tokenValue(task));
         }
 
+
+        if (this.isKeyword(['PROC', 'PROCEDURE'])) {
+            const signature = new ProcedureSignatureParser(this.context).parse();
+            return signature ? new ProcedureReferenceTargetNode(signature) : undefined;
+        }
 
         const simpleType = new SimpleTypeParser( this.context ).parse();
 

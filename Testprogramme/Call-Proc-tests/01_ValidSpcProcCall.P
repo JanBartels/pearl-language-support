@@ -1,0 +1,9 @@
+MODULE ValidSpcProcCall;
+PROBLEM;
+SPC Output: PROC(Value FIXED, Flag BIT(1) IDENT) GLOBAL;
+DCL A FIXED;
+DCL B BIT(1);
+Runner: TASK;
+    CALL Output(A, B);
+END;
+MODEND;

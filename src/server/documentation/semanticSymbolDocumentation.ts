@@ -31,6 +31,8 @@ export function appendSemanticSymbolDocumentation(
 
         case SymbolKind.Procedure:
             return `${documentation}\n\n**Symbol:** procedure`
+                + (symbol.signature
+                    ? `\n\n**Signature:** \`${formatSemanticType(symbol.signature)}\`` : '')
                 + (symbol.resultType
                     ? `\n\n**Result type:** \`${formatSemanticType(symbol.resultType)}\``
                     : '');

@@ -1,0 +1,6 @@
+MODULE MissingSpcGlobal;
+PROBLEM;
+SPC External ENTRY(FIXED); ! GLOBAL required
+Runner: TASK;
+END;
+MODEND;

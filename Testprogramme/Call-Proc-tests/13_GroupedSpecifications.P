@@ -1,0 +1,8 @@
+MODULE GroupedSpecifications;
+PROBLEM;
+SPC (Input, Output) ENTRY(FIXED IDENT) GLOBAL;
+Runner: TASK;
+    CALL Input(1);
+    CALL Output(2);
+END;
+MODEND;

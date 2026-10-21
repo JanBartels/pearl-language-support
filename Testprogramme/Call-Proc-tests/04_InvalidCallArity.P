@@ -1,0 +1,10 @@
+MODULE InvalidCallArity;
+PROBLEM;
+SPC External ENTRY(FIXED, FLOAT) GLOBAL;
+Runner: TASK;
+    CALL External(42); ! Expected 2 actual parameters
+    BEGIN
+        DCL Survives FIXED;
+    END;
+END;
+MODEND;

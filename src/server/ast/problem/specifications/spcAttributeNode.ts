@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
+import { SpcProcedureAttributeNode } from './spcProcedureAttributeNode';
 import { SpcTaskAttributeNode } from "./spcTaskAttributeNode";
 import { SpcBoltAttributeNode } from './spcBoltAttributeNode';
 import { SpcDationAttributeNode } from './spcDationAttributeNode';
@@ -9,4 +10,5 @@ import { SpcProblemDataAttributeNode } from './spcProblemDataAttributeNode';
 import { SpcSemaAttributeNode } from './spcSemaAttributeNode';
 
 export type SpcAttributeNode = SpcProblemDataAttributeNode | SpcSemaAttributeNode | SpcBoltAttributeNode
-    | SpcDationAttributeNode | SpcInterruptAttributeNode | SpcTaskAttributeNode;
+    | SpcDationAttributeNode | SpcInterruptAttributeNode | SpcTaskAttributeNode
+    | SpcProcedureAttributeNode;

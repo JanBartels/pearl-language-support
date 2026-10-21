@@ -1,0 +1,8 @@
+MODULE InvalidCallTarget;
+PROBLEM;
+DCL Number FIXED;
+Runner: TASK;
+    CALL Number; ! Not a procedure
+    BEGIN DCL Survives FIXED; END;
+END;
+MODEND;

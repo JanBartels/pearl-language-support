@@ -15,22 +15,20 @@ export class SpcDeclarationDocumentationProvider extends DocumentationProvider<S
         return md`
 # ${node.keyword.value}
 
-Specifies an object before its definition is available.
+Beschreibt ein Objekt beziehungsweise eine Prozedur für die Übersetzung.
 
-Without \`GLOBAL\` the specification is a forward specification for a later \`DCL\` in the same module.
-With \`GLOBAL\` it specifies an object supplied by another module.
+- \`SPC Name ENTRY(...) RETURNS(...) GLOBAL;\` beschreibt eine extern aufrufbare Prozedur.
+- \`SPC Name PROC(...) GLOBAL;\` beschreibt ebenfalls eine Prozedursignatur.
+- \`SPC Name REF PROC(...) GLOBAL;\` beschreibt einen externen Prozedurzeiger.
 
-Array specifications use virtual dimensions. They state only the number of dimensions, not their bounds.
+In RTOS-UH benötigen gewöhnliche Daten- und Prozedurspezifikationen \`GLOBAL\`.
+\`SPC Name TASK;\` ist ein eigener Sonderfall und kann ohne \`GLOBAL\` verwendet werden.
 
-Examples:
+Beispiel:
 
 \`\`\`pearl
-SPC localValue FIXED;
-SPC localArray() FLOAT;
-SPC externalValue FIXED GLOBAL;
-
-DCL localValue FIXED;
-DCL localArray(20) FLOAT;
+SPC Output ENTRY(FIXED, FLOAT IDENT) GLOBAL;
+SPC ProcPointer REF PROC(FIXED) GLOBAL;
 \`\`\`
 `;
     }

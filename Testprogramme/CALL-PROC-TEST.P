@@ -1,0 +1,22 @@
+MODULE ProcedureIntegration;
+PROBLEM;
+
+SPC External ENTRY(FIXED, FLOAT IDENT) GLOBAL;
+DCL Number FIXED;
+DCL Measurement FLOAT;
+
+Target: PROC(A FIXED);
+    RETURN;
+END;
+
+DCL Pointer REF PROC(FIXED) INIT(Target);
+
+Runner: TASK;
+    CALL External(Number, Measurement);
+    CALL Pointer(3);
+    IF '1'B THEN
+        CALL Target(2);
+    FIN;
+END;
+
+MODEND;

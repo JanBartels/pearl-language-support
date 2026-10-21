@@ -1,0 +1,14 @@
+MODULE NestedConditionalCall;
+PROBLEM;
+SPC External ENTRY(FIXED) GLOBAL;
+DCL Flag BIT(1);
+Runner: TASK;
+    IF Flag THEN
+        CALL External(1);
+    ELSE
+        BEGIN
+            CALL External(2);
+        END;
+    FIN;
+END;
+MODEND;

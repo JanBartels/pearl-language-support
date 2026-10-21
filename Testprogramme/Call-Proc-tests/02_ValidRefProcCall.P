@@ -1,0 +1,10 @@
+MODULE ValidRefProcCall;
+PROBLEM;
+Target: PROC(A FIXED);
+    RETURN;
+END;
+DCL Callback REF PROC(FIXED) INIT(Target);
+Runner: TASK;
+    CALL Callback(7);
+END;
+MODEND;

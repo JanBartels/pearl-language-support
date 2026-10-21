@@ -1,0 +1,8 @@
+MODULE InvalidRefProcSignature;
+PROBLEM;
+Target: PROC(A FLOAT);
+END;
+DCL Callback REF PROC(FIXED) INIT(Target); ! Incompatible signature
+Runner: TASK;
+END;
+MODEND;

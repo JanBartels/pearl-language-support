@@ -28,7 +28,7 @@ import type {
     SemanticType
 } from './semanticType';
 import { SemanticTypeKind } from './semanticType';
-import type { DataObjectSymbol, TaskSymbol } from './symbol';
+import type { DataObjectSymbol, ProcedureSymbol, TaskSymbol } from './symbol';
 import { CharacterConstantEvaluator } from './characterConstantEvaluator';
 
 export interface InitializationResolverContext {
@@ -70,7 +70,7 @@ export interface InitializationResolverContext {
         identifier: SourceValue<string>,
         expectedTargetType: SemanticType | undefined,
         environment: Environment
-    ): DataObjectSymbol | TaskSymbol | undefined;
+    ): DataObjectSymbol | TaskSymbol | ProcedureSymbol | undefined;
 
     registerNamedConstant(symbol: DataObjectSymbol, value: SemanticConstantValue): void;
 
@@ -380,7 +380,7 @@ export class InitializationResolver {
             return undefined;
         }
 
-        const targets: (DataObjectSymbol | TaskSymbol)[] = [];
+        const targets: (DataObjectSymbol | TaskSymbol | ProcedureSymbol)[] = [];
 
         for (const element of initialization.elements) {
             if (element.value.kind !== 'identifier') {

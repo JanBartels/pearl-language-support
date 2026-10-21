@@ -7,6 +7,7 @@ import { BlockParser } from "./blockParser";
 import { RepetitionParser } from "./repetitionParser";
 import { IfStatementParser } from "./ifStatementParser";
 import { CaseStatementParser } from "./caseStatementParser";
+import { CallStatementParser } from "./callStatementParser";
 import { ReturnStatementParser } from "./returnStatementParser";
 
 /** All nested statement constructs are dispatched through this common entry point. */
@@ -29,6 +30,10 @@ export class StatementParser extends ParserBase {
 
         if (this.isKeyword("CASE")) {
             return new CaseStatementParser(this.context).parse();
+        }
+
+        if (this.isKeyword("CALL")) {
+            return new CallStatementParser(this.context).parse();
         }
 
         if (this.isKeyword("RETURN")) {

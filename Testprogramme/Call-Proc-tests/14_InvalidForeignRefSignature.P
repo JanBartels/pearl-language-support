@@ -1,0 +1,7 @@
+MODULE InvalidForeignRefSignature;
+PROBLEM;
+SPC Foreign ENTRY_C(FIXED) GLOBAL;
+DCL Pointer REF PROC(FIXED) INIT(Foreign); ! Incompatible calling convention
+Runner: TASK;
+END;
+MODEND;

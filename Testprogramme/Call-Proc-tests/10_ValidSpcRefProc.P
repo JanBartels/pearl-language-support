@@ -1,0 +1,7 @@
+MODULE ValidSpcRefProc;
+PROBLEM;
+SPC ExternalCallback REF PROC(FIXED, FLOAT IDENT) GLOBAL;
+Runner: TASK;
+    CALL ExternalCallback(1, 3.5);
+END;
+MODEND;

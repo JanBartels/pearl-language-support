@@ -57,6 +57,10 @@ export enum AstKind {
     RefType,
     TaskReferenceTarget,
     SpcTaskAttribute,
+    ProcedureSpecificationParameter,
+    ProcedureSignature,
+    ProcedureReferenceTarget,
+    SpcProcedureAttribute,
 
     Block,
     Repetition,
@@ -67,6 +71,7 @@ export enum AstKind {
     CaseAlternative,
     CaseOut,
     ReturnStatement,
+    CallStatement,
 
     Assignment,
     Operator,

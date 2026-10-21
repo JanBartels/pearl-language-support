@@ -1,0 +1,9 @@
+MODULE ValidSpcEntryCall;
+PROBLEM;
+SPC External ENTRY(FIXED, FLOAT IDENT) GLOBAL;
+DCL A FIXED;
+DCL B FLOAT;
+Runner: TASK;
+    CALL External(A, B);
+END;
+MODEND;

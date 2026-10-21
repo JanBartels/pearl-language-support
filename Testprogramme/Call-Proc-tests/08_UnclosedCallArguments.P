@@ -1,0 +1,8 @@
+MODULE UnclosedCallArguments;
+PROBLEM;
+SPC External ENTRY(FIXED, FIXED) GLOBAL;
+Runner: TASK;
+    CALL External(1, (2+3); ! Closing ')' of CALL missing
+    BEGIN DCL Survives FIXED; END;
+END;
+MODEND;

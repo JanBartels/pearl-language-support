@@ -1,0 +1,7 @@
+MODULE NestedCallArguments;
+PROBLEM;
+SPC External ENTRY(FIXED, FIXED) GLOBAL;
+Runner: TASK;
+    CALL External((1+2), A(3,4) + B(5));
+END;
+MODEND;
