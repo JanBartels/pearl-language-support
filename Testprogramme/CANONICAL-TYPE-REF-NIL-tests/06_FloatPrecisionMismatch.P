@@ -1,0 +1,8 @@
+MODULE FloatPrecisionMismatch;
+PROBLEM;
+SPC Later ENTRY(FLOAT(55));
+
+Later: PROC(Value FLOAT);
+    RETURN;
+END;
+MODEND;

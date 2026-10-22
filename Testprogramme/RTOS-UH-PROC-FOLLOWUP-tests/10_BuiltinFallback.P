@@ -1,0 +1,7 @@
+MODULE BuiltinFallback;
+PROBLEM;
+DCL Ptr REF FIXED INIT(NIL);
+T: TASK;
+    CALL REFADD(Ptr, 1);
+END;
+MODEND;

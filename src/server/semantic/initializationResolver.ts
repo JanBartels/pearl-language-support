@@ -30,6 +30,7 @@ import type {
 import { SemanticTypeKind } from './semanticType';
 import type { DataObjectSymbol, ProcedureSymbol, TaskSymbol } from './symbol';
 import { CharacterConstantEvaluator } from './characterConstantEvaluator';
+import { isNilAssignableTo } from './semanticTypeComparison';
 
 export interface InitializationResolverContext {
     resolveUnderlyingType(type: SemanticType): SemanticType | undefined;
@@ -148,7 +149,7 @@ export class InitializationResolver {
             return undefined;
         }
 
-        if (underlyingType.kind === SemanticTypeKind.Reference) {
+        if (underlyingType.kind === SemanticTypeKind.Reference && isNilAssignableTo(underlyingType)) {
             return this.resolveReferenceInitialization(
                 initialization,
                 underlyingType.target,
@@ -323,7 +324,8 @@ export class InitializationResolver {
             return undefined;
         }
 
-        if (!initialization.elements.every(element => element.value.kind === 'identifier')) {
+        if (!initialization.elements.every(element => element.value.kind === 'identifier'
+            || element.value.kind === 'nil')) {
             this.context.reportInvalidInitialization(initialization.keyword, 'REF');
             return undefined;
         }
@@ -332,19 +334,22 @@ export class InitializationResolver {
             apply: (symbol, identifierIndex, environment) => {
                 const element = initialization.elements[identifierIndex];
 
-                if (element.value.kind !== 'identifier') {
+                if (element.value.kind === 'nil') {
+                    this.context.registerInitialValues(symbol, {
+                        kind: SemanticInitialValueKind.Reference,
+                        values: [null],
+                        elementCount: BigInt(1)
+                    });
                     return;
                 }
+                if (element.value.kind !== 'identifier') return;
 
                 const target = this.context.resolveReferenceInitializer(
                     element.value.identifier,
                     expectedTargetType,
                     environment
                 );
-
-                if (!target) {
-                    return;
-                }
+                if (!target) return;
 
                 this.context.registerInitialValues(symbol, {
                     kind: SemanticInitialValueKind.Reference,
@@ -362,7 +367,8 @@ export class InitializationResolver {
         identifierCount: number,
         environment: Environment
     ): DataObjectInitialization | undefined {
-        if (!initialization.elements.every(element => element.value.kind === 'identifier')) {
+        if (!initialization.elements.every(element => element.value.kind === 'identifier'
+            || element.value.kind === 'nil')) {
             this.context.reportInvalidInitialization(initialization.keyword, 'REF');
             return undefined;
         }
@@ -380,23 +386,21 @@ export class InitializationResolver {
             return undefined;
         }
 
-        const targets: (DataObjectSymbol | TaskSymbol | ProcedureSymbol)[] = [];
+        const targets: (DataObjectSymbol | TaskSymbol | ProcedureSymbol | null)[] = [];
 
         for (const element of initialization.elements) {
-            if (element.value.kind !== 'identifier') {
-                return undefined;
+            if (element.value.kind === 'nil') {
+                targets.push(null);
+                continue;
             }
+            if (element.value.kind !== 'identifier') return undefined;
 
             const target = this.context.resolveReferenceInitializer(
                 element.value.identifier,
                 expectedTargetType,
                 environment
             );
-
-            if (!target) {
-                return undefined;
-            }
-
+            if (!target) return undefined;
             targets.push(target);
         }
 

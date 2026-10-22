@@ -46,6 +46,12 @@ export class ProblemPartParser extends ParserBase {
                 break;
             }
 
+            // The PROBLEM part permits empty statements. In particular, macro
+            // expansions may leave a lone semicolon. No AST node is needed.
+            if (this.acceptSemicolon()) {
+                continue;
+            }
+
             const typeDeclaration =
                 new TypeDeclarationParser(
                     this.context

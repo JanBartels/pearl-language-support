@@ -1,0 +1,7 @@
+MODULE ShadowedBuiltinDcl;
+PROBLEM;
+DCL REFADD FIXED;
+T: TASK;
+    CALL REFADD(1, 2);
+END;
+MODEND;

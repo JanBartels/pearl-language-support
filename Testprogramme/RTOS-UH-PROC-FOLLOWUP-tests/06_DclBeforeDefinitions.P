@@ -1,0 +1,9 @@
+MODULE DclBeforeDefinitions;
+PROBLEM;
+DCL A FIXED;
+P: PROC;
+    RETURN;
+END;
+T: TASK;
+END;
+MODEND;

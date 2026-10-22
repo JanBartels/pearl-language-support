@@ -9,6 +9,7 @@ import type { ProcedureDeclarationNode } from '../ast/problem/declarations/proce
 import type { ProcedureSymbol } from './symbol';
 import { SemanticTypeKind } from './semanticType';
 import type { ProcedureType, SemanticType } from './semanticType';
+import { semanticTypeEquals } from './semanticTypeComparison';
 import {
     SemanticDiagnosticCode,
     SemanticDiagnosticSeverity
@@ -47,18 +48,16 @@ function checkShellSignature(signature: ProcedureType | undefined): boolean {
 
     const length = parameters[3];
     const text = parameters[4];
-    if (length.byIdentification || length.type?.kind !== SemanticTypeKind.Fixed
+    if (length.byIdentification || !length.type
+        || !semanticTypeEquals(length.type, { kind: SemanticTypeKind.Fixed, precision: 15 })
         || text.byIdentification || text.type?.kind !== SemanticTypeKind.Character
         || text.type.length !== 255) {
         return false;
     }
-    // RTOS-UH 3.3 requires the unqualified FIXED parameter in this ABI.
-    // Default precision depends on LENGTH (5.1); do not assume FIXED(31).
-    if (length.type.precision !== undefined) {
-        return false;
-    }
     const result: SemanticType | undefined = signature.resultType;
-    return result?.kind === SemanticTypeKind.Bit && result.length === 1;
+    return result !== undefined && semanticTypeEquals(result, {
+        kind: SemanticTypeKind.Bit, length: 1
+    });
 }
 
 function shellName(value: string): string {

@@ -1,0 +1,8 @@
+MODULE GlobalSpcTaskDefined;
+PROBLEM;
+SPC Later TASK GLOBAL;
+First: TASK;
+END;
+Later: TASK GLOBAL;
+END;
+MODEND;

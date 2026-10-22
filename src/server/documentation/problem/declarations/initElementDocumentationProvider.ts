@@ -22,6 +22,11 @@ export class InitElementDocumentationProvider
     ): string | undefined {
 
         switch (node.value.kind) {
+            case 'nil':
+                return lookup.element === node.value.keyword
+                    ? '# NIL\n\nNull pointer constant. Valid for REF initializations.'
+                    : undefined;
+
 
             case "constantFixedExpression":
                 return undefined;

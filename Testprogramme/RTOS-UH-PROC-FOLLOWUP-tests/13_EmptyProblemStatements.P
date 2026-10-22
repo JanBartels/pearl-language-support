@@ -1,0 +1,9 @@
+MODULE EmptyProblemStatements;
+PROBLEM;
+;
+DCL A FIXED;
+;
+T: TASK;
+END;
+;
+MODEND;

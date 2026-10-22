@@ -78,10 +78,10 @@ function formatRepeatedValues(
 }
 
 function formatRepeatedReferenceValues(
-    values: readonly { readonly name: { readonly value: string } }[],
+    values: readonly ({ readonly name: { readonly value: string } } | null)[],
     elementCount: bigint
 ): string {
-    return formatRepeatedSequence(values, elementCount, value => value.name.value);
+    return formatRepeatedSequence(values, elementCount, value => value === null ? 'NIL' : value.name.value);
 }
 
 function formatRepeatedSequence<T>(
@@ -96,7 +96,7 @@ function formatRepeatedSequence<T>(
         const last = values[values.length - 1];
         const expanded = Array.from(
             { length: count },
-            (_, index) => values[index] ?? last
+            (_, index) => index < values.length ? values[index] : last
         );
 
         return expanded.map(formatValue).join(', ');

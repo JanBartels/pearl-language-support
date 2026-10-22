@@ -1,0 +1,8 @@
+MODULE RefVoidSignatureMismatch;
+PROBLEM;
+SPC Later ENTRY(REF STRUCT[]);
+
+Later: PROC(Ptr REF FIXED);
+    RETURN;
+END;
+MODEND;

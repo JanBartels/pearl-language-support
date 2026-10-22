@@ -17,6 +17,10 @@ import { SignedConstantExpressionNode } from '../expressions/signedConstantExpre
 
 export type InitElementValue =
     | {
+        readonly kind: 'nil';
+        readonly keyword: SourceValue<string>;
+    }
+    | {
         readonly kind: 'constantFixedExpression';
         readonly expression: ConstantFixedExpressionNode;
     }
@@ -86,6 +90,9 @@ export class InitElementNode extends AstNode {
             case 'constantFixedExpression':
                 return this.value.expression.lookupSourceValue(offset);
 
+            case 'nil':
+                return this.lookupOwnSourceValue(offset, this.value.keyword);
+
             case 'identifier':
                 return this.lookupOwnSourceValue(
                     offset,
@@ -113,6 +120,9 @@ export class InitElementNode extends AstNode {
         switch (this.value.kind) {
             case 'constantFixedExpression':
                 return 'InitElement(constant FIXED expression)';
+
+            case 'nil':
+                return 'InitElement(NIL)';
 
             case 'identifier':
                 return `InitElement(identifier ${this.value.identifier.value})`;

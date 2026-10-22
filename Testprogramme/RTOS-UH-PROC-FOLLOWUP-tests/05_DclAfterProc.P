@@ -1,0 +1,9 @@
+MODULE DclAfterProc;
+PROBLEM;
+P: PROC;
+    RETURN;
+END;
+DCL A FIXED;
+T: TASK;
+END;
+MODEND;

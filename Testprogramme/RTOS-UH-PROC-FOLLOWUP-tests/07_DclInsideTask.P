@@ -1,0 +1,6 @@
+MODULE DclInsideTask;
+PROBLEM;
+T: TASK;
+    DCL A FIXED;
+END;
+MODEND;

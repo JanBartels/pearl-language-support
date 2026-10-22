@@ -1,0 +1,8 @@
+SHELLMODULE ShellDefaultPrecisions;
+Sages: 'ECHOTX';
+PROBLEM;
+Sages: PROC{'Prueft Standardlaengen im Shell-ABI.'} ((Input, Output, Errors) DATION INOUT ALPHIC IDENT,
+    Length FIXED(15), Text CHAR(255)) RETURNS(BIT);
+    RETURN('1'B);
+END;
+MODEND;

@@ -1,0 +1,7 @@
+MODULE GlobalSpcExternalOnly;
+PROBLEM;
+SPC External ENTRY(FIXED) GLOBAL;
+T: TASK;
+    CALL External(1);
+END;
+MODEND;

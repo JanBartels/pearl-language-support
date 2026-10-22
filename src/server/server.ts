@@ -58,6 +58,7 @@ import { CompilerOptionDocumentationProvider } from './documentation/compilerOpt
 import { PreprocessorConditionalBlockDocumentationProvider } from './documentation/preprocessorConditionalBlockDocumentationProvider';
 import { AstLookupResultDocumentationProvider } from './documentation/astLookupResultDocumentationProvider';
 import { lookupSymbolDefinition } from './semantic/bindingIndex';
+import { lookupLocalSpecificationRelation } from './semantic/localSpecificationRelation';
 import { FoldingRegionCollection } from './folding/foldingRegionCollection';
 import { mapFoldingRegion } from './lsp/foldingMapper';
 import { CommentFoldingCollector } from './lexer/commentFoldingCollector';
@@ -105,6 +106,7 @@ connection.onInitialize((params: InitializeParams) => {
 //      completionProvider: { resolveProvider: true },
       hoverProvider: true,
       definitionProvider: true,
+      declarationProvider: true,
       foldingRangeProvider: true,
       semanticTokensProvider: {
         legend: tokenLegend.getLegend(),
@@ -224,13 +226,56 @@ connection.onDefinition(params => {
       return undefined;
     }
 
-    const definition = lookupSymbolDefinition(semanticContext.bindings, lookup.element);
+    // A local SPC may precede its PROC or TASK definition. The relation is
+    // preserved even on semantic errors; other symbols use the usual bindings.
+    const relation = lookupLocalSpecificationRelation(
+        semanticContext.localSpecificationRelations,
+        lookup.element
+    );
+    const definition = relation?.definition
+        ?? lookupSymbolDefinition(semanticContext.bindings, lookup.element);
 
     if (!definition?.location) {
       return undefined;
     }
 
     return mapLspLocation(definition.location, documentRegistry);
+});
+
+// ------------------------------
+// Goto Declaration (local SPC -> PROC/TASK relation)
+// ------------------------------
+
+connection.onDeclaration(params => {
+    const document = documentRegistry.get(params.textDocument.uri);
+    if (!document) {
+        return undefined;
+    }
+
+    const analysisResult = documentRegistry.getAnalysisResult(
+        params.textDocument.uri,
+        document.version
+    );
+    if (!analysisResult) {
+        return undefined;
+    }
+
+    const offset = document.offsetAt(params.position);
+    const lookup = analysisResult.rootAnalysis.ast.lookupSourceValue(offset);
+    const semanticContext = analysisResult.rootAnalysis.semanticContext;
+    if (!lookup || !semanticContext) {
+        return undefined;
+    }
+
+    const relation = lookupLocalSpecificationRelation(
+        semanticContext.localSpecificationRelations,
+        lookup.element
+    );
+    if (!relation?.specification.location) {
+        return undefined;
+    }
+
+    return mapLspLocation(relation.specification.location, documentRegistry);
 });
 
 // ------------------------------

@@ -76,11 +76,16 @@ import {
 } from './symbol';
 import { SymbolKind } from './symbolKind';
 import { resolveSymbol } from './symbolResolver';
+import { lookupBuiltin } from './builtins/builtinCatalog';
+import { semanticTypeEquals, procedureSignaturesEqual, isProcedureSignatureResolved } from './semanticTypeComparison';
+import type { BuiltinDefinition } from './builtins/builtinSignature';
+import { acceptsBuiltinArity, builtinExpectedArity } from './builtins/builtinSignature';
 import {
     Scope,
     ScopeKind
 } from './scope';
 import { DeclarationIndex, IndexedDeclaration } from './declarationIndex';
+import type { LocalSpecificationRelation } from './localSpecificationRelation';
 import { TypeIndex } from './typeIndex';
 import { SystemObjectDeclaration, SystemObjectIndex } from './systemObjectIndex';
 import {
@@ -113,6 +118,7 @@ class SemanticAnalysisState implements
     TimeConstantEvaluatorContext {
     readonly typeDefinitions = new Map<TypeSymbol, SemanticType>();
     readonly bindings = new Map<SourceValue<string>, SemanticSymbol>();
+    readonly builtinBindings = new Map<SourceValue<string>, BuiltinDefinition>();
     readonly diagnostics: SemanticDiagnostic[] = [];
     readonly constantFixedExpressionValues = new Map<ConstantFixedExpressionNode, FixedConstantValue>();
     readonly constantFixedValues = new Map<AstNode, FixedConstantValue>();
@@ -130,6 +136,7 @@ class SemanticAnalysisState implements
     readonly typeSymbols = new Map<TypeDeclarationNode, TypeSymbol>();
     readonly taskSymbols = new Map<TaskDeclarationNode, TaskSymbol>();
     readonly procedureSymbols = new Map<ProcedureDeclarationNode, ProcedureSymbol>();
+    readonly localSpecificationRelations = new Map<SourceValue<string>, LocalSpecificationRelation>();
     readonly parameterSymbols = new Map<SourceValue<string>, ParameterSymbol>();
     readonly loopControlSymbols = new Map<RepetitionNode, LoopControlVariableSymbol>();
     readonly loopControlScopes = new Map<SourceValue<string>, Scope>();
@@ -155,12 +162,24 @@ class SemanticAnalysisState implements
             this.timeConstantValues,
             this.semaPresetValues,
             this.moduleConfigurations,
-            this.shellCommandsByProcedure
+            this.shellCommandsByProcedure,
+            this.builtinBindings,
+            this.localSpecificationRelations
         );
     }
 
     bind(source: SourceValue<string>, symbol: SemanticSymbol): void {
         this.bindings.set(source, symbol);
+    }
+
+    linkLocalSpecification(
+        kind: 'PROC' | 'TASK',
+        specification: SourceValue<string>,
+        definition: SourceValue<string>
+    ): void {
+        const relation: LocalSpecificationRelation = { kind, specification, definition };
+        this.localSpecificationRelations.set(specification, relation);
+        this.localSpecificationRelations.set(definition, relation);
     }
 
     evaluateConstantFixedExpression(
@@ -398,7 +417,7 @@ class SemanticAnalysisState implements
 
         if (symbol.kind === SymbolKind.Procedure) {
             if (expectedTargetType?.kind !== SemanticTypeKind.Procedure
-                || !symbol.signature || !this.semanticTypesEqual(expectedTargetType, symbol.signature)) {
+                || !symbol.signature || !semanticTypeEquals(expectedTargetType, symbol.signature)) {
                 this.reportInvalidInitialization(identifier, 'REF PROC');
                 return undefined;
             }
@@ -410,91 +429,12 @@ class SemanticAnalysisState implements
             return undefined;
         }
 
-        if (expectedTargetType && !this.semanticTypesEqual(expectedTargetType, symbol.type)) {
+        if (expectedTargetType && !semanticTypeEquals(expectedTargetType, symbol.type)) {
             this.reportInvalidInitialization(identifier, 'REF');
             return undefined;
         }
 
         return symbol;
-    }
-
-    private semanticTypesEqual(left: SemanticType, right: SemanticType): boolean {
-        if (left.kind !== right.kind) {
-            return false;
-        }
-
-        switch (left.kind) {
-            case SemanticTypeKind.Fixed:
-                return right.kind === SemanticTypeKind.Fixed && left.precision === right.precision;
-
-            case SemanticTypeKind.Float:
-                return right.kind === SemanticTypeKind.Float && left.precision === right.precision;
-
-            case SemanticTypeKind.Bit:
-                return right.kind === SemanticTypeKind.Bit && left.length === right.length;
-
-            case SemanticTypeKind.Character:
-                return right.kind === SemanticTypeKind.Character && left.length === right.length;
-
-            case SemanticTypeKind.Clock:
-            case SemanticTypeKind.Duration:
-            case SemanticTypeKind.Sema:
-            case SemanticTypeKind.Bolt:
-            case SemanticTypeKind.Interrupt:
-            case SemanticTypeKind.Task:
-            case SemanticTypeKind.VoidReference:
-                return true;
-
-            case SemanticTypeKind.Dation:
-                return right.kind === SemanticTypeKind.Dation
-                    && left.direction === right.direction
-                    && left.dationClass === right.dationClass;
-
-            case SemanticTypeKind.Array:
-                return right.kind === SemanticTypeKind.Array
-                    && left.dimensions.length === right.dimensions.length
-                    && left.dimensions.every((dimension, index) => {
-                        const other = right.dimensions[index];
-                        return dimension.lowerBound === other.lowerBound
-                            && dimension.upperBound === other.upperBound;
-                    })
-                    && this.semanticTypesEqual(left.elementType, right.elementType);
-
-            case SemanticTypeKind.VirtualArray:
-                return right.kind === SemanticTypeKind.VirtualArray
-                    && left.rank === right.rank
-                    && this.semanticTypesEqual(left.elementType, right.elementType);
-
-            case SemanticTypeKind.Struct:
-                return right.kind === SemanticTypeKind.Struct
-                    && left.components.length === right.components.length
-                    && left.components.every((component, index) => {
-                        const other = right.components[index];
-                        return component.name.value === other.name.value
-                            && this.semanticTypesEqual(component.type, other.type);
-                    });
-
-            case SemanticTypeKind.Procedure:
-                return right.kind === SemanticTypeKind.Procedure
-                    && left.hasResult === right.hasResult
-                    && left.callingConvention === right.callingConvention
-                    && left.parameters.length === right.parameters.length
-                    && left.parameters.every((param, index) => {
-                        const other = right.parameters[index];
-                        return param.byIdentification === other.byIdentification
-                            && (param.type === undefined || other.type === undefined
-                                || this.semanticTypesEqual(param.type, other.type));
-                    })
-                    && (left.resultType === undefined || right.resultType === undefined
-                        || this.semanticTypesEqual(left.resultType, right.resultType));
-
-            case SemanticTypeKind.Reference:
-                return right.kind === SemanticTypeKind.Reference
-                    && this.semanticTypesEqual(left.target, right.target);
-
-            case SemanticTypeKind.Named:
-                return right.kind === SemanticTypeKind.Named && left.symbol === right.symbol;
-        }
     }
 
     lookupForwardType(name: string, environment: Environment): TypeSymbol | undefined {
@@ -583,6 +523,24 @@ class SemanticAnalysisState implements
         });
     }
 
+    reportSecondModuleInTranslationUnit(keyword: SourceValue<string>): void {
+        this.diagnostics.push({
+            code: SemanticDiagnosticCode.MultipleModulesInTranslationUnit,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: keyword.location,
+            message: 'RTOS-UH erlaubt nur ein MODULE pro Übersetzungseinheit.'
+        });
+    }
+
+    reportDeclarationAfterProcedureOrTask(keyword: SourceValue<string>): void {
+        this.diagnostics.push({
+            code: SemanticDiagnosticCode.DeclarationAfterProcedureOrTask,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: keyword.location,
+            message: 'Eine DCL-Deklaration auf Modulebene muss vor der ersten PROC- oder TASK-Definition stehen.'
+        });
+    }
+
     reportDuplicateDeclaration(name: SourceValue<string>, existing: IndexedDeclaration): void {
         this.diagnostics.push({
             code: SemanticDiagnosticCode.DuplicateDeclaration,
@@ -596,13 +554,41 @@ class SemanticAnalysisState implements
         });
     }
 
-    reportProcedureSpecificationRequiresGlobal(name: SourceValue<string>): void {
+    reportMissingLocalDefinition(name: SourceValue<string>, kind: 'PROC' | 'TASK'): void {
         this.diagnostics.push({
-            code: SemanticDiagnosticCode.ProcedureSpecificationRequiresGlobal,
+            code: kind === 'PROC'
+                ? SemanticDiagnosticCode.MissingLocalProcedureDefinition
+                : SemanticDiagnosticCode.MissingLocalTaskDefinition,
             severity: SemanticDiagnosticSeverity.Error,
             location: name.location,
-            message: `Prozedurspezifikation '${name.value}' benötigt GLOBAL.`
+            message: `Die lokale SPC-Spezifikation '${name.value}' erwartet eine ${kind}-Definition `
+                + 'im selben Modul (MISSING PROC/TASK).'
         });
+    }
+
+    reportLocalProcedureSpecificationMismatch(
+        definition: SourceValue<string>,
+        specification: SourceValue<string>
+    ): void {
+        this.diagnostics.push({
+            code: SemanticDiagnosticCode.LocalProcedureSpecificationMismatch,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: definition.location,
+            message: `Die Signatur von PROC '${definition.value}' stimmt nicht mit der `
+                + 'vorherigen SPC-Spezifikation überein.',
+            relatedLocations: [{
+                location: specification.location,
+                message: 'Die vorherige SPC-Spezifikation befindet sich hier.'
+            }]
+        });
+    }
+
+    procedureSignaturesConflict(specification: ProcedureType, definition: ProcedureType): boolean {
+        if (!isProcedureSignatureResolved(specification)
+            || !isProcedureSignatureResolved(definition)) {
+            return false;
+        }
+        return !procedureSignaturesEqual(specification, definition);
     }
 
     reportInvalidCallTarget(name: SourceValue<string>): void {
@@ -611,6 +597,15 @@ class SemanticAnalysisState implements
             severity: SemanticDiagnosticSeverity.Error,
             location: name.location,
             message: `'${name.value}' ist keine aufrufbare Prozedur.`
+        });
+    }
+
+    reportInvalidBuiltinCallArity(name: SourceValue<string>, expected: string, actual: number): void {
+        this.diagnostics.push({
+            code: SemanticDiagnosticCode.InvalidCallArity,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: name.location,
+            message: `Einbaufunktion '${name.value}' erwartet ${expected} Aktualparameter, erhalten: ${actual}.`
         });
     }
 
@@ -895,11 +890,54 @@ export class SemanticAnalyzer {
         this.validateDataDeclarationShadowing(state);
         this.validateLoopControlVariables(state);
         this.collectModuleConfigurations(root, state);
+        this.validateModuleDeclarationOrder(root, state);
+        this.validateSingleModulePerTranslationUnit(root, state);
         this.analyzeNode(root, undefined, state);
         this.validateShellModules(root, state);
         state.finalize();
 
         return state.createContext();
+    }
+
+    /** The parser retains all modules for recovery; RTOS-UH compiles one per source file. */
+    private validateSingleModulePerTranslationUnit(root: AstNode, state: SemanticAnalysisState): void {
+        if (root.kind !== AstKind.TranslationUnit) return;
+
+        let seenModule = false;
+        for (const node of root.getChildren()) {
+            if (node.kind !== AstKind.Module) continue;
+            if (seenModule) {
+                state.reportSecondModuleInTranslationUnit((node as ModuleNode).keyword);
+            }
+            seenModule = true;
+        }
+    }
+
+    /**
+     * Check the RTOS-UH module-level declaration order independently of parsing
+     * and indexing. Keeping all nodes in the AST allows further diagnostics and
+     * stable editor navigation even after an out-of-order DCL.
+     */
+    private validateModuleDeclarationOrder(root: AstNode, state: SemanticAnalysisState): void {
+        const modules = root.kind === AstKind.Module
+            ? [root as ModuleNode]
+            : root.kind === AstKind.TranslationUnit
+                ? root.getChildren().filter((child): child is ModuleNode => child.kind === AstKind.Module)
+                : [];
+
+        for (const module of modules) {
+            const problemPart = module.getChildren().find(child => child.kind === AstKind.ProblemPart);
+            if (!problemPart) continue;
+
+            let definitionsStarted = false;
+            for (const child of problemPart.getChildren()) {
+                if (child.kind === AstKind.ProcedureDeclaration || child.kind === AstKind.TaskDeclaration) {
+                    definitionsStarted = true;
+                } else if (definitionsStarted && child.kind === AstKind.DclDeclaration) {
+                    state.reportDeclarationAfterProcedureOrTask((child as DclDeclarationNode).keyword);
+                }
+            }
+        }
     }
 
     private validateShellModules(root: AstNode, state: SemanticAnalysisState): void {
@@ -1503,8 +1541,20 @@ export class SemanticAnalyzer {
         if (accepted) {
             const previous = this.resolveSymbolInCurrentScope(environment, node.name.value);
             if (previous?.kind === SymbolKind.Procedure && previous.definition === node.name) {
+                // A preceding SPC (local or GLOBAL for a GLOBAL PROC) is not
+                // a second declaration. Its signature must match the definition.
+                if (previous.name !== node.name && previous.signature
+                    && state.procedureSignaturesConflict(previous.signature, signature)) {
+                    state.reportLocalProcedureSpecificationMismatch(node.name, previous.name);
+                }
                 state.replaceSymbolBindings(previous, symbol);
-                this.replaceScopeSymbol(environment.scope, previous, symbol);
+                // The indexed PROC symbol was already replaced with `resolved` above.
+                // Do not add a second copy to scope.symbols for the SPC placeholder.
+                const symbols = (environment.scope as MutableScope).symbols;
+                const placeholderIndex = symbols.indexOf(previous);
+                if (placeholderIndex >= 0) {
+                    symbols.splice(placeholderIndex, 1);
+                }
             } else if (previous) {
                 state.reportDuplicateDeclaration(node.name, {
                     kind: previous.kind, name: previous.name
@@ -1543,8 +1593,20 @@ export class SemanticAnalyzer {
         if (!node.target) return environment;
         const symbol = resolveSymbol(environment, node.target.value);
         if (!symbol) {
-            // Built-in RTOS-UH procedures and forward usages are not indexed yet.
-            // Report no unknown-symbol diagnostic until general name resolution exists.
+            const builtin = lookupBuiltin(node.target.value);
+            if (builtin) {
+                state.builtinBindings.set(node.target, builtin);
+                if (builtin.category !== 'procedure') {
+                    state.reportInvalidCallTarget(node.target);
+                } else if (!builtin.signatures.some(signature =>
+                    acceptsBuiltinArity(signature, node.argumentsList?.length ?? 0))) {
+                    state.reportInvalidBuiltinCallArity(
+                        node.target, builtinExpectedArity(builtin), node.argumentsList?.length ?? 0
+                    );
+                }
+                return environment;
+            }
+            // Forward references and general expression names will be resolved later.
             return environment;
         }
         state.bind(node.target, symbol);
@@ -1905,18 +1967,41 @@ export class SemanticAnalyzer {
         const signature = state.typeResolver.resolveProcedureSignature(attribute.signature, environment);
         let current = environment;
         for (const identifier of node.identifiers.identifiers) {
-            const existing = this.resolveSymbolInCurrentScope(current, identifier.value)
-                ?? state.declarationIndex.lookupInScope(environment.scope, identifier.value);
-            if (existing) {
-                state.reportDuplicateDeclaration(identifier, existing);
+            const previous = this.resolveSymbolInCurrentScope(current, identifier.value);
+            const indexed = state.declarationIndex.lookupInScope(environment.scope, identifier.value);
+            const localSpecification = !attribute.global;
+            // An SPC with GLOBAL can also precede a GLOBAL PROC defined in this
+            // very module (confirmed by RTOS-UH compiler probe C08). The index
+            // contains definitions from the entire module, not SPC placeholders.
+            // A GLOBAL SPC without such a definition remains an external symbol.
+            const indexedProcedure = indexed?.kind === SymbolKind.Procedure
+                ? [...state.procedureSymbols.values()].find(symbol => symbol.name === indexed.name)
+                : undefined;
+            const forwardDefinition = indexedProcedure &&
+                (localSpecification || (attribute.global?.moduleName === undefined
+                    && indexedProcedure.global !== undefined))
+                    ? indexedProcedure.name : undefined;
+
+            if (previous || (indexed && !forwardDefinition)) {
+                state.reportDuplicateDeclaration(identifier, previous
+                    ? { kind: previous.kind, name: previous.name } : indexed!);
                 continue;
             }
-            if (!attribute.global) {
-                state.reportProcedureSpecificationRequiresGlobal(identifier);
-                continue;
+
+            if (localSpecification && !forwardDefinition) {
+                state.reportMissingLocalDefinition(identifier, 'PROC');
             }
+
+            // Record a same-module SPC/PROC relation, including GLOBAL/GLOBAL.
+            // The relation must survive a later signature mismatch.
+            if (forwardDefinition) {
+                state.linkLocalSpecification('PROC', identifier, forwardDefinition);
+            }
+
             const symbol: ProcedureSymbol = {
-                kind: SymbolKind.Procedure, name: identifier, definition: identifier,
+                kind: SymbolKind.Procedure,
+                name: identifier,
+                definition: forwardDefinition ?? identifier,
                 global: this.globalSymbolAttribute(attribute.global),
                 resultType: signature.resultType,
                 signature
@@ -1953,7 +2038,19 @@ export class SemanticAnalyzer {
             }
 
             if (!indexed && !attribute.global) {
-                state.reportMissingDeclarationForSpecification(identifier);
+                state.reportMissingLocalDefinition(identifier, 'TASK');
+            }
+
+            // For TASK, retain the same-module relation. An explicit GLOBAL
+            // specification is paired only with a GLOBAL definition; a GLOBAL
+            // SPC without a definition is external, as before.
+            if (indexed?.kind === SymbolKind.Task) {
+                const indexedTask = [...state.taskSymbols.values()]
+                    .find(symbol => symbol.name === indexed.name);
+                if (indexedTask && (!attribute.global ||
+                    (attribute.global.moduleName === undefined && indexedTask.global !== undefined))) {
+                    state.linkLocalSpecification('TASK', identifier, indexed.name);
+                }
             }
 
             const definition = indexed?.kind === SymbolKind.Task ? indexed.name : identifier;

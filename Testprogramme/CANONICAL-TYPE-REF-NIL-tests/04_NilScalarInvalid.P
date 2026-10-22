@@ -1,0 +1,7 @@
+MODULE NilScalarInvalid;
+PROBLEM;
+DCL Value FIXED INIT(NIL);
+
+T: TASK;
+END;
+MODEND;

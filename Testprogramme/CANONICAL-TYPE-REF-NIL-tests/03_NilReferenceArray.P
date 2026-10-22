@@ -1,0 +1,7 @@
+MODULE NilReferenceArray;
+PROBLEM;
+DCL Ptrs(1:3) REF FIXED INIT(NIL, NIL, NIL);
+
+T: TASK;
+END;
+MODEND;

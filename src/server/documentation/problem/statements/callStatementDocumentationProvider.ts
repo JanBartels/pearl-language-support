@@ -5,6 +5,7 @@ import { AstLookupResult } from '../../../ast/astLookupResult';
 import { CallStatementNode } from '../../../ast/problem/statements/callStatementNode';
 import { SemanticContext } from '../../../semantic/semanticContext';
 import { lookupBoundSymbol } from '../../../semantic/bindingIndex';
+import { formatBuiltinSignature } from '../../../semantic/builtins/builtinSignature';
 import { DocumentationProvider } from '../../documentationProvider';
 import { appendSemanticSymbolDocumentation } from '../../semanticSymbolDocumentation';
 
@@ -23,8 +24,17 @@ export class CallStatementDocumentationProvider extends DocumentationProvider<Ca
                     `${node.argumentsList.length} Aktualparameter`}.`;
             const symbol = semanticContext && node.target
                 ? lookupBoundSymbol(semanticContext.bindings, node.target) : undefined;
-            return symbol && semanticContext
-                ? appendSemanticSymbolDocumentation(text, symbol, semanticContext) : text;
+            if (symbol && semanticContext) {
+                return appendSemanticSymbolDocumentation(text, symbol, semanticContext);
+            }
+            const builtin = semanticContext && node.target
+                ? semanticContext.builtinBindings.get(node.target) : undefined;
+            return builtin
+                ? `${text}\n\n**RTOS-UH-Einbaufunktion:** ${builtin.description}`
+                    + `\n\n**Signatur:** \`${builtin.signatures.map(signature =>
+                        formatBuiltinSignature(builtin, signature)).join(' | ')}\``
+                    + `\n\n**Quelle:** ${builtin.source}`
+                : text;
         }
         return undefined;
     }

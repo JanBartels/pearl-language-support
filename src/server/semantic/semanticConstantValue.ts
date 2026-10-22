@@ -82,7 +82,7 @@ export interface SemanticConstantInitialValue {
 
 export interface SemanticReferenceInitialValue {
     readonly kind: SemanticInitialValueKind.Reference;
-    readonly values: readonly (DataObjectSymbol | TaskSymbol | ProcedureSymbol)[];
+    readonly values: readonly (DataObjectSymbol | TaskSymbol | ProcedureSymbol | null)[];
     readonly elementCount: bigint;
 }
 

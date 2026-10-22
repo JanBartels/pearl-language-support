@@ -7,6 +7,9 @@ import type { ShellCommandNode } from '../ast/module/shellCommandNode';
 import type { ProcedureDeclarationNode } from '../ast/problem/declarations/procedureDeclarationNode';
 import type { ConstantFixedExpressionNode } from '../ast/problem/expressions/constantFixedExpressionNode';
 import type { BindingIndex } from './bindingIndex';
+import type { LocalSpecificationRelationIndex } from './localSpecificationRelation';
+import type { BuiltinDefinition } from './builtins/builtinSignature';
+import type { SourceValue } from '../core/sourceValue';
 import { SemanticInitialValueKind } from './semanticConstantValue';
 import type {
     FixedConstantValue,
@@ -22,6 +25,7 @@ import type { DataObjectSymbol, TypeSymbol } from './symbol';
 export class SemanticContext {
     readonly typeDefinitions: ReadonlyMap<TypeSymbol, SemanticType>;
     readonly bindings: BindingIndex;
+    readonly builtinBindings: ReadonlyMap<SourceValue<string>, BuiltinDefinition>;
     readonly diagnostics: readonly SemanticDiagnostic[];
     readonly constantFixedExpressionValues: ReadonlyMap<ConstantFixedExpressionNode, FixedConstantValue>;
     readonly namedConstantValues: ReadonlyMap<DataObjectSymbol, SemanticConstantValue>;
@@ -31,6 +35,7 @@ export class SemanticContext {
     readonly semaPresetValues: ReadonlyMap<DataObjectSymbol, readonly FixedConstantValue[]>;
     readonly moduleConfigurations: ReadonlyMap<ModuleNode, ModuleConfiguration>;
     readonly shellCommandsByProcedure: ReadonlyMap<ProcedureDeclarationNode, ShellCommandNode>;
+    readonly localSpecificationRelations: LocalSpecificationRelationIndex;
 
     constructor(
         typeDefinitions: ReadonlyMap<TypeSymbol, SemanticType> = new Map(),
@@ -43,10 +48,14 @@ export class SemanticContext {
         timeConstantValues: ReadonlyMap<AstNode, TimeConstantValue> = new Map(),
         semaPresetValues: ReadonlyMap<DataObjectSymbol, readonly FixedConstantValue[]> = new Map(),
         moduleConfigurations: ReadonlyMap<ModuleNode, ModuleConfiguration> = new Map(),
-        shellCommandsByProcedure: ReadonlyMap<ProcedureDeclarationNode, ShellCommandNode> = new Map()
+        shellCommandsByProcedure: ReadonlyMap<ProcedureDeclarationNode, ShellCommandNode> = new Map(),
+        builtinBindings: ReadonlyMap<SourceValue<string>, BuiltinDefinition> = new Map(),
+        localSpecificationRelations: LocalSpecificationRelationIndex = new Map()
     ) {
         this.typeDefinitions = new Map(typeDefinitions);
         this.bindings = new Map(bindings);
+        this.builtinBindings = new Map(builtinBindings);
+        this.localSpecificationRelations = new Map(localSpecificationRelations);
         this.diagnostics = [...diagnostics];
         this.constantFixedExpressionValues = new Map(constantFixedExpressionValues);
         this.namedConstantValues = new Map(namedConstantValues);
@@ -105,7 +114,9 @@ export class SemanticContext {
             this.timeConstantValues,
             this.semaPresetValues,
             this.moduleConfigurations,
-            this.shellCommandsByProcedure
+            this.shellCommandsByProcedure,
+            this.builtinBindings,
+            this.localSpecificationRelations
         );
     }
 

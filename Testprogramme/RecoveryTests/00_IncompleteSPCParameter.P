@@ -1,0 +1,9 @@
+MODULE IncompleteSPCParameter;
+PROBLEM;
+SPC Later ENTRY(UnknownType);
+Later: PROC(Value FIXED);
+    RETURN;
+END;
+T: TASK;
+END;
+MODEND;

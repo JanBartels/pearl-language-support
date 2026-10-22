@@ -1,0 +1,10 @@
+MODULE FirstModule;
+PROBLEM;
+T: TASK;
+END;
+MODEND;
+MODULE SecondModule;
+PROBLEM;
+U: TASK;
+END;
+MODEND;

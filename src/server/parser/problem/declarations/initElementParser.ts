@@ -24,6 +24,12 @@ export class InitElementParser extends ParserBase {
     override parse(): InitElementNode | undefined {
         this.skipTrivia();
 
+        // NIL is a reserved null reference constant, not an identifier.
+        const nil = this.acceptKeyword('NIL');
+        if (nil) {
+            return new InitElementNode({ kind: 'nil', keyword: this.tokenValue(nil) });
+        }
+
         const signToken = this.acceptOperator(['+', '-']);
 
         if (signToken) {
