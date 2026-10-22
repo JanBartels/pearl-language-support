@@ -1,0 +1,12 @@
+SC=$2000;
+MODULE GoToCaseCross;
+PROBLEM;
+TestTask: TASK;
+    CASE 1
+    ALT
+        GOTO InOtherAlt;
+    ALT
+        InOtherAlt: ;
+    FIN;
+END;
+MODEND;

@@ -40,6 +40,7 @@ import { DimensionBoundariesNode } from '../ast/problem/dimensions/dimensionBoun
 import type { Environment } from './environment';
 import { SemanticContext } from './semanticContext';
 import { validateShellProcedures } from './shellProcedureValidator';
+import { resolveLabels } from './labelResolver';
 import { DEFAULT_TIME_RESOLUTION } from './moduleConfiguration';
 import { resolveModuleControls } from './moduleControlResolver';
 import type { ModuleConfiguration, TimeResolution } from './moduleConfiguration';
@@ -880,6 +881,11 @@ export class SemanticAnalyzer {
         this.indexNode(root, undefined, state);
         this.validateDataDeclarationShadowing(state);
         this.validateLoopControlVariables(state);
+        // Labels share the DeclarationIndex with other names, but their GOTO
+        // references are resolved after indexing to permit forward jumps.
+        const labels = resolveLabels(root, state.scopes, state.declarationIndex);
+        state.diagnostics.push(...labels.diagnostics);
+        for (const [source, symbol] of labels.bindings) state.bind(source, symbol);
         this.collectModuleConfigurations(root, state);
         this.validateModuleDeclarationOrder(root, state);
         this.validateSingleModulePerTranslationUnit(root, state);

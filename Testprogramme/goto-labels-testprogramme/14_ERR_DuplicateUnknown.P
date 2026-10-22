@@ -1,0 +1,9 @@
+SC=$2000;
+MODULE GoToInvalidNames;
+PROBLEM;
+TestTask: TASK;
+    Duplicate: ;
+    Duplicate: ;
+    GOTO Missing;
+END;
+MODEND;

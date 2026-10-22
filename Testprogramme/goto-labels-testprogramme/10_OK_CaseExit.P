@@ -1,0 +1,15 @@
+SC=$2000;
+MODULE GoToCaseExit;
+PROBLEM;
+TestTask: TASK;
+    CASE 1
+    ALT
+        GOTO AfterCase;
+    ALT
+        GOTO AfterCase;
+    OUT
+        GOTO AfterCase;
+    FIN;
+    AfterCase: ;
+END;
+MODEND;

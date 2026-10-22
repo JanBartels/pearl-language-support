@@ -94,6 +94,7 @@ export class Lexer {
     // Operatoren und sonstige Sonderzeichen
     "//",
     "**",
+    ":=",
     "==",
     "/=",
     "<=",

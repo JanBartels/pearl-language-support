@@ -1,0 +1,12 @@
+SC=$2000;
+MODULE GoToCrossProcedures;
+PROBLEM;
+First: PROC;
+    InFirst: ;
+    GOTO InSecond;
+END;
+Second: PROC;
+    InSecond: ;
+    GOTO InFirst;
+END;
+MODEND;

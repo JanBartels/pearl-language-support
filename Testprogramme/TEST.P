@@ -217,7 +217,7 @@ END;
 something: PROC( D DATION INOUT ALPHIC IDENT, A FIXED, B FLOAT);
 DCL (X,UnusedLocalVar) FIXED;
 A = abc;
-B = A * 1.0 + InitializedFloat;
+B := A * 1.0 + InitializedFloat;
 X = A;
 ACTIVATE demo;
 STR = 'IF';
@@ -259,7 +259,7 @@ IF x = 0 THEN     ! Operator = ist Fehler!
    ! Kommentar
    CALL something( A1, 5,12.3 );
    CALL somethingSPC;
-   CALL somethingREF;
+   x = somethingREF(5);
    GOTO MyLabel;
    /* noch
    ein

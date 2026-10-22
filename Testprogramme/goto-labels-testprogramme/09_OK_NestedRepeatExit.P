@@ -1,0 +1,14 @@
+SC=$2000;
+MODULE GoToNestedRepeatExit;
+PROBLEM;
+TestTask: TASK;
+    FOR I FROM 1 TO 2
+    REPEAT
+        OuterPoint: ;
+        FOR J FROM 1 TO 2
+        REPEAT
+            GOTO OuterPoint;
+        END;
+    END;
+END;
+MODEND;

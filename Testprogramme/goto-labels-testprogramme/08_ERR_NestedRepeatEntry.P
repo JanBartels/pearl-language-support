@@ -1,0 +1,14 @@
+SC=$2000;
+MODULE GoToNestedRepeatEnter;
+PROBLEM;
+TestTask: TASK;
+    FOR I FROM 1 TO 2
+    REPEAT
+        GOTO DeepLoop;
+        FOR J FROM 1 TO 2
+        REPEAT
+            DeepLoop: ;
+        END;
+    END;
+END;
+MODEND;

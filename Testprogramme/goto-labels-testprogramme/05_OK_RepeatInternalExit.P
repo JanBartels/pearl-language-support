@@ -1,0 +1,14 @@
+SC=$2000;
+MODULE GoToRepeatOk;
+PROBLEM;
+TestTask: TASK;
+    BeforeLoop: ;
+    FOR I FROM 1 TO 3
+    REPEAT
+        LoopStart: ;
+        GOTO LoopStart;
+        GOTO BeforeLoop;
+    END;
+    AfterLoop: ;
+END;
+MODEND;

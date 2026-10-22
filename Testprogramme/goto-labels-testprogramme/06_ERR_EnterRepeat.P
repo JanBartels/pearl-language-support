@@ -1,0 +1,11 @@
+SC=$2000;
+MODULE GoToRepeatEnter;
+PROBLEM;
+TestTask: TASK;
+    GOTO LoopBody;
+    FOR I FROM 1 TO 3
+    REPEAT
+        LoopBody: ;
+    END;
+END;
+MODEND;

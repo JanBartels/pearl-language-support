@@ -1,0 +1,10 @@
+SC=$2000;
+MODULE GoToEnterBlock;
+PROBLEM;
+TestTask: TASK;
+    GOTO Inside;
+    BEGIN
+        Inside: ;
+    END;
+END;
+MODEND;

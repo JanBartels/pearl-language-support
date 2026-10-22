@@ -1,0 +1,11 @@
+SC=$2000;
+MODULE GoToBasics;
+PROBLEM;
+TestTask: TASK;
+    GOTO Forward;
+    Backward: Alias: ;
+    Forward: ;
+    GOTO Backward;
+    GOTO Alias;
+END;
+MODEND;

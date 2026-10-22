@@ -1,0 +1,13 @@
+SC=$2000;
+MODULE GoToLeaveBlock;
+PROBLEM;
+TestTask: TASK;
+    BEGIN
+        BEGIN
+            GOTO Outside;
+        END;
+    END;
+    Outside: ;
+    GOTO Outside;
+END;
+MODEND;

@@ -76,6 +76,9 @@ export enum AstKind {
     CaseOut,
     ReturnStatement,
     CallStatement,
+    GotoStatement,
+    LabeledStatement,
+    EmptyStatement,
 
     Assignment,
     Operator,

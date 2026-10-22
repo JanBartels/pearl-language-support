@@ -1,0 +1,13 @@
+SC=$2000;
+MODULE GoToSiblingBlocks;
+PROBLEM;
+TestTask: TASK;
+    BEGIN
+        Left: ;
+        GOTO Right;
+    END;
+    BEGIN
+        Right: ;
+    END;
+END;
+MODEND;

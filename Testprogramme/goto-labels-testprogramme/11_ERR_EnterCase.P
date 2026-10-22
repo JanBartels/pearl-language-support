@@ -1,0 +1,15 @@
+SC=$2000;
+MODULE GoToCaseEnter;
+PROBLEM;
+TestTask: TASK;
+    GOTO InCase;
+    CASE 1
+    ALT
+        InCase: ;
+    ALT
+        ;
+    OUT
+        ;
+    FIN;
+END;
+MODEND;

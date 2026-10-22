@@ -9,6 +9,9 @@ import { IfStatementParser } from "./ifStatementParser";
 import { CaseStatementParser } from "./caseStatementParser";
 import { CallStatementParser } from "./callStatementParser";
 import { ReturnStatementParser } from "./returnStatementParser";
+import { GotoStatementParser } from "./gotoStatementParser";
+import { LabeledStatementParser } from "./labeledStatementParser";
+import { EmptyStatementNode } from "../../../ast/problem/statements/emptyStatementNode";
 
 /** All nested statement constructs are dispatched through this common entry point. */
 export class StatementParser extends ParserBase {
@@ -38,6 +41,29 @@ export class StatementParser extends ParserBase {
 
         if (this.isKeyword("RETURN")) {
             return new ReturnStatementParser(this.context).parse();
+        }
+
+        if (this.isKeyword("GOTO")) {
+            return new GotoStatementParser(this.context).parse();
+        }
+
+        // Identifier is a shared prefix of labels and identifier-led
+        // statements. Only ':' introduces a label. Other tails (currently
+        // unsupported assignments, etc.) keep the previous recovery behavior.
+        if (this.isIdentifier()) {
+            const identifier = this.acceptIdentifier()!;
+            this.skipTrivia();
+            if (this.isOperator(":")) {
+                return new LabeledStatementParser(this.context)
+                    .parseAfterIdentifier(identifier);
+            }
+            this.skipUnsupportedStatement();
+            return undefined;
+        }
+
+        const empty = this.acceptOperator(";");
+        if (empty) {
+            return new EmptyStatementNode(this.tokenValue(empty));
         }
 
         // An unmatched conditional delimiter must not trap the parser in a loop.
