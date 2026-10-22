@@ -4,7 +4,6 @@
 import { AstKind } from '../ast/astKind';
 import type { AstNode } from '../ast/astNode';
 import type { SourceValue } from '../core/sourceValue';
-import type { CompilerModeNode } from '../ast/module/compilerModeNode';
 import type { ModuleNode } from '../ast/module/moduleNode';
 import type { ShellCommandNode } from '../ast/module/shellCommandNode';
 import { AlphicDationSystemDeclarationNode } from '../ast/system/declarations/alphicDationSystemDeclationNode';
@@ -41,7 +40,8 @@ import { DimensionBoundariesNode } from '../ast/problem/dimensions/dimensionBoun
 import type { Environment } from './environment';
 import { SemanticContext } from './semanticContext';
 import { validateShellProcedures } from './shellProcedureValidator';
-import { createModuleConfiguration, DEFAULT_TIME_RESOLUTION, isKnownCompilerMode } from './moduleConfiguration';
+import { DEFAULT_TIME_RESOLUTION } from './moduleConfiguration';
+import { resolveModuleControls } from './moduleControlResolver';
 import type { ModuleConfiguration, TimeResolution } from './moduleConfiguration';
 import { SemanticConstantKind } from './semanticConstantValue';
 import type {
@@ -855,15 +855,6 @@ class SemanticAnalysisState implements
         return `${resolution.numerator}/${resolution.denominator} s`;
     }
 
-    reportUnknownCompilerMode(mode: SourceValue<string>): void {
-        this.diagnostics.push({
-            code: SemanticDiagnosticCode.UnknownCompilerMode,
-            severity: SemanticDiagnosticSeverity.Error,
-            location: mode.location,
-            message: `Unbekannter Compiler-MODE '${mode.value}'.`
-        });
-    }
-
     finalize(): void {
         for (const targets of this.unresolvedReferenceTargets.values()) {
             for (const symbol of targets.values()) {
@@ -967,52 +958,13 @@ export class SemanticAnalyzer {
     }
 
     private collectModuleConfigurations(root: AstNode, state: SemanticAnalysisState): void {
-        if (root.kind === AstKind.Module) {
-            const module = root as ModuleNode;
-            const configuration = createModuleConfiguration([]);
+        const resolved = resolveModuleControls(root);
+        state.diagnostics.push(...resolved.diagnostics);
 
+        for (const [module, configuration] of resolved.configurations) {
             state.moduleConfigurations.set(module, configuration);
-
             const scope = state.scopes.get(module);
-            if (scope) {
-                state.moduleConfigurationsByScope.set(scope, configuration);
-            }
-            return;
-        }
-
-        if (root.kind !== AstKind.TranslationUnit) {
-            return;
-        }
-
-        const modes: SourceValue<string>[] = [];
-
-        for (const child of root.getChildren()) {
-            switch (child.kind) {
-                case AstKind.CompilerMode: {
-                    const mode = (child as CompilerModeNode).mode;
-                    modes.push(mode);
-
-                    if (!isKnownCompilerMode(mode.value)) {
-                        state.reportUnknownCompilerMode(mode);
-                    }
-                    break;
-                }
-
-                case AstKind.Module: {
-                    const module = child as ModuleNode;
-                    const configuration = createModuleConfiguration(modes);
-
-                    state.moduleConfigurations.set(module, configuration);
-
-                    const scope = state.scopes.get(module);
-                    if (scope) {
-                        state.moduleConfigurationsByScope.set(scope, configuration);
-                    }
-
-                    modes.length = 0;
-                    break;
-                }
-            }
+            if (scope) state.moduleConfigurationsByScope.set(scope, configuration);
         }
     }
 

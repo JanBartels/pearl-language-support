@@ -4,7 +4,7 @@
 import { DocumentationProvider } from '../documentationProvider';
 import { AstLookupResult } from '../../ast/astLookupResult';
 import { md } from '../markdownUtils';
-import { ModuleNode } from '../ast/moduleNode';
+import { ModuleNode } from '../../ast/module/moduleNode';
 
 export class ModuleDocumentationProvider
     extends DocumentationProvider<ModuleNode> {
@@ -69,8 +69,9 @@ Marks the end of the current module.
             return md`
 # DEBUG
 
-Requests generation of additional debug information
-for the current module.
+Closes a module compiled with \`MODE=DEBUG;\`. In RTOS-UH this ensures that
+the debug information is appended to the generated code.
+This pairing is practically confirmed but not documented in RTOS-UH 5.3.
 `;
         }
 

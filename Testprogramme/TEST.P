@@ -6,8 +6,10 @@ Kommentar
 DCL A FIXED;
 */
 
-!MODE=NOLSTOP;
-!SC=2000;
+MODE=NOLSTOP;
+SC=2000;
+P=MPC604;
+MODE=DEBUG;
 
 /*+M*/
 /*+T*/
@@ -28,6 +30,8 @@ SYSTEM;
 
 PROBLEM;
 !   SPC A1 DATION INOUT ALPHIC;
+
+#define MacroMitSemikolon "Wert";
 
 TYPE Counter FIXED(31);
 

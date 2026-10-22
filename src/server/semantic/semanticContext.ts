@@ -90,7 +90,12 @@ export class SemanticContext {
                     timeResolution: { ...configuration.timeResolution },
                     fullCharacterComparison: configuration.fullCharacterComparison,
                     noLineStop: configuration.noLineStop,
-                    padding: configuration.padding
+                    padding: configuration.padding,
+                    debugInformation: configuration.debugInformation,
+                    processor: configuration.processor && { ...configuration.processor },
+                    moduleSize: configuration.moduleSize && { ...configuration.moduleSize },
+                    setLine: configuration.setLine && { ...configuration.setLine },
+                    maxErrors: configuration.maxErrors
                 }
             ])
         );

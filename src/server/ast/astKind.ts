@@ -5,6 +5,10 @@ export enum AstKind {
 
     TranslationUnit,
     CompilerMode,
+    ProcessorSetting,
+    ModuleSizeSetting,
+    SetLineSetting,
+    MaxErrorSetting,
     Module,
     ModuleParameter,
     ShellCommand,

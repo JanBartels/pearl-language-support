@@ -4,7 +4,7 @@
 import { ParserBase } from "../parserBase";
 import { TranslationUnitNode } from "../../ast/module/translationUnitNode";
 import { ModuleParser } from "./moduleParser";
-import { CompilerModeParser } from "./compilerModeParser";
+import { CompilerControlParser } from "./compilerControlParser";
 
 export class TranslationUnitParser extends ParserBase {
 
@@ -14,17 +14,19 @@ export class TranslationUnitParser extends ParserBase {
 
         while (!this.eof()) {
 
-            const compilerMode = new CompilerModeParser(this.context).parse();
+            const compilerControl = new CompilerControlParser(this.context).parse();
 
-            if (compilerMode) {
-                root.addChild(compilerMode);
+            if (compilerControl) {
+                root.addChild(compilerControl);
                 continue;
             }
 
-            const module = new ModuleParser(this.context).parse();
+            // CompilerControlParser may consume trailing trivia before EOF.
+            if (this.eof()) break;
 
-            if (module) {
-                root.addChild(module);
+            if (this.isKeyword(["MODULE", "SHELLMODULE"])) {
+                const module = new ModuleParser(this.context).parse();
+                if (module) root.addChild(module);
                 continue;
             }
 

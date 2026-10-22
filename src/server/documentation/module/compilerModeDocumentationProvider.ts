@@ -13,7 +13,12 @@ export class CompilerModeDocumentationProvider
         lookup: AstLookupResult
     ): string | undefined {
         if (lookup.element === node.keyword) {
-            return '# MODE\n\nRTOS-UH-Compilermodus für das folgende Modul.';
+            return '# MODE — modulglobale Compilereinstellung\n\n'
+                + 'Schreibweise: `MODE=<Name>;` vor `MODULE`.\n\n'
+                + '**Mögliche Modi:** `CLOCK50`, `FULLCC`, `NOLSTOP`, `PAD`, `NOPAD` und '
+                + '`DEBUG`.\n\n'
+                + 'Zu `MODE=DEBUG;` gehört `MODEND DEBUG;` am Modulende. '
+                + 'Mehrere `MODE`-Anweisungen sind zulässig; `PAD` und `NOPAD` wirken in Quelltextreihenfolge.';
         }
 
         if (lookup.element !== node.mode) {
@@ -21,6 +26,12 @@ export class CompilerModeDocumentationProvider
         }
 
         switch (node.mode.value) {
+            case 'DEBUG':
+                return '# DEBUG\n\n'
+                    + '`MODE=DEBUG;` fordert beim RTOS-UH-Compiler Debug-Informationen an. '
+                    + 'Das Modul muss mit `MODEND DEBUG;` abgeschlossen werden, '
+                    + 'damit die Debug-Informationen an den erzeugten Code angehängt werden. ';
+
             case 'CLOCK50':
                 return '# CLOCK50\n\n'
                     + '`MODE=CLOCK50;` verwendet für CLOCK und DURATION die RTOS-UH-Zeitauflösung '
