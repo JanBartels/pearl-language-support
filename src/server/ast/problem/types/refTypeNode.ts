@@ -12,6 +12,7 @@ import { RefTypeDocumentationProvider } from "../../../documentation/problem/typ
 
 import { ProcedureReferenceTargetNode } from "./procedureReferenceTargetNode";
 import { TaskReferenceTargetNode } from "./taskReferenceTargetNode";
+import { SynchronizationReferenceTargetNode } from "./synchronizationReferenceTargetNode";
 import { SimpleTypeNode } from "./simpleTypeNode";
 import { NamedTypeNode } from "./namedTypeNode";
 import { StructTypeNode } from "./structTypeNode";
@@ -21,6 +22,7 @@ export type RefTargetTypeNode =
     | NamedTypeNode
     | StructTypeNode
     | TaskReferenceTargetNode
+    | SynchronizationReferenceTargetNode
     | ProcedureReferenceTargetNode
     ;
 

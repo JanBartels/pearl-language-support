@@ -6,13 +6,9 @@ import { SourceValue } from "../../../core/sourceValue";
 import { ParserBase } from "../../parserBase";
 
 import { TypeDeclarationNode } from "../../../ast/problem/declarations/typeDeclarationNode";
-import { ProblemDataTypeNode } from "../../../ast/problem/types/problemDataTypeNode";
 
 import { DimensionAttributeParser } from "../dimensions/dimensionAttributeParser";
 import { ProblemDataTypeParser } from "../types/problemDataTypeParser";
-import { SimpleTypeParser } from "../types/simpleTypeParser";
-import { NamedTypeParser } from "../types/namedTypeParser";
-import { StructTypeParser } from "../types/structTypeParser";
 
 export class TypeDeclarationParser extends ParserBase {
 
@@ -68,9 +64,7 @@ export class TypeDeclarationParser extends ParserBase {
          */
         const dimension = new DimensionAttributeParser( this.context ).parse();
 
-        const type = dimension
-            ? new ProblemDataTypeParser( this.context ).parse()
-            : this.parseTypeDefinition();
+        const type = new ProblemDataTypeParser( this.context ).parse();
 
         if (!type) {
 
@@ -121,24 +115,6 @@ export class TypeDeclarationParser extends ParserBase {
             dimension,
             type
         );
-    }
-
-    private parseTypeDefinition():
-        ProblemDataTypeNode | undefined {
-
-        const simpleType = new SimpleTypeParser( this.context ).parse();
-
-        if (simpleType) {
-            return simpleType;
-        }
-
-        const namedType = new NamedTypeParser( this.context ).parse();
-
-        if (namedType) {
-            return namedType;
-        }
-
-        return new StructTypeParser( this.context ).parse();
     }
 
 }

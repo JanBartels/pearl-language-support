@@ -5,6 +5,7 @@ import { SourceValue } from "../core/sourceValue";
 
 import { ProcedureSignatureNode } from '../ast/problem/procedures/procedureSignatureNode';
 import { ProcedureReferenceTargetNode } from '../ast/problem/types/procedureReferenceTargetNode';
+import { SynchronizationReferenceTargetNode } from '../ast/problem/types/synchronizationReferenceTargetNode';
 import { ProcedureParameterTypeNode } from '../ast/problem/declarations/procedureParameterTypeNode';
 import { FormalParameterTypeNode } from '../ast/problem/declarations/formalParameterNode';
 import { AstKind } from "../ast/astKind";
@@ -298,6 +299,13 @@ export class SemanticTypeResolver {
 
             case AstKind.TaskReferenceTarget:
                 return { kind: SemanticTypeKind.Task };
+
+            case AstKind.SynchronizationReferenceTarget: {
+                const target = node as SynchronizationReferenceTargetNode;
+                return { kind: target.keyword.value === 'SEMA'
+                    ? SemanticTypeKind.Sema
+                    : SemanticTypeKind.Bolt };
+            }
 
             case AstKind.ProcedureReferenceTarget:
                 return this.resolveProcedureSignature(

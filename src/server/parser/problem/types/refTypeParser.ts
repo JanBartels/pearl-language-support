@@ -11,6 +11,7 @@ import {
 import { ProcedureReferenceTargetNode } from "../../../ast/problem/types/procedureReferenceTargetNode";
 import { ProcedureSignatureParser } from "../procedures/procedureSignatureParser";
 import { TaskReferenceTargetNode } from "../../../ast/problem/types/taskReferenceTargetNode";
+import { SynchronizationReferenceTargetNode } from "../../../ast/problem/types/synchronizationReferenceTargetNode";
 import { SimpleTypeParser } from "./simpleTypeParser";
 import { StructTypeParser } from "./structTypeParser";
 import { NamedTypeParser } from "./namedTypeParser";
@@ -44,6 +45,13 @@ export class RefTypeParser extends ParserBase {
         const task = this.acceptKeyword("TASK");
         if (task) {
             return new TaskReferenceTargetNode(this.tokenValue(task));
+        }
+
+        const synchronization = this.acceptKeyword(["SEMA", "BOLT"]);
+        if (synchronization) {
+            return new SynchronizationReferenceTargetNode(
+                this.tokenValue(synchronization)
+            );
         }
 
 

@@ -60,6 +60,7 @@ export enum AstKind {
     StructComponent,
     RefType,
     TaskReferenceTarget,
+    SynchronizationReferenceTarget,
     SpcTaskAttribute,
     ProcedureSpecificationParameter,
     ProcedureSignature,

@@ -31,6 +31,10 @@ Examples:
 \`\`\`pearl
 DCL Counter FIXED;
 DCL Pointer REF FIXED;
+DCL MyBolt REF BOLT;
+DCL MySemaphore REF SEMA;
+
+TYPE TRefProc REF PROC(FIXED) RETURNS(FIXED);
 
 TYPE Node STRUCT[
     Value FIXED,

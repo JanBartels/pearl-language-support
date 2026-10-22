@@ -166,6 +166,9 @@ DCL BufSema SEMA;
 
 SPC HuhuTask TASK;
 
+TYPE TRefProc REF PROC( FIXED ) RETURNS( FIXED );
+DCL MyRefProc TRefProc;
+
 HuhuTask: TASK PRIO 23;
 DCL HuhuA FIXED;
 DCL Var FLOAT;
@@ -228,9 +231,6 @@ CALL GlobProc;    ! Aus Include-Datei
 SEMASET 3, MySema;
 REQUEST MySema;
 END;
-
-TYPE TRefProc REF PROC( FIXED ) RETURNS( FIXED );
-DCL MyRefProc TRefProc;
 
 demo: 
    TASK PRIO 8;
