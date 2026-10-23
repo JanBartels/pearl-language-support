@@ -16,6 +16,7 @@ import { SynchronizationReferenceTargetNode } from "./synchronizationReferenceTa
 import { SimpleTypeNode } from "./simpleTypeNode";
 import { NamedTypeNode } from "./namedTypeNode";
 import { StructTypeNode } from "./structTypeNode";
+import { ProcedureParameterTypeNode } from "../declarations/procedureParameterTypeNode";
 
 export type RefTargetTypeNode =
     | SimpleTypeNode
@@ -24,6 +25,7 @@ export type RefTargetTypeNode =
     | TaskReferenceTargetNode
     | SynchronizationReferenceTargetNode
     | ProcedureReferenceTargetNode
+    | ProcedureParameterTypeNode
     ;
 
 export class RefTypeNode extends AstNode {

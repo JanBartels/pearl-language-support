@@ -70,25 +70,26 @@ export function resolveModuleControls(root: AstNode): ResolvedModuleControls {
 
     function processorSetting(node: ProcessorSettingNode): ProcessorConfiguration | undefined {
         const name = node.processor.value;
-        const options = new Set(['68000', '68020', '68040', '68060', '68881', 'MPC604', 'MPC405']);
+        const options = new Set(['68000', '68020', '68040', '68060', '68881', 'MPC603', 'MPC604', 'MPC405']);
         if (!options.has(name)) {
             report(node.processor, Code.UnknownTargetProcessor, `Unbekannter RTOS-UH-Zielprozessor '${name}'.`);
             return undefined;
         }
         const hasRegisters = node.registerCount !== undefined;
-        const explicitFpu = node.fpuKeyword !== undefined;
-        if (explicitFpu && !node.fpuKeyword?.location) return undefined;
-        if (explicitFpu && name !== 'MPC604') {
-            report(node.fpuKeyword, Code.InvalidProcessorOption,
-                `Die Schreibweise +FPU(n) ist nur bei P=MPC604 erlaubt.`);
+        const explicitFpu = node.plusOperator !== undefined;
+        if (node.fpuKeyword && !node.fpuKeyword.location) return undefined;
+        const isPowerPcFpu = name === 'MPC603' || name === 'MPC604';
+        if (explicitFpu && !isPowerPcFpu) {
+            report(node.plusOperator, Code.InvalidProcessorOption,
+                'Die Schreibweisen +(n) und +FPU(n) sind nur bei MPC603/MPC604 erlaubt.');
             return undefined;
         }
-        if (name === 'MPC604' && hasRegisters !== explicitFpu) {
+        if (isPowerPcFpu && hasRegisters !== explicitFpu) {
             report(node.processor, Code.InvalidProcessorOption,
-                'P=MPC604 akzeptiert Registerzahlen nur in der Form +FPU(n).');
+                `P=${name} akzeptiert Registerzahlen nur in der Form +(n) oder +FPU(n).`);
             return undefined;
         }
-        if (hasRegisters && !['68040', '68060', '68881', 'MPC604'].includes(name)) {
+        if (hasRegisters && !['68040', '68060', '68881', 'MPC603', 'MPC604'].includes(name)) {
             report(node.registerCount, Code.InvalidProcessorOption,
                 `P=${name} unterstützt keine Registerzahl.`);
             return undefined;
@@ -97,8 +98,8 @@ export function resolveModuleControls(root: AstNode): ResolvedModuleControls {
 
         const count = decimal(node.registerCount!, 'FPU-Registerzahl');
         if (count === undefined) return undefined;
-        const min = name === '68881' ? 1 : name === 'MPC604' ? 0 : 3;
-        const max = name === 'MPC604' ? 32 : 8;
+        const min = name === '68881' ? 1 : isPowerPcFpu ? 0 : 3;
+        const max = isPowerPcFpu ? 32 : 8;
         if (count < min || count > max) {
             report(node.registerCount, Code.InvalidFpuRegisterCount,
                 `P=${name} erlaubt FPU-Registerzahlen von ${min} bis ${max}.`);

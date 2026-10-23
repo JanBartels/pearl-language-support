@@ -23,7 +23,6 @@ export enum SemanticDiagnosticCode {
     InvalidCallArity = 'semantic.invalid-call-arity',
     UnknownLabel = 'semantic.unknown-label',
     InvalidGotoIntoBlock = 'semantic.invalid-goto-into-block',
-    InvalidGotoIntoCase = 'semantic.invalid-goto-into-case',
     UnknownType = 'semantic.unknown-type',
     ExpectedType = 'semantic.expected-type',
     DuplicateType = 'semantic.duplicate-type',

@@ -5,7 +5,7 @@ import { SourceValue } from '../../core/sourceValue';
 import { ProcessorSettingNode } from '../../ast/module/processorSettingNode';
 import { ParserBase } from '../parserBase';
 
-/** P=(68000|68020|68040[(n)]|68060[(n)]|68881[(n)]|MPC604[+FPU(n)]|MPC405); */
+/** RTOS-UH P=<CPU> [ +(n) | +FPU(n) | (n) ]; options checked by semantics. */
 export class ProcessorSettingParser extends ParserBase {
     override parse(): ProcessorSettingNode | undefined {
         this.skipTrivia();
@@ -29,17 +29,20 @@ export class ProcessorSettingParser extends ParserBase {
 
         let fpuKeyword: SourceValue<string> | undefined;
         let registerCount: SourceValue<string> | undefined;
+        let plusOperator: SourceValue<string> | undefined;
 
         this.skipTrivia();
 
         // PowerPC special form: MPC604+FPU(n)
-        if (this.acceptOperator('+')) {
+        const plus = this.acceptOperator('+');
+        if (plus) {
+            plusOperator = this.tokenValue(plus);
             this.skipTrivia();
-            const fpu = this.expectKeyword('FPU', "Expected 'FPU' after '+'.");
-            fpuKeyword = fpu ? this.tokenValue(fpu) : error;
+            const fpu = this.acceptKeyword('FPU');
+            if (fpu) fpuKeyword = this.tokenValue(fpu);
             if (!this.expectLeftParenthesis()) {
                 this.synchronizeSetting();
-                return new ProcessorSettingNode(keywordValue, this.tokenValue(name), fpuKeyword, error);
+                return new ProcessorSettingNode(keywordValue, this.tokenValue(name), fpuKeyword, error, plusOperator);
             }
             registerCount = this.parseRegisterCount();
         } else if (this.acceptLeftParenthesis()) {
@@ -48,7 +51,7 @@ export class ProcessorSettingParser extends ParserBase {
         }
 
         this.endSetting();
-        return new ProcessorSettingNode(keywordValue, this.tokenValue(name), fpuKeyword, registerCount);
+        return new ProcessorSettingNode(keywordValue, this.tokenValue(name), fpuKeyword, registerCount, plusOperator);
     }
 
     private parseRegisterCount(): SourceValue<string> {

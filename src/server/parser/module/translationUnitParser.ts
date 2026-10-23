@@ -5,6 +5,7 @@ import { ParserBase } from "../parserBase";
 import { TranslationUnitNode } from "../../ast/module/translationUnitNode";
 import { ModuleParser } from "./moduleParser";
 import { CompilerControlParser } from "./compilerControlParser";
+import { TokenKind } from '../../lexer/token';
 
 export class TranslationUnitParser extends ParserBase {
 
@@ -13,6 +14,11 @@ export class TranslationUnitParser extends ParserBase {
         const root = new TranslationUnitNode();
 
         while (!this.eof()) {
+
+            // Before MODULE/SHELLMODULE, compiler-option comments and their
+            // optional semicolons belong to the translation-unit preamble.
+            this.skipModulePreambleTrivia();
+            if (this.eof()) break;
 
             const compilerControl = new CompilerControlParser(this.context).parse();
 
@@ -39,6 +45,19 @@ export class TranslationUnitParser extends ParserBase {
         }
 
         return root;
+    }
+
+    /** Skip comment/newline trivia and optional semicolons in the module preamble. */
+    private skipModulePreambleTrivia(): void {
+        while (!this.eof()) {
+            if (this.tokenKind() === TokenKind.Newline ||
+                this.tokenKind() === TokenKind.Comment ||
+                this.isOperator(';')) {
+                this.next();
+                continue;
+            }
+            break;
+        }
     }
 
 }

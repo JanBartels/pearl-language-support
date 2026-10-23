@@ -25,19 +25,6 @@ interface GotoReference {
     readonly owner: Scope;
 }
 
-/**
- * CASE is a control-flow boundary, not a lexical Scope. Keep these two
- * concepts separate so label checks do not change ordinary name visibility.
- * Labels attached to a CASE statement itself are outside that CASE.
- */
-function enclosingCases(node: AstNode): ReadonlySet<AstNode> {
-    const cases = new Set<AstNode>();
-    for (let current = node.parent; current; current = current.parent) {
-        if (current.kind === AstKind.CaseStatement) cases.add(current);
-    }
-    return cases;
-}
-
 /** The enclosing task/procedure determines the maximal scope of a GOTO. */
 function executableOwner(scope: Scope): Scope | undefined {
     for (let current: Scope | undefined = scope; current; current = current.parent) {
@@ -67,7 +54,6 @@ export function resolveLabels(
     const byScope = new Map<Scope, Map<string, LabelSymbol>>();
     const byOwner = new Map<Scope, Map<string, LabelSymbol[]>>();
     const references: GotoReference[] = [];
-    const casesByLabel = new Map<LabelSymbol, ReadonlySet<AstNode>>();
 
     const reportDuplicate = (name: SourceValue<string>, previous: SourceValue<string>): void => {
         if (!name.location) return;
@@ -96,7 +82,6 @@ export function resolveLabels(
                     }
                     const symbol: LabelSymbol = { kind: SymbolKind.Label, name, definition: name };
                     bindings.set(name, symbol);
-                    casesByLabel.set(symbol, enclosingCases(node));
 
                     let labels = byScope.get(scope);
                     if (!labels) {
@@ -137,23 +122,6 @@ export function resolveLabels(
             if (found || current === owner) break;
         }
         if (found) {
-            const sourceCases = enclosingCases(node);
-            const targetCases = casesByLabel.get(found);
-            const entersCase = targetCases && [...targetCases].some(c => !sourceCases.has(c));
-
-            if (entersCase) {
-                diagnostics.push({
-                    code: SemanticDiagnosticCode.InvalidGotoIntoCase,
-                    severity: SemanticDiagnosticSeverity.Error,
-                    location: target.location,
-                    message: `GOTO '${target.value}' darf nicht in eine CASE-Anweisung hineinspringen.`,
-                    relatedLocations: found.name.location
-                        ? [{ location: found.name.location, message: 'Hier ist die Sprungmarke innerhalb von CASE definiert.' }]
-                        : undefined
-                });
-                continue;
-            }
-
             bindings.set(target, found);
             continue;
         }

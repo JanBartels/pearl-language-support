@@ -16,7 +16,8 @@ export class ProcessorSettingNode extends AstNode {
         public readonly keyword: SourceValue<string>,
         public readonly processor: SourceValue<string>,
         public readonly fpuKeyword?: SourceValue<string>,
-        public readonly registerCount?: SourceValue<string>
+        public readonly registerCount?: SourceValue<string>,
+        public readonly plusOperator?: SourceValue<string>
     ) {
         super(AstKind.ProcessorSetting);
     }
@@ -28,6 +29,7 @@ export class ProcessorSettingNode extends AstNode {
     override lookupSourceValue(offset: number): AstLookupResult | undefined {
         return this.lookupOwnSourceValue(offset, this.keyword)
             ?? this.lookupOwnSourceValue(offset, this.processor)
+            ?? this.lookupOwnSourceValue(offset, this.plusOperator)
             ?? this.lookupOwnSourceValue(offset, this.fpuKeyword)
             ?? this.lookupOwnSourceValue(offset, this.registerCount);
     }

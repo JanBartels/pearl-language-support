@@ -7,11 +7,11 @@ DCL A FIXED;
 */
 
 MODE=NOLSTOP;
-SC=2000;
-P=MPC604;
+SC=2E4F0;
+P=MPC603+(4);
 MODE=DEBUG;
 
-/*+M*/
+/*+M*/;
 /*+T*/
 /*+D=1000*/
 /*+T Indextester */
@@ -53,6 +53,15 @@ TYPE Time CLOCK;
 TYPE Interval DURATION;
 
 DCL Start FIXED;
+
+TYPE MyTestStruct2 STRUCT [
+   D REF DATION INOUT ALPHIC CONTROL(ALL),
+   F FIXED
+];
+
+SPC DationProc PROC(D REF DATION INOUT ALPHIC CONTROL(ALL) IDENT) GLOBAL;
+
+SPC FREE PROC( REF STRUCT[] IDENT ) GLOBAL;
 
 DCL MySema SEMA;
 
@@ -209,9 +218,12 @@ DCL SpecialChar CHAR(20);
 
    TT = 'Mein Typ';
 
+   RETURN(1);
+
    ! Strukturelemente
    MyTestStruct.Element1 = 42;
    RETURN 1;
+   RETURN(1)
 END;
 
 something2: PROC( D DATION INOUT ALPHIC IDENT, A FIXED, B FLOAT) RETURNS( FIXED );

@@ -13,6 +13,19 @@ export class ReturnStatementParser extends ParserBase {
         if (!keyword) return undefined;
         this.skipTrivia();
 
+        // RETURN; and RETURN(Expression); are the two grammar forms.
+        // A bare value (RETURN 1;) is not a missing semicolon.
+        // Recover at the statement boundary without accepting this syntax.
+        if (!this.isOperator(['(', ';']) && !this.isKeyword([
+            'END', 'MODEND', 'FIN', 'ELSE', 'ALT', 'OUT'
+        ])) {
+            this.problems.error(this.location(),
+                "Expected '(' before RETURN expression. Use RETURN(<expression>);");
+            this.synchronize([';', 'END', 'MODEND', 'FIN', 'ELSE', 'ALT', 'OUT']);
+            this.acceptSemicolon();
+            return new ReturnStatementNode(this.tokenValue(keyword), undefined);
+        }
+
         let expression: SourceValue<string>[] | undefined;
         if (this.acceptLeftParenthesis()) {
             expression = [];

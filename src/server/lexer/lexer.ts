@@ -172,7 +172,7 @@ export class Lexer {
     }
 
     // Whitespace (space + tab)
-    if (isWhitespace(ch)) {
+    if (isWhitespace(ch) || ch === 4 /* EOT / Ctrl-D */) {
       this.skipWhitespace();
       return this.nextToken();
     }
@@ -234,7 +234,7 @@ export class Lexer {
 
   private skipWhitespace(): void {
 
-    while (isWhitespace(this.stream.peek())) {
+    while (isWhitespace(this.stream.peek()) || this.stream.peek() === 4 /* EOT */) {
       this.stream.next();
     }
   }
@@ -346,7 +346,24 @@ export class Lexer {
     // Exponent
     // ------------------------------------------------------------
 
-    if (this.stream.peek() === 69 /* E */) {
+    // Distinguish scientific notation (2E10) from a complete hex sequence
+    // (2E10A or 2E). The latter is a single HexDigitSequence token.
+    let exponentIsHexSuffix = false;
+    if (!hasDot && this.stream.peek() === 69 /* E */) {
+        let look = 1;
+        if (this.stream.peek(look) !== 43 /* + */
+            && this.stream.peek(look) !== 45 /* - */) {
+            let trailingHexLetter = false;
+            while (isHexDigit(this.stream.peek(look))) {
+                const hex = this.stream.peek(look);
+                if (hex >= 65 && hex <= 70) trailingHexLetter = true;
+                look++;
+            }
+            exponentIsHexSuffix = look === 1 || trailingHexLetter;
+        }
+    }
+
+    if (this.stream.peek() === 69 /* E */ && !exponentIsHexSuffix) {
 
         hasExponent = true;
 
@@ -400,8 +417,10 @@ export class Lexer {
 
             const ch = this.stream.peek();
 
-            if (ch >= 65 /* A */ && ch <= 70 /* F */) {
-                containsHexLetter = true;
+            if (isHexDigit(ch)) {
+                if (ch >= 65 /* A */ && ch <= 70 /* F */) {
+                    containsHexLetter = true;
+                }
                 this.stream.next();
                 continue;
             }

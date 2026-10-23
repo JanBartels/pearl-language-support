@@ -23,6 +23,17 @@ export class ProcedureParameterTypeParser extends ParserBase {
             const dationClass = this.expectKeyword(['ALPHIC', 'BASIC', 'ALL'],
                 'Expected DATION class after direction.');
             if (dationClass) qualifiers.push(this.tokenValue(dationClass));
+
+            this.skipTrivia();
+            const control = this.acceptKeyword('CONTROL');
+            if (control) {
+                qualifiers.push(this.tokenValue(control));
+                this.expectLeftParenthesis("Expected '(' after CONTROL.");
+                this.skipTrivia();
+                const all = this.expectKeyword('ALL', "Expected 'ALL' in CONTROL(...).");
+                if (all) qualifiers.push(this.tokenValue(all));
+                this.expectRightParenthesis("Expected ')' after CONTROL(ALL).");
+            }
         }
         return new ProcedureParameterTypeNode(this.tokenValue(keyword), qualifiers);
     }

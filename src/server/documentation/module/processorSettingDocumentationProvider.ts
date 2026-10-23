@@ -16,8 +16,9 @@ const OPTIONS = md`
 | \`P=68040;\`, \`P=68040(n);\` | MC68040; n = 3 bis 8 FPU-Register |
 | \`P=68060;\`, \`P=68060(n);\` | MC68060; n = 3 bis 8 FPU-Register |
 | \`P=68881;\`, \`P=68881(n);\` | MC68881/2; n = 1 bis 8, Standard 1 |
-| \`P=MPC604;\` | PowerPC 603/604 ohne FPU |
-| \`P=MPC604+FPU(n);\` | PowerPC mit FPU; n = 0 bis 32 |
+| \`P=MPC603;\`, \`P=MPC604;\` | PowerPC 603/604 ohne FPU |
+| \`P=MPC603+(n);\`, \`P=MPC604+(n);\` | PowerPC mit FPU; n = 0 bis 32 |
+| \`P=MPC603+FPU(n);\`, \`P=MPC604+FPU(n);\` | PowerPC mit FPU; n = 0 bis 32 |
 | \`P=MPC405;\` | IBM PowerPC 405; mit Prozessor-Workaround |
 
 Die Prozessorwahl beeinflusst insbesondere den Befehlssatz, das Gleitkommaformat
@@ -45,7 +46,8 @@ Die globale Compilersteueranweisung \`P=...;\` steht vor \`MODULE\`.
                 '68040': 'MC68040 mit nativen FPU-Operationen und angepassten mathematischen Routinen.',
                 '68060': 'MC68060; vermeidet dort nicht vorhandene emulierte Befehle.',
                 '68881': 'MC68881/2-FPU; standardmäßig wird ein FPU-Register gesichert.',
-                'MPC604': 'PowerPC 603/604; ohne +FPU(n) keine Nutzung der FPU.',
+                'MPC603': 'PowerPC 603; ohne FPU-Parameter keine Nutzung der FPU.',
+                'MPC604': 'PowerPC 603/604; ohne FPU-Parameter keine Nutzung der FPU.', 
                 'MPC405': 'PowerPC 405 mit Umgehung des lwarx/stwarx-Prozessorfehlers.'
             };
             return md`# Zielprozessor ${processor}
@@ -54,9 +56,10 @@ ${descriptions[processor] ?? 'Dieser Zielprozessor ist in RTOS-UH 5.1.1 nicht au
 
 ` + '\n\n' + OPTIONS;
         }
-        if (lookup.element === node.fpuKeyword || lookup.element === node.registerCount) {
+        if (lookup.element === node.plusOperator || lookup.element === node.fpuKeyword
+            || lookup.element === node.registerCount) {
             const processor = node.processor.value;
-            const range = processor === 'MPC604'
+            const range = (processor === 'MPC603' || processor === 'MPC604')
                 ? '0 bis 32 (0 deaktiviert die FPU; der Compiler kann die Zahl bei Bedarf erhöhen)'
                 : processor === '68881'
                     ? '1 bis 8 (ohne Angabe wird 1 verwendet)'

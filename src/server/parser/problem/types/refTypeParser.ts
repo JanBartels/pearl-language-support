@@ -15,6 +15,7 @@ import { SynchronizationReferenceTargetNode } from "../../../ast/problem/types/s
 import { SimpleTypeParser } from "./simpleTypeParser";
 import { StructTypeParser } from "./structTypeParser";
 import { NamedTypeParser } from "./namedTypeParser";
+import { ProcedureParameterTypeParser } from "../declarations/procedureParameterTypeParser";
 
 export class RefTypeParser extends ParserBase {
 
@@ -54,6 +55,10 @@ export class RefTypeParser extends ParserBase {
             );
         }
 
+
+        if (this.isKeyword('DATION')) {
+            return new ProcedureParameterTypeParser(this.context).parse();
+        }
 
         if (this.isKeyword(['PROC', 'PROCEDURE'])) {
             const signature = new ProcedureSignatureParser(this.context).parse();

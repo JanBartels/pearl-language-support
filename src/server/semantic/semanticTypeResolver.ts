@@ -307,6 +307,9 @@ export class SemanticTypeResolver {
                     : SemanticTypeKind.Bolt };
             }
 
+            case AstKind.ProcedureParameterType:
+                return this.resolveProcedureParameterType(node as ProcedureParameterTypeNode, environment);
+
             case AstKind.ProcedureReferenceTarget:
                 return this.resolveProcedureSignature(
                     (node as ProcedureReferenceTargetNode).signature, environment

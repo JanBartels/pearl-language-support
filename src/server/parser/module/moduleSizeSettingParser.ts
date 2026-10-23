@@ -61,6 +61,16 @@ export class ModuleSizeSettingParser extends ParserBase {
             ?? this.acceptIntegerLiteral()
             ?? this.acceptHexDigitSequence();
         if (token) return this.tokenValue(token);
+
+        // E in 2E570 is lexically an exponent, but here the entire token
+        // denotes a hexadecimal number. Hex-only identifiers (e.g. FACE)
+        // are also accepted only in this grammatical position.
+        if ((this.isFloatingPointLiteral() || this.isIdentifier())
+            && /^[0-9A-Fa-f]+$/.test(this.tokenText())) {
+            const hexToken = this.current();
+            this.next();
+            return this.tokenValue(hexToken);
+        }
         this.problems.error(this.location(), 'Expected hexadecimal number (e.g. $6500 or 6500).');
         return undefined;
     }

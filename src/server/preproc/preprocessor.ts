@@ -77,6 +77,12 @@ export class Preprocessor implements TokenStream {
     private readonly handlers = new Map<string, DirectiveHandler>();
     private readonly expansions = new ExpansionStack();
 
+    /**
+     * The conditional stacks are shared with included files and macro expansions.
+     * Each preprocessor may close only the conditionals opened by its own input.
+     */
+    private readonly initialConditionalDepth: number;
+
     constructor(
         private readonly input: TokenStream,
         private readonly source: Source,
@@ -86,6 +92,8 @@ export class Preprocessor implements TokenStream {
         private readonly preprocessorConditionalBlocks: PreprocessorConditionalBlockCollection,
         private readonly logger: Logger
     ) {
+        this.initialConditionalDepth = context.conditionals.depth();
+
         this.handlers.set("#define", this.handleDefine.bind(this));
         this.handlers.set("#else", this.handleElse.bind(this));
         this.handlers.set("#endif", this.handleEndif.bind(this));
@@ -187,9 +195,10 @@ export class Preprocessor implements TokenStream {
             if (stream.eof()) {
 
                 if (stream === this.input) {
-                    while (!this.context.conditionals.isEmpty()) {
-                        this.problems.error(stream.current().location,"Missing #endif.");
+                    while (this.context.conditionals.depth() > this.initialConditionalDepth) {
+                        this.problems.error(stream.current().location, "Missing #endif.");
                         this.context.conditionals.leaveConditional();
+                        this.context.conditionalBlocks.leaveConditional();
                     }
                 }                
                 this.currentToken = stream.current();
@@ -378,7 +387,14 @@ export class Preprocessor implements TokenStream {
                     nameToken.location
                 );
 
-                // Rest der Zeile darf nur noch Kommentar/Newline sein.
+                // Ein Semikolon nach dem schliessenden Anfuehrungszeichen
+                // beendet die #define-Direktive und ist kein Teil des
+                // Ersetzungstextes.
+                if (!this.input.eof() && this.input.tokenText(this.input.current()) === ";") {
+                    this.input.next();
+                }
+
+                // Danach darf nur noch Kommentar/Newline folgen.
                 if (!this.input.eof()) {
 
                     const rest = this.input.current();
@@ -409,7 +425,7 @@ export class Preprocessor implements TokenStream {
 
         const directive = this.input.current();
 
-        if (this.context.conditionals.isEmpty()) {
+        if (this.context.conditionals.depth() <= this.initialConditionalDepth) {
 
             this.problems.error(
                 directive.location,
@@ -442,7 +458,7 @@ export class Preprocessor implements TokenStream {
 
         const directive = this.input.current();
 
-        if (this.context.conditionals.isEmpty()) {
+        if (this.context.conditionals.depth() <= this.initialConditionalDepth) {
 
             this.problems.error(
                 directive.location,

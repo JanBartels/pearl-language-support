@@ -61,7 +61,6 @@ const RESERVED_WORDS = new Set<string>([
   'FORBACK',
   'FORMAT',
   'FORWARD',
-  'FREE',
   'FROM',
   'GET',
   'GLOBAL',
