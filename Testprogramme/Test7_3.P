@@ -1,0 +1,11 @@
+SC=2E1;
+MODULE M;
+
+PROBLEM;
+
+TYPE Node FIXED;
+
+DCL a REF Node;
+DCL b REF Node;
+
+MODEND;

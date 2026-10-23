@@ -60,9 +60,7 @@ function appendDataObjectDocumentation(
     }
 
     if (symbol.global) {
-        result += symbol.global.moduleName
-            ? `\n\n**Global object:** module \`${symbol.global.moduleName.value}\``
-            : '\n\n**Global object**';
+        result += '\n\n**Global object**';
     }
 
     return result;

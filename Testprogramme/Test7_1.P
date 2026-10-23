@@ -1,0 +1,15 @@
+SC=2E1;
+MODULE M;
+PROBLEM;
+
+TYPE Node FIXED;
+
+DCL p REF Node;
+DCL q REF MissingType;
+
+Main: PROC;
+    CALL Compute;
+    GOTO Somewhere;
+END;
+
+MODEND;

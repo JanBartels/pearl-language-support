@@ -26,6 +26,9 @@ import { ConditionalStack } from '../preproc/conditionalStack';
 import { AstDumper } from '../ast/astDumper';
 
 import { SemanticAnalyzer } from '../semantic/semanticAnalyzer';
+import { SymbolReferenceCollector } from '../semantic/symbolReferenceCollector';
+import { SymbolReferenceResolver } from '../semantic/symbolReferenceResolver';
+import { SymbolOccurrenceIndex } from '../semantic/symbolOccurrenceIndex';
 import { CompilerControlAnalyzer } from '../semantic/compilerControlAnalyzer';
 import {
     SemanticDiagnostic,
@@ -92,8 +95,7 @@ export class Validator {
             this.documentRegistry,
             macroTable,
             new ConditionalStack(),
-            new PreprocessorConditionalBlockStack(),
-            preprocessorConditionalBlocks
+            new PreprocessorConditionalBlockStack()
         );
 
         const preprocessor = Preprocessor.create(
@@ -121,6 +123,12 @@ export class Validator {
         }
 
         // ----------------------------
+        // Syntaktische Symbolreferenzen (unabhaengig von der Semantik)
+        // ----------------------------
+
+        const symbolReferences = new SymbolReferenceCollector().collect(ast);
+
+        // ----------------------------
         // Semantik
         // ----------------------------
 
@@ -145,6 +153,18 @@ export class Validator {
         );
 
         // ----------------------------
+        // Symbolbindungen zu den syntaktischen Referenzen zuordnen
+        // ----------------------------
+
+        const symbolReferenceResolutions = new SymbolReferenceResolver().resolve(
+            symbolReferences, semanticContext
+        );
+
+        const symbolOccurrences = new SymbolOccurrenceIndex(
+            symbolReferenceResolutions, semanticContext
+        );
+
+        // ----------------------------
         // Analysis
         // ----------------------------
 
@@ -159,7 +179,10 @@ export class Validator {
             problems,
             macroReferences,
             preprocessorConditionalBlocks,
-            semanticContext
+            semanticContext,
+            symbolReferences,
+            symbolReferenceResolutions,
+            symbolOccurrences
         );
 
         return AnalysisResult.create(

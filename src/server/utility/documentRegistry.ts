@@ -205,6 +205,34 @@ export class DocumentRegistry {
       this.analysisResults.delete(uri);
   }
 
+  /**
+   * A file opened in the editor can also be a #include of a translation unit.
+   * Reuse that unit's semantic context when there is exactly one analyzed
+   * including root. With multiple roots the semantics may differ, so there
+   * is intentionally no arbitrary choice of parent.
+   */
+  getAnalysisResultForReferences(uri: string, version: number): AnalysisResult | undefined {
+    const visited = new Set<string>([uri]);
+    const parents = [uri];
+    const candidates = new Set<AnalysisResult>();
+
+    while (parents.length > 0) {
+      const current = parents.pop()!;
+      for (const parent of this.includedBy.get(current) ?? []) {
+        if (visited.has(parent)) continue;
+        visited.add(parent);
+        parents.push(parent);
+        const entry = this.analysisResults.get(parent);
+        if (entry) candidates.add(entry.result);
+      }
+    }
+
+    if (candidates.size === 1) return [...candidates][0];
+    if (candidates.size > 1) return undefined;
+    return this.getAnalysisResult(uri, version);
+  }
+
+
   stats(): { openDocuments: number; cachedIncludes: number } {
     return {
       openDocuments: this.documents.all().length,

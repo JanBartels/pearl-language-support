@@ -1936,8 +1936,7 @@ export class SemanticAnalyzer {
                 ? [...state.procedureSymbols.values()].find(symbol => symbol.name === indexed.name)
                 : undefined;
             const forwardDefinition = indexedProcedure &&
-                (localSpecification || (attribute.global?.moduleName === undefined
-                    && indexedProcedure.global !== undefined))
+                (localSpecification || indexedProcedure.global !== undefined)
                     ? indexedProcedure.name : undefined;
 
             if (previous || (indexed && !forwardDefinition)) {
@@ -2002,16 +2001,15 @@ export class SemanticAnalyzer {
             // For TASK, retain the same-module relation. An explicit GLOBAL
             // specification is paired only with a GLOBAL definition; a GLOBAL
             // SPC without a definition is external, as before.
+            let definition = identifier;
             if (indexed?.kind === SymbolKind.Task) {
                 const indexedTask = [...state.taskSymbols.values()]
                     .find(symbol => symbol.name === indexed.name);
-                if (indexedTask && (!attribute.global ||
-                    (attribute.global.moduleName === undefined && indexedTask.global !== undefined))) {
-                    state.linkLocalSpecification('TASK', identifier, indexed.name);
+                if (indexedTask && (!attribute.global || indexedTask.global !== undefined)) {
+                    definition = indexed.name;
+                    state.linkLocalSpecification('TASK', identifier, definition);
                 }
             }
-
-            const definition = indexed?.kind === SymbolKind.Task ? indexed.name : identifier;
             const symbol: TaskSymbol = {
                 kind: SymbolKind.Task,
                 name: identifier,
@@ -2360,7 +2358,7 @@ export class SemanticAnalyzer {
                 definition: systemDeclaration?.name ?? identifier,
                 type,
                 assignmentProtected: false,
-                global: systemDeclaration ? (global ?? { moduleName: undefined }) : global
+                global: systemDeclaration ? (global ?? { kind: 'global' }) : global
             };
 
             state.bind(identifier, symbol);
@@ -2429,9 +2427,7 @@ export class SemanticAnalyzer {
             return undefined;
         }
 
-        return {
-            moduleName: attribute.moduleName
-        };
+        return { kind: 'global' };
     }
 
     private analyzeTypeDeclaration(

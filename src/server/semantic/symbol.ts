@@ -34,8 +34,7 @@ export interface TypeSymbol extends SymbolBase {
 }
 
 export interface GlobalSymbolAttribute {
-
-    readonly moduleName: SourceValue<string> | undefined;
+    readonly kind: 'global';
 }
 
 export interface GlobalSymbolBase extends SymbolBase {

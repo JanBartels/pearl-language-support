@@ -47,6 +47,7 @@ import { Validator } from './validation/validator';
 import { mapDiagnostics } from './lsp/diagnosticMapper';
 import { mapLspLocation } from './lsp/lspLocationMapper';
 import { createHover } from './lsp/createHover';
+import { findReferences } from './lsp/findReferences';
 import { ConnectionLogger } from './utility/logging/connectionLogger';
 import { SemanticTokenService } from './semanticTokens/semanticTokenService';
 import { TokenLegend } from './semanticTokens/tokenLegend';
@@ -107,6 +108,7 @@ connection.onInitialize((params: InitializeParams) => {
       hoverProvider: true,
       definitionProvider: true,
       declarationProvider: true,
+      referencesProvider: true,
       foldingRangeProvider: true,
       semanticTokensProvider: {
         legend: tokenLegend.getLegend(),
@@ -276,6 +278,28 @@ connection.onDeclaration(params => {
     }
 
     return mapLspLocation(relation.specification.location, documentRegistry);
+});
+
+// ------------------------------
+// Find References (one translation unit; no external linker lookup)
+// ------------------------------
+
+connection.onReferences(params => {
+    const document = documentRegistry.get(params.textDocument.uri);
+    if (!document) return [];
+
+    const analysisResult = documentRegistry.getAnalysisResultForReferences(
+        params.textDocument.uri, document.version
+    );
+    if (!analysisResult) return [];
+
+    return findReferences(
+        analysisResult.rootAnalysis,
+        params.textDocument.uri,
+        params.position,
+        params.context.includeDeclaration,
+        documentRegistry
+    );
 });
 
 // ------------------------------

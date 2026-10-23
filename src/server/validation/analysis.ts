@@ -9,6 +9,9 @@ import { Severity } from "../core/severity";
 import { AstNode } from "../ast/astNode";
 import { PreprocessorConditionalBlockCollection } from "../preproc/preprocessorConditionalBlockCollection";
 import { SemanticContext } from "../semantic/semanticContext";
+import { SymbolReferenceIndex } from '../semantic/symbolReferenceIndex';
+import { SymbolReferenceResolutionIndex } from '../semantic/symbolReferenceResolutionIndex';
+import { SymbolOccurrenceIndex } from '../semantic/symbolOccurrenceIndex';
 
 export function collectBlockComments(tokens: readonly Token[]): readonly CommentToken[] {
     return tokens.filter(
@@ -34,7 +37,16 @@ export class Analysis {
 
         readonly preprocessorConditionalBlocks: PreprocessorConditionalBlockCollection,
 
-        readonly semanticContext?: SemanticContext
+        readonly semanticContext?: SemanticContext,
+
+        /** All syntactic symbol usages, including unresolved ones. */
+        readonly symbolReferences: SymbolReferenceIndex = new SymbolReferenceIndex(),
+
+        /** Semantic results of the syntactically recorded symbol references. */
+        readonly symbolReferenceResolutions: SymbolReferenceResolutionIndex = new SymbolReferenceResolutionIndex(),
+
+        /** Declaration and reference occurrences grouped by semantic identity. */
+        readonly symbolOccurrences: SymbolOccurrenceIndex = new SymbolOccurrenceIndex(symbolReferenceResolutions, semanticContext ?? new SemanticContext())
 
     ) {
     }
