@@ -4,7 +4,8 @@
 import { Analysis } from './analysis';
 import { ProblemCollection } from '../core/problemCollection';
 import { MacroReference } from '../preproc/macroReference';
-import { SourceOffset, containsSourceOffset } from '../core/sourceOffset';
+import { SourceOffset } from '../core/sourceOffset';
+import { AMBIGUOUS_MACRO_OCCURRENCE } from '../preproc/macroOccurrenceIndex';
 import { Severity } from '../core/severity';
 
 export class AnalysisResult {
@@ -71,14 +72,16 @@ readonly rootAnalysis: Analysis;
       .flatMap(f => f.tokens);
   }
 
+  /** Find a macro name at either its #define or a usage site. */
   lookupMacro(position: SourceOffset): MacroReference | undefined {
-    for (const reference of this.macroReferences) {
-        if (containsSourceOffset(reference.location, position)) {
-            return reference;
-        }
+    const match = this.rootAnalysis.macroOccurrences.lookupAt(position);
+    if (!match || match === AMBIGUOUS_MACRO_OCCURRENCE) return undefined;
+    if (!match.isDefinition) {
+      const reference = match.group.references.find(ref => ref.location === match.location);
+      if (reference) return reference;
     }
-
-    return undefined;
+    // Definition locations have no MacroReference in the original stream.
+    return { definition: match.group.definition, location: match.location };
   }
 
 }

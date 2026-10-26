@@ -59,6 +59,9 @@ export enum TokenKind {
   /** Trennzeichen für Präprozessor */
   PreprocessorOperator,
 
+  /** Opaque replacement text inside a double-quoted #define. */
+  PreprocessorText,
+
   /**
    * Ungültige Direktive nach '#', z. B. gemischte Groß-/Kleinschreibung
    * (#Define) oder eine andere ungültige Schreibweise.

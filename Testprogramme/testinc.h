@@ -15,6 +15,10 @@ der ganz lang ist,
 um den Collector der Hauptdatei
 zu verwirren */
 
+SPC ASSIGN ENTRY( DATION INOUTP90_ ALPHIC IDENT, CHAR(24)) GLOBAL;
+
+#define AusEinerAnderenWelt "'Ich bin ein Alien"
+
 #endif
 
 SPC GlobProcHuhu PROC GLOBAL;

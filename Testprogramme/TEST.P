@@ -47,7 +47,7 @@ SPC MYPROC ENTRY( () FIXED ) GLOBAL;
 #else
    #define INOUTP90 "INOUT"
 #endif   
-SPC ASSIGN ENTRY( DATION INOUTP90_ ALPHIC IDENT, CHAR(24)) GLOBAL;
+
 SPC Boeser_Unterstrich ENTRY GLOBAL;
 
 DCL TFU FIXED;
@@ -199,6 +199,7 @@ HuhuTask: TASK PRIO 23;
 DCL HuhuA FIXED;
 DCL Var FLOAT;
 
+HuhuA = LEN( AusEinerAnderenWelt );
 CALL ASSIGN(A1,'/TY');
 CALL Boeser_Unterstrich;
 END;

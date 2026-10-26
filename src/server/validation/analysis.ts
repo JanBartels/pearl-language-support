@@ -5,6 +5,8 @@ import { Source } from "../source/source";
 import { Token, CommentToken, CommentKind, isCommentToken } from "../lexer/";
 import { ProblemCollection } from "../core/problemCollection";
 import { MacroReference } from '../preproc/macroReference';
+import type { MacroDefinition } from '../preproc/macroDefinition';
+import { MacroOccurrenceIndex } from '../preproc/macroOccurrenceIndex';
 import { Severity } from "../core/severity";
 import { AstNode } from "../ast/astNode";
 import { PreprocessorConditionalBlockCollection } from "../preproc/preprocessorConditionalBlockCollection";
@@ -46,7 +48,13 @@ export class Analysis {
         readonly symbolReferenceResolutions: SymbolReferenceResolutionIndex = new SymbolReferenceResolutionIndex(),
 
         /** Declaration and reference occurrences grouped by semantic identity. */
-        readonly symbolOccurrences: SymbolOccurrenceIndex = new SymbolOccurrenceIndex(symbolReferenceResolutions, semanticContext ?? new SemanticContext())
+        readonly symbolOccurrences: SymbolOccurrenceIndex = new SymbolOccurrenceIndex(symbolReferenceResolutions, semanticContext ?? new SemanticContext()),
+
+        /** Macro definitions gathered by the preprocessor, even if unused. */
+        readonly macroDefinitions: readonly MacroDefinition[] = [],
+
+        /** Macro occurrence groups, independent of semantic PEARL symbols. */
+        readonly macroOccurrences: MacroOccurrenceIndex = new MacroOccurrenceIndex(macroDefinitions, macroReferences)
 
     ) {
     }

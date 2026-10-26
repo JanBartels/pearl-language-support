@@ -76,6 +76,11 @@ export class Lexer {
 
   private readonly stream: CharStream;
 
+  // Only the lexer knows the lexical boundaries of a #define replacement.
+  // Its double-quoted text is opaque until the preprocessor expands it.
+  private inDefineDirective = false;
+  private inDefineReplacement = false;
+
   constructor(
     source: Source,
     private readonly problems: ProblemCollection,
@@ -166,9 +171,27 @@ export class Lexer {
       return this.createZeroLengthToken(TokenKind.EOF);
     }
 
-    // Newline
+    // A #define replacement is one raw lexical region, not PEARL code.
+    // In particular, unmatched apostrophes in a replacement must not swallow
+    // the closing double quote or subsequent preprocessor directives.
     if (ch === 10 /* \n */ || ch === 13 /* \r */) {
+      this.inDefineDirective = false;
+      this.inDefineReplacement = false;
       return this.lexNewline();
+    }
+
+    if (this.inDefineReplacement) {
+      if (ch === 34 /* " */) {
+        this.inDefineReplacement = false;
+        return this.lexOperator();
+      }
+      return this.lexDefineReplacementText();
+    }
+
+    if (this.inDefineDirective && ch === 34 /* " */) {
+      this.inDefineDirective = false;
+      this.inDefineReplacement = true;
+      return this.lexOperator();
     }
 
     // Whitespace (space + tab)
@@ -608,6 +631,19 @@ export class Lexer {
       return this.createTokenFromSpan(TokenKind.StringLiteral, start);
   }
 
+  /** Return opaque #define replacement text until a quote or line ending. */
+  private lexDefineReplacementText(): Token {
+    const start = this.stream.mark();
+    while (true) {
+      const ch = this.stream.peek();
+      if (ch === -1 || ch === 34 /* " */ || ch === 10 || ch === 13) {
+        break;
+      }
+      this.stream.next();
+    }
+    return this.createTokenFromSpan(TokenKind.PreprocessorText, start);
+  }
+
   private lexPreprocessorDirective(): Token {
 
     const start = this.stream.mark();
@@ -656,6 +692,10 @@ export class Lexer {
       );
     }
 
+    const directive = this.stream.getText({ start, end: this.stream.offset });
+    if (directive === '#define') {
+      this.inDefineDirective = true;
+    }
     return this.createTokenFromSpan(
       TokenKind.PreprocessorDirective,
       start

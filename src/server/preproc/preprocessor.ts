@@ -311,6 +311,8 @@ export class Preprocessor implements TokenStream {
     
     private handleDefine(): void {
 
+        const directiveLocation = this.input.current().location;
+
         // "#define" konsumieren
         this.input.next();
 
@@ -336,13 +338,13 @@ export class Preprocessor implements TokenStream {
         // Makro ohne Ersetzungstext?
         if (this.input.eof() || this.input.current().kind == TokenKind.Newline) {
 
-            this.defineMacro(name,null,nameToken.location);
+            this.defineMacro(name,null,nameToken.location,directiveLocation);
             return;
         }
 
         // Kommentar direkt nach dem Makronamen?
         if (this.input.current().kind == TokenKind.Comment) {
-            this.defineMacro(name,null,nameToken.location);
+            this.defineMacro(name,null,nameToken.location,directiveLocation);
             this.skipToNextLine();
             return;
         }
@@ -369,6 +371,12 @@ export class Preprocessor implements TokenStream {
         while (!this.input.eof()) {
 
             const token = this.input.current();
+            // A replacement may not extend to the next physical line.
+            // Preserve the next line for its own directive or source tokens.
+            if (token.kind === TokenKind.Newline) {
+                this.problems.error(start.location, "Unterminated macro replacement text.");
+                return;
+            }
             const text = this.input.tokenText(token);
 
             if (text === "\"") {
@@ -384,7 +392,8 @@ export class Preprocessor implements TokenStream {
                 this.defineMacro(
                     name,
                     replacement,
-                    nameToken.location
+                    nameToken.location,
+                    directiveLocation
                 );
 
                 // Ein Semikolon nach dem schliessenden Anfuehrungszeichen
@@ -780,10 +789,16 @@ export class Preprocessor implements TokenStream {
     private defineMacro(
         name: string,
         replacement: string | null,
-        location: Location
+        location: Location,
+        directiveLocation: Location
     ): void {
 
-        if (this.context.macroTable.define(name, replacement, location)) {
+        const redefined = this.context.macroTable.define(name, replacement, location, directiveLocation);
+        const definition = this.context.macroTable.get(name);
+        if (definition) {
+            this.context.macroDefinitions.push(definition);
+        }
+        if (redefined) {
             this.problems.warning(location, `Macro '${name}' redefined.`);
         }
     }

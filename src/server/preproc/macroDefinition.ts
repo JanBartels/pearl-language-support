@@ -10,4 +10,7 @@ export interface MacroDefinition {
     readonly replacement: string | null;
 
     readonly location?: Location;
+
+    /** The #define keyword, if introduced in source (not through settings). */
+    readonly directiveLocation?: Location;
 }

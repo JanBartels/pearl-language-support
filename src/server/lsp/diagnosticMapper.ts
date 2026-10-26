@@ -7,6 +7,8 @@ import {
 } from 'vscode-languageserver/node';
 
 import { Problem } from '../core/problem';
+import { mapToOriginalLocation } from '../core/sourceOffset';
+import type { Location } from '../core/location';
 import { ProblemCollection } from '../core/problemCollection';
 import { Severity } from '../core/severity';
 import { DocumentRegistry } from '../utility/documentRegistry';
@@ -21,7 +23,11 @@ export function mapDiagnostics(
 
   for (const problem of problems.toArray()) {
 
-    const uri = problem.location.source.uri;
+    // Lexer, preprocessor and parser diagnostics can originate from a
+    // MacroSource. Resolve the complete source chain before using offsets
+    // together with the editor document URI.
+    const location = mapToOriginalLocation(problem.location);
+    const uri = location.source.uri;
     const document = registry.get(uri);
     if (!document) {
         // interner Fehler
@@ -36,7 +42,7 @@ export function mapDiagnostics(
     }
 
     diagnostics.push(
-      mapDiagnostic(problem, document)
+      mapDiagnostic(problem, location, document)
     );
   }
 
@@ -45,10 +51,11 @@ export function mapDiagnostics(
 
 function mapDiagnostic(
   problem: Problem,
+  location: Location,
   document: TextDocument
 ): Diagnostic {
 
-  const span = problem.location.span;
+  const span = location.span;
 
   const start = document.positionAt(span.start);
   const end = document.positionAt(span.end);

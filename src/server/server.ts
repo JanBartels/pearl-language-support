@@ -48,6 +48,7 @@ import { mapDiagnostics } from './lsp/diagnosticMapper';
 import { mapLspLocation } from './lsp/lspLocationMapper';
 import { createHover } from './lsp/createHover';
 import { findReferences } from './lsp/findReferences';
+import { findMacroReferences } from './lsp/findMacroReferences';
 import { ConnectionLogger } from './utility/logging/connectionLogger';
 import { SemanticTokenService } from './semanticTokens/semanticTokenService';
 import { TokenLegend } from './semanticTokens/tokenLegend';
@@ -58,7 +59,8 @@ import { MacroDocumentationProvider } from './documentation/macroDocumentationPr
 import { CompilerOptionDocumentationProvider } from './documentation/compilerOptionDocumentProvider';
 import { PreprocessorConditionalBlockDocumentationProvider } from './documentation/preprocessorConditionalBlockDocumentationProvider';
 import { AstLookupResultDocumentationProvider } from './documentation/astLookupResultDocumentationProvider';
-import { lookupSymbolDefinition } from './semantic/bindingIndex';
+import { lookupSymbolDefinition, lookupBoundSymbol } from './semantic/bindingIndex';
+import { appendIncludeOriginDocumentation } from './documentation/includeOriginDocumentation';
 import { lookupLocalSpecificationRelation } from './semantic/localSpecificationRelation';
 import { FoldingRegionCollection } from './folding/foldingRegionCollection';
 import { mapFoldingRegion } from './lsp/foldingMapper';
@@ -171,7 +173,13 @@ connection.onHover(params => {
     //
     const macro = analysisResult.lookupMacro(position);
     if (macro) {
-        return createHover( MacroDocumentationProvider.getDocumentation(macro) );
+        const markdown = MacroDocumentationProvider.getDocumentation(macro);
+        return createHover(appendIncludeOriginDocumentation(
+            markdown,
+            macro.definition.location,
+            position.uri,
+            analysisResult.rootAnalysis.source.uri
+        ));
     }
 
     //
@@ -185,7 +193,14 @@ connection.onHover(params => {
             analysisResult.rootAnalysis.semanticContext
         );
         if (markdown) {
-            return createHover(markdown);
+            const symbol = analysisResult.rootAnalysis.semanticContext
+                && lookupBoundSymbol(analysisResult.rootAnalysis.semanticContext.bindings, result.element);
+            return createHover(appendIncludeOriginDocumentation(
+                markdown,
+                (symbol?.definition ?? symbol?.name)?.location,
+                position.uri,
+                analysisResult.rootAnalysis.source.uri
+            ));
         }
     }
 });
@@ -301,6 +316,16 @@ connection.onReferences(params => {
         params.textDocument.uri, document.version
     );
     if (!analysisResult) return [];
+
+    // Preprocessor symbols take precedence over expanded AST occurrences.
+    const macros = findMacroReferences(
+        analysisResult.rootAnalysis.macroOccurrences,
+        params.textDocument.uri,
+        params.position,
+        params.context.includeDeclaration,
+        documentRegistry
+    );
+    if (macros !== undefined) return macros;
 
     return findReferences(
         analysisResult.rootAnalysis,

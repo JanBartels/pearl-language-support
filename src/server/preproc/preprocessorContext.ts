@@ -5,8 +5,14 @@ import { DocumentRegistry } from '../utility/documentRegistry';
 import { MacroTable } from './macroTable';
 import { ConditionalStack } from './conditionalStack';
 import { PreprocessorConditionalBlockStack } from './preprocessorConditionalBlockStack';
+import type { MacroDefinition } from './macroDefinition';
 
 export class PreprocessorContext {
+
+  /** Definitions seen during this preprocessing run, including redefinitions
+   * and definitions that are subsequently removed by #undef. The identity of
+   * each entry is shared with MacroReference.definition. */
+  readonly macroDefinitions: MacroDefinition[] = [];
 
   constructor(
 

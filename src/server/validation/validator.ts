@@ -182,7 +182,8 @@ export class Validator {
             semanticContext,
             symbolReferences,
             symbolReferenceResolutions,
-            symbolOccurrences
+            symbolOccurrences,
+            context.macroDefinitions
         );
 
         return AnalysisResult.create(
