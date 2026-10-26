@@ -34,6 +34,8 @@ node_modules/**
 package-lock.json
 pnpm-lock.yaml
 yarn.lock
+Roadmap.md
+release.sh
 
 # -----------------------------
 # internal Documentation
@@ -46,3 +48,4 @@ manuals/**
 coverage/**
 *.log
 .DS_Store
+
