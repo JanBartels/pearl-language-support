@@ -6,6 +6,7 @@ import { DocumentationProvider } from '../../../documentation/documentationProvi
 import {
     SpcBoltAttributeDocumentationProvider
 } from '../../../documentation/problem/specifications/spcBoltAttributeDocumentationProvider';
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from '../../astKind';
 import { AstLookupResult } from '../../astLookupResult';
 import { AstNode } from '../../astNode';
@@ -28,8 +29,8 @@ export class SpcBoltAttributeNode extends AstNode {
         return SpcBoltAttributeNode.provider;
     }
 
-    override lookupSourceValue(offset: number): AstLookupResult | undefined {
-        return this.lookupOwnSourceValue(offset, this.keyword) ?? this.global?.lookupSourceValue(offset);
+    override lookupSourceValue(position: SourceOffset): AstLookupResult | undefined {
+        return this.lookupOwnSourceValue(position, this.keyword) ?? this.global?.lookupSourceValue(position);
     }
 
     override dumpLabel(): string {

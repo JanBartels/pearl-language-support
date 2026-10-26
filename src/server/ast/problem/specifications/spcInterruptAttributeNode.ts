@@ -6,6 +6,7 @@ import { DocumentationProvider } from '../../../documentation/documentationProvi
 import {
     SpcInterruptAttributeDocumentationProvider
 } from '../../../documentation/problem/specifications/spcInterruptAttributeDocumentationProvider';
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from '../../astKind';
 import { AstLookupResult } from '../../astLookupResult';
 import { AstNode } from '../../astNode';
@@ -29,8 +30,8 @@ export class SpcInterruptAttributeNode extends AstNode {
         return SpcInterruptAttributeNode.provider;
     }
 
-    override lookupSourceValue(offset: number): AstLookupResult | undefined {
-        return this.lookupOwnSourceValue(offset, this.keyword) ?? this.global?.lookupSourceValue(offset);
+    override lookupSourceValue(position: SourceOffset): AstLookupResult | undefined {
+        return this.lookupOwnSourceValue(position, this.keyword) ?? this.global?.lookupSourceValue(position);
     }
 
     override dumpLabel(): string {

@@ -65,6 +65,7 @@ import { mapFoldingRegion } from './lsp/foldingMapper';
 import { CommentFoldingCollector } from './lexer/commentFoldingCollector';
 import { PreprocessorFoldingCollector } from './preproc/preprocessorFoldingCollector';
 import { AstFoldingCollector } from './ast/astFoldingCollector';
+import { SourceOffset } from './core/sourceOffset';
 
 const connection = createConnection(ProposedFeatures.all);
 
@@ -135,17 +136,20 @@ connection.onHover(params => {
         return undefined;
     }
 
-    const analysisResult = documentRegistry.getAnalysisResult(params.textDocument.uri, document.version );
+    const analysisResult = documentRegistry.getAnalysisResultForSource(params.textDocument.uri, document.version);
     if (!analysisResult) {
       return undefined;
     }
 
-    const offset = document.offsetAt(params.position);
+    const position: SourceOffset = {
+        uri: params.textDocument.uri,
+        offset: document.offsetAt(params.position)
+    };
 
     //
     // Compiler-Options
     //
-    const option = CompilerOptionLookup.lookup(analysisResult.rootAnalysis.blockComments, offset);
+    const option = CompilerOptionLookup.lookupAt(analysisResult.rootAnalysis.blockComments, position);
     if (option) {
         return createHover( CompilerOptionDocumentationProvider.getDocumentation(option) );
     }
@@ -155,9 +159,8 @@ connection.onHover(params => {
     //
     const conditional =
         PreprocessorConditionalBlockLookup.lookup(
-            analysisResult.rootAnalysis.source,
             analysisResult.rootAnalysis.preprocessorConditionalBlocks,
-            offset
+            position
         );
     if (conditional) {
         return createHover( PreprocessorConditionalBlockDocumentationProvider.getDocumentation(conditional) );
@@ -166,7 +169,7 @@ connection.onHover(params => {
     //
     // Macro hover
     //
-    const macro = analysisResult.lookupMacro(offset);
+    const macro = analysisResult.lookupMacro(position);
     if (macro) {
         return createHover( MacroDocumentationProvider.getDocumentation(macro) );
     }
@@ -174,7 +177,7 @@ connection.onHover(params => {
     //
     // AST hover
     //
-    const result = analysisResult.rootAnalysis.ast.lookupSourceValue(offset);
+    const result = analysisResult.rootAnalysis.ast.lookupSourceValue(position);
     if (result) {
 
         const markdown = AstLookupResultDocumentationProvider.getDocumentation(
@@ -200,17 +203,20 @@ connection.onDefinition(params => {
     }
 
     const analysisResult =
-        documentRegistry.getAnalysisResult(params.textDocument.uri, document.version );
+        documentRegistry.getAnalysisResultForSource(params.textDocument.uri, document.version);
     if (!analysisResult) {
         return undefined;
     }
 
-    const offset = document.offsetAt(params.position);
+    const position: SourceOffset = {
+        uri: params.textDocument.uri,
+        offset: document.offsetAt(params.position)
+    };
 
     //
     // Macro definitions
     //
-    const macro = analysisResult.lookupMacro(offset);
+    const macro = analysisResult.lookupMacro(position);
     if (macro?.definition.location) {
         return mapLspLocation(
             macro.definition.location,
@@ -221,7 +227,7 @@ connection.onDefinition(params => {
     //
     // AST / semantic definitions
     //
-    const lookup = analysisResult.rootAnalysis.ast.lookupSourceValue(offset);
+    const lookup = analysisResult.rootAnalysis.ast.lookupSourceValue(position);
     const semanticContext = analysisResult.rootAnalysis.semanticContext;
 
     if (!lookup || !semanticContext) {
@@ -254,7 +260,7 @@ connection.onDeclaration(params => {
         return undefined;
     }
 
-    const analysisResult = documentRegistry.getAnalysisResult(
+    const analysisResult = documentRegistry.getAnalysisResultForSource(
         params.textDocument.uri,
         document.version
     );
@@ -262,8 +268,11 @@ connection.onDeclaration(params => {
         return undefined;
     }
 
-    const offset = document.offsetAt(params.position);
-    const lookup = analysisResult.rootAnalysis.ast.lookupSourceValue(offset);
+    const position: SourceOffset = {
+        uri: params.textDocument.uri,
+        offset: document.offsetAt(params.position)
+    };
+    const lookup = analysisResult.rootAnalysis.ast.lookupSourceValue(position);
     const semanticContext = analysisResult.rootAnalysis.semanticContext;
     if (!lookup || !semanticContext) {
         return undefined;
@@ -288,7 +297,7 @@ connection.onReferences(params => {
     const document = documentRegistry.get(params.textDocument.uri);
     if (!document) return [];
 
-    const analysisResult = documentRegistry.getAnalysisResultForReferences(
+    const analysisResult = documentRegistry.getAnalysisResultForSource(
         params.textDocument.uri, document.version
     );
     if (!analysisResult) return [];
@@ -314,7 +323,7 @@ connection.onFoldingRanges((params) => {
     }
 
     const analysisResult =
-        documentRegistry.getAnalysisResult(params.textDocument.uri, document.version );
+        documentRegistry.getAnalysisResultForSource(params.textDocument.uri, document.version);
     if (!analysisResult) {
         return [];
     }

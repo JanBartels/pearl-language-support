@@ -94,7 +94,8 @@ export interface DationType {
 
     readonly kind: SemanticTypeKind.Dation;
 
-    readonly direction: DationDirection;
+    /** Undefined means no direction restriction (e.g. ENTRY(DATION ALPHIC IDENT)). */
+    readonly direction: DationDirection | undefined;
 
     readonly dationClass: DationClass;
 }

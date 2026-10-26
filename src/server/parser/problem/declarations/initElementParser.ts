@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import type { SourceValue } from '../../../core/sourceValue';
+import type { Token } from '../../../lexer/token';
 
 import { ParserBase } from '../../parserBase';
 
@@ -67,9 +68,21 @@ export class InitElementParser extends ParserBase {
         const characterString = this.acceptStringLiteral();
 
         if (characterString) {
+            // Makroexpansionen koennen eine einzige PEARL-Zeichenkettenkonstante
+            // in mehrere benachbarte StringLiteral-Tokens aufteilen. Ihre
+            // einzelnen Quelltextstellen bleiben als SourceValues erhalten.
+            const literals: SourceValue<string>[] = [this.tokenValue(characterString)];
+            let previous: Token = characterString;
+
+            while (this.isStringLiteral() && this.areAdjacentStringTokens(previous, this.current())) {
+                const current = this.acceptStringLiteral()!;
+                literals.push(this.tokenValue(current));
+                previous = current;
+            }
+
             return new InitElementNode({
                 kind: 'characterString',
-                literal: this.tokenValue(characterString)
+                literals
             });
         }
 
@@ -133,6 +146,28 @@ export class InitElementParser extends ParserBase {
         }
 
         return undefined;
+    }
+
+    /**
+     * Adjacent source fragments may belong to one literal after macro expansion.
+     * Whitespace-separated literals are deliberately not merged: PEARL does not
+     * have an implicit string-concatenation operator for separate expressions.
+     */
+    private areAdjacentStringTokens(left: Token, right: Token): boolean {
+        const leftLocation = left.location;
+        const rightLocation = right.location;
+
+        if (leftLocation.source === rightLocation.source) {
+            return leftLocation.span.end === rightLocation.span.start;
+        }
+
+        // Expansions live in their own Source. Only compare their editor
+        // origins here; do not replace the actual SourceValues in the AST.
+        const leftOrigin = leftLocation.source.mapLocation(leftLocation);
+        const rightOrigin = rightLocation.source.mapLocation(rightLocation);
+
+        return leftOrigin.source === rightOrigin.source
+            && leftOrigin.span.end === rightOrigin.span.start;
     }
 
     private parseSignedElement(

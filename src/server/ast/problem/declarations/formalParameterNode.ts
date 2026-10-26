@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { SourceValue } from '../../../core/sourceValue';
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from '../../astKind';
 import { AstLookupResult } from '../../astLookupResult';
 import { AstNode } from '../../astNode';
@@ -34,16 +35,16 @@ export class FormalParameterNode extends AstNode {
         return FormalParameterNode.provider;
     }
 
-    override lookupSourceValue(offset: number): AstLookupResult | undefined {
+    override lookupSourceValue(position: SourceOffset): AstLookupResult | undefined {
         // Bind parameter names to this node, not to the generic identifier-list provider.
         for (const name of this.identifiers.identifiers) {
-            const result = this.lookupOwnSourceValue(offset, name);
+            const result = this.lookupOwnSourceValue(position, name);
             if (result) return result;
         }
-        return this.type.lookupSourceValue(offset)
-            ?? this.dimension?.lookupSourceValue(offset)
-            ?? this.lookupOwnSourceValue(offset, this.invKeyword)
-            ?? this.lookupOwnSourceValue(offset, this.identKeyword);
+        return this.type.lookupSourceValue(position)
+            ?? this.dimension?.lookupSourceValue(position)
+            ?? this.lookupOwnSourceValue(position, this.invKeyword)
+            ?? this.lookupOwnSourceValue(position, this.identKeyword);
     }
 
     override getChildren(): readonly AstNode[] {

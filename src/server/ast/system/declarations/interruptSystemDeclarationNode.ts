@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from '../../astKind';
 import { SourceValue } from '../../../core/sourceValue';
 import { AstLookupResult } from '../../astLookupResult';
@@ -28,20 +29,20 @@ export class InterruptSystemDeclarationNode extends SystemDeclarationNode {
     }
 
     override lookupSourceValue(
-        offset: number
+        position: SourceOffset
     ): AstLookupResult | undefined {
 
-        let result = this.lookupOwnSourceValue(offset, this.keyword);
+        let result = this.lookupOwnSourceValue(position, this.keyword);
         if (result) {
             return result;
         }
 
-        result = this.lookupOwnSourceValue(offset, this.name);
+        result = this.lookupOwnSourceValue(position, this.name);
         if (result) {
             return result;
         }
 
-        result = this.lookupOwnSourceValue(offset, this.mask);
+        result = this.lookupOwnSourceValue(position, this.mask);
         if (result) {
             return result;
         }

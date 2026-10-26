@@ -3,6 +3,7 @@
 
 import { SourceValue } from "../../../core/sourceValue";
 
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from "../../astKind";
 import { AstLookupResult } from "../../astLookupResult";
 import { AstNode } from "../../astNode";
@@ -34,13 +35,13 @@ export class DclDeclarationNode extends AstNode {
     }
 
     override lookupSourceValue(
-        offset: number
+        position: SourceOffset
     ): AstLookupResult | undefined {
 
         for (const declaration of this.declarations) {
 
             const result =
-                declaration.lookupSourceValue(offset);
+                declaration.lookupSourceValue(position);
 
             if (result) {
                 return result;
@@ -48,7 +49,7 @@ export class DclDeclarationNode extends AstNode {
         }
 
         return this.lookupOwnSourceValue(
-            offset,
+            position,
             this.keyword
         );
     }

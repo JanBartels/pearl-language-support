@@ -4,6 +4,7 @@
 import { SourceValue } from "../../../core/sourceValue";
 import { AstNode } from "../../astNode";
 import type { CaseStatementNode } from "./caseStatementNode";
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from "../../astKind";
 import { AstLookupResult } from "../../astLookupResult";
 import { DocumentationProvider } from "../../../documentation/documentationProvider";
@@ -43,15 +44,15 @@ export class CaseAlternativeNode extends AstNode {
         return this.body;
     }
 
-    override lookupSourceValue(offset: number): AstLookupResult | undefined {
+    override lookupSourceValue(position: SourceOffset): AstLookupResult | undefined {
         for (const child of this.body) {
-            const result = child.lookupSourceValue(offset);
+            const result = child.lookupSourceValue(position);
             if (result) {
                 return result;
             }
         }
         for (const token of [this.altKeyword, ...(this.caseListTokens ?? [])]) {
-            const result = this.lookupOwnSourceValue(offset, token);
+            const result = this.lookupOwnSourceValue(position, token);
             if (result) {
                 return result;
             }

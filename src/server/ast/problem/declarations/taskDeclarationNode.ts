@@ -4,6 +4,7 @@
 import { Source } from "../../../source/source";
 import { SourceValue } from "../../../core/sourceValue";
 
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from "../../astKind";
 import { AstLookupResult } from "../../astLookupResult";
 import { AstNode } from "../../astNode";
@@ -55,32 +56,32 @@ export class TaskDeclarationNode extends AstNode {
     }
 
     override lookupSourceValue(
-        offset: number
+        position: SourceOffset
     ): AstLookupResult | undefined {
 
-        const priority = this.priority?.lookupSourceValue(offset);
+        const priority = this.priority?.lookupSourceValue(position);
         if (priority) {
             return priority;
         }
 
-        const global = this.global?.lookupSourceValue(offset);
+        const global = this.global?.lookupSourceValue(position);
         if (global) {
             return global;
         }
 
         for (const child of this.body) {
-            const result = child.lookupSourceValue(offset);
+            const result = child.lookupSourceValue(position);
             if (result) {
                 return result;
             }
         }
 
-        return this.lookupOwnSourceValue(offset, this.name)
-            ?? this.lookupOwnSourceValue(offset, this.taskKeyword)
-            ?? this.lookupOwnSourceValue(offset, this.priorityKeyword)
-            ?? this.lookupOwnSourceValue(offset, this.residentKeyword)
-            ?? this.lookupOwnSourceValue(offset, this.mainKeyword)
-            ?? this.lookupOwnSourceValue(offset, this.endKeyword);
+        return this.lookupOwnSourceValue(position, this.name)
+            ?? this.lookupOwnSourceValue(position, this.taskKeyword)
+            ?? this.lookupOwnSourceValue(position, this.priorityKeyword)
+            ?? this.lookupOwnSourceValue(position, this.residentKeyword)
+            ?? this.lookupOwnSourceValue(position, this.mainKeyword)
+            ?? this.lookupOwnSourceValue(position, this.endKeyword);
     }
 
     override addFoldingRegionsTo(

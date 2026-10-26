@@ -4,6 +4,7 @@
 import { SourceValue } from "../../../core/sourceValue";
 import { Source } from "../../../source/source";
 import { AstNode } from "../../astNode";
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from "../../astKind";
 import { AstLookupResult } from "../../astLookupResult";
 import { DocumentationProvider } from "../../../documentation/documentationProvider";
@@ -41,9 +42,9 @@ export class IfStatementNode extends AstNode {
         return [...this.thenBody, ...this.elseBody];
     }
 
-    override lookupSourceValue(offset: number): AstLookupResult | undefined {
+    override lookupSourceValue(position: SourceOffset): AstLookupResult | undefined {
         for (const child of this.getChildren()) {
-            const result = child.lookupSourceValue(offset);
+            const result = child.lookupSourceValue(position);
             if (result) {
                 return result;
             }
@@ -52,7 +53,7 @@ export class IfStatementNode extends AstNode {
         const values = [this.ifKeyword, ...this.conditionTokens, this.thenKeyword,
             this.elseKeyword, this.finKeyword];
         for (const value of values) {
-            const result = this.lookupOwnSourceValue(offset, value);
+            const result = this.lookupOwnSourceValue(position, value);
             if (result) {
                 return result;
             }

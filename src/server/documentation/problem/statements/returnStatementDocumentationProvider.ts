@@ -13,10 +13,10 @@ export class ReturnStatementDocumentationProvider extends DocumentationProvider<
         let parent = node.parent;
         while (parent && !(parent instanceof ProcedureDeclarationNode)) parent = parent.parent;
         const procedure = parent as ProcedureDeclarationNode | undefined;
+        const owner = procedure ? md`Belongs to procedure \`${procedure.name.value}\`.` : '';
         return md`# RETURN
 
-${node.expression ? 'Returns a value.' : 'Returns from the procedure.'}
-${procedure ? `
-Belongs to procedure \`${procedure.name.value}\`.` : ''}`;
+${node.expression ? 'Returns a value.' : 'Returns from the procedure.'}`
+            + (owner ? `\n\n${owner}` : '');
     }
 }

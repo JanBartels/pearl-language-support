@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from '../../astKind';
 import { AstLookupResult } from '../../astLookupResult';
 import { AstNode } from '../../astNode';
@@ -29,10 +30,10 @@ export class SpcDeclarationSentenceNode extends AstNode {
         return undefined;
     }
 
-    override lookupSourceValue(offset: number): AstLookupResult | undefined {
-        return this.identifiers.lookupSourceValue(offset)
-            ?? this.virtualDimensions?.lookupSourceValue(offset)
-            ?? this.attribute?.lookupSourceValue(offset);
+    override lookupSourceValue(position: SourceOffset): AstLookupResult | undefined {
+        return this.identifiers.lookupSourceValue(position)
+            ?? this.virtualDimensions?.lookupSourceValue(position)
+            ?? this.attribute?.lookupSourceValue(position);
     }
 
     override dumpLabel(): string {

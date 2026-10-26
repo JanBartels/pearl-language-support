@@ -3,6 +3,7 @@
 
 import { SourceValue } from "../../../core/sourceValue";
 
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from "../../astKind";
 import { AstLookupResult } from "../../astLookupResult";
 import { AstNode } from "../../astNode";
@@ -35,11 +36,11 @@ export class OneIdentifierOrListNode extends AstNode {
     }
 
     override lookupSourceValue(
-        offset: number
+        position: SourceOffset
     ): AstLookupResult | undefined {
 
         for (const identifier of this.identifiers) {
-            const result = this.lookupOwnSourceValue(offset, identifier);
+            const result = this.lookupOwnSourceValue(position, identifier);
             if (result) {
                 return result;
             }

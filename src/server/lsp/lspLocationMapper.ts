@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { Location } from '../core/location';
+import { mapToOriginalLocation } from '../core/sourceOffset';
 import { DocumentRegistry } from '../utility/documentRegistry';
 import { Location as LspLocation } from 'vscode-languageserver';
 
@@ -22,22 +23,3 @@ export function mapLspLocation(location: Location, registry: DocumentRegistry): 
     };
 }
 
-function mapToOriginalLocation(location: Location): Location {
-    let current = location;
-
-    for (;;) {
-        const mapped = current.source.mapLocation(current);
-
-        if (sameLocation(mapped, current)) {
-            return current;
-        }
-
-        current = mapped;
-    }
-}
-
-function sameLocation(left: Location, right: Location): boolean {
-    return left.source === right.source
-        && left.span.start === right.span.start
-        && left.span.end === right.span.end;
-}

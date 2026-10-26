@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from '../../astKind';
 import { SourceValue } from '../../../core/sourceValue';
 import { AstLookupResult } from '../../astLookupResult';
@@ -35,40 +36,40 @@ export class AlphicDationSystemDeclarationNode extends SystemDeclarationNode {
     }
 
     override lookupSourceValue(
-        offset: number
+        position: SourceOffset
     ): AstLookupResult | undefined {
 
-        let result = this.lookupOwnSourceValue(offset, this.name);
+        let result = this.lookupOwnSourceValue(position, this.name);
         if (result) {
             return result;
         }
 
-        result = this.lookupOwnSourceValue(offset, this.systemName);
+        result = this.lookupOwnSourceValue(position, this.systemName);
         if (result) {
             return result;
         }
 
-        result = this.lookupOwnSourceValue(offset, this.direction);
+        result = this.lookupOwnSourceValue(position, this.direction);
         if (result) {
             return result;
         }
 
-        result = this.lookupOwnSourceValue(offset, this.tfu);
+        result = this.lookupOwnSourceValue(position, this.tfu);
         if (result) {
             return result;
         }
 
-        result = this.lookupOwnSourceValue(offset, this.neFlag);
+        result = this.lookupOwnSourceValue(position, this.neFlag);
         if (result) {
             return result;
         }
 
-        result = this.lookupOwnSourceValue(offset, this.mb);
+        result = this.lookupOwnSourceValue(position, this.mb);
         if (result) {
             return result;
         }
 
-        result = this.lookupOwnSourceValue(offset, this.ai);
+        result = this.lookupOwnSourceValue(position, this.ai);
         if (result) {
             return result;
         }

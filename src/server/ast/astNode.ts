@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
+import { SourceOffset } from '../core/sourceOffset';
 import { AstKind } from './astKind';
 import { AstLookupResult } from './astLookupResult';
 import { Source } from "../source/source";
@@ -28,21 +29,21 @@ export abstract class AstNode {
     }
 
     /**
-     * Looks up the syntactic language element at the specified source offset.
+     * Looks up the syntactic language element at the specified source position.
      *
      * Returns the AST node together with the matching SourceValue,
-     * or undefined if this subtree does not cover the offset.
+     * or undefined if this subtree does not cover the position.
      */
     abstract lookupSourceValue(
-        offset: number
+        position: SourceOffset
     ): AstLookupResult | undefined;
 
     protected lookupOwnSourceValue(
-        offset: number,
+        position: SourceOffset,
         sourceValue: SourceValue<unknown> | undefined
     ): AstLookupResult | undefined {
 
-        if (!sourceValue?.contains(offset)) {
+        if (!sourceValue?.contains(position)) {
             return undefined;
         }
 

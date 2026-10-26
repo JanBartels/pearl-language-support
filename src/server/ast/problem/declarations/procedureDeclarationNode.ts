@@ -3,6 +3,7 @@
 
 import { Source } from '../../../source/source';
 import { SourceValue } from '../../../core/sourceValue';
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from '../../astKind';
 import { AstLookupResult } from '../../astLookupResult';
 import { AstNode } from '../../astNode';
@@ -43,19 +44,19 @@ export class ProcedureDeclarationNode extends AstNode {
         return ProcedureDeclarationNode.provider;
     }
 
-    override lookupSourceValue(offset: number): AstLookupResult | undefined {
+    override lookupSourceValue(position: SourceOffset): AstLookupResult | undefined {
         for (const child of this.getChildren()) {
-            const found = child.lookupSourceValue(offset);
+            const found = child.lookupSourceValue(position);
             if (found) return found;
         }
-        return this.lookupOwnSourceValue(offset, this.name)
-            ?? this.lookupOwnSourceValue(offset, this.procKeyword)
-            ?? this.lookupOwnSourceValue(offset, this.returnsKeyword)
-            ?? this.lookupOwnSourceValue(offset, this.endKeyword)
-            ?? this.lookupOwnSourceValue(offset, this.xhelpOpen)
-            ?? this.lookupOwnSourceValue(offset, this.xhelpText)
-            ?? this.lookupOwnSourceValue(offset, this.parameterListOpen)
-            ?? this.lookupOwnSourceValue(offset, this.headerSemicolon);
+        return this.lookupOwnSourceValue(position, this.name)
+            ?? this.lookupOwnSourceValue(position, this.procKeyword)
+            ?? this.lookupOwnSourceValue(position, this.returnsKeyword)
+            ?? this.lookupOwnSourceValue(position, this.endKeyword)
+            ?? this.lookupOwnSourceValue(position, this.xhelpOpen)
+            ?? this.lookupOwnSourceValue(position, this.xhelpText)
+            ?? this.lookupOwnSourceValue(position, this.parameterListOpen)
+            ?? this.lookupOwnSourceValue(position, this.headerSemicolon);
     }
 
     override addFoldingRegionsTo(source: Source, regions: FoldingRegionCollection): void {

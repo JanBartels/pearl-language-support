@@ -635,10 +635,19 @@ export class InitializationResolver {
                 let source: SourceValue<string>;
 
                 switch (element.value.kind) {
-                    case 'characterString':
-                        source = element.value.literal;
-                        value = this.characterConstantEvaluator.evaluate(element.value.literal.value);
+                    case 'characterString': {
+                        const first = element.value.literals[0];
+                        if (!first) return undefined;
+
+                        source = first;
+                        // Literal spelling is joined BEFORE decoding. Doubled
+                        // apostrophes across a macro boundary must be decoded
+                        // as part of the complete PEARL character constant.
+                        value = this.characterConstantEvaluator.evaluate(
+                            element.value.literals.map(part => part.value).join('')
+                        );
                         break;
+                    }
 
                     case 'identifier': {
                         source = element.value.identifier;

@@ -7,6 +7,7 @@ import { SemanticContext } from '../../../semantic/semanticContext';
 import { lookupBoundSymbol } from '../../../semantic/bindingIndex';
 import { formatBuiltinSignature } from '../../../semantic/builtins/builtinSignature';
 import { DocumentationProvider } from '../../documentationProvider';
+import { md } from '../../markdownUtils';
 import { appendSemanticSymbolDocumentation } from '../../semanticSymbolDocumentation';
 
 export class CallStatementDocumentationProvider extends DocumentationProvider<CallStatementNode> {
@@ -19,9 +20,10 @@ export class CallStatementDocumentationProvider extends DocumentationProvider<Ca
             return '# CALL\n\nRuft eine Prozedur oder einen REF-PROC-Zeiger auf.';
         }
         if (lookup.element === node.target) {
-            const text = `# Prozeduraufruf ${node.target?.value ?? ''}\n\n${
-                node.argumentsList === undefined ? 'Ohne Parameterliste' :
-                    `${node.argumentsList.length} Aktualparameter`}.`;
+            const text = md`# Prozeduraufruf ${node.target?.value ?? ''}
+
+${node.argumentsList === undefined ? 'Ohne Parameterliste' :
+    `${node.argumentsList.length} Aktualparameter`}.`;
             const symbol = semanticContext && node.target
                 ? lookupBoundSymbol(semanticContext.bindings, node.target) : undefined;
             if (symbol && semanticContext) {

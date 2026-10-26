@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { SourceValue } from '../../../core/sourceValue';
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from '../../astKind';
 import { AstLookupResult } from '../../astLookupResult';
 import { AstNode } from '../../astNode';
@@ -20,9 +21,9 @@ export class ProcedureParameterTypeNode extends AstNode {
         return undefined;
     }
 
-    override lookupSourceValue(offset: number): AstLookupResult | undefined {
+    override lookupSourceValue(position: SourceOffset): AstLookupResult | undefined {
         for (const token of [this.keyword, ...this.qualifiers]) {
-            const result = this.lookupOwnSourceValue(offset, token);
+            const result = this.lookupOwnSourceValue(position, token);
             if (result) return result;
         }
         return undefined;

@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { SourceValue } from '../../../core/sourceValue';
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from '../../astKind';
 import { AstLookupResult } from '../../astLookupResult';
 import { AstNode } from '../../astNode';
@@ -20,7 +21,7 @@ export class EmptyStatementNode extends AstNode {
         return EmptyStatementNode.provider;
     }
 
-    override lookupSourceValue(offset: number): AstLookupResult | undefined {
-        return this.lookupOwnSourceValue(offset, this.semicolon);
+    override lookupSourceValue(position: SourceOffset): AstLookupResult | undefined {
+        return this.lookupOwnSourceValue(position, this.semicolon);
     }
 }

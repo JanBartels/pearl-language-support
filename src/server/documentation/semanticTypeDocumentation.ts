@@ -30,7 +30,7 @@ export function formatSemanticType(type: SemanticType): string {
             return 'BOLT';
 
         case SemanticTypeKind.Dation:
-            return `DATION ${type.direction} ${type.dationClass}`;
+            return `DATION${type.direction ? ` ${type.direction}` : ''} ${type.dationClass}`;
 
         case SemanticTypeKind.Interrupt:
             return 'INTERRUPT';

@@ -3,6 +3,7 @@
 
 import { SourceValue } from "../../../core/sourceValue";
 
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from "../../astKind";
 import { AstLookupResult } from "../../astLookupResult";
 import { AstNode } from "../../astNode";
@@ -46,15 +47,15 @@ export class RefTypeNode extends AstNode {
         return RefTypeNode.provider;
     }
 
-    override lookupSourceValue( offset: number ): AstLookupResult | undefined {
+    override lookupSourceValue( position: SourceOffset ): AstLookupResult | undefined {
 
-        const keyword = this.lookupOwnSourceValue(offset, this.keyword);
+        const keyword = this.lookupOwnSourceValue(position, this.keyword);
 
         if (keyword) {
             return keyword;
         }
 
-        return this.target.lookupSourceValue(offset);
+        return this.target.lookupSourceValue(position);
     }
 
     public override dumpLabel(): string {

@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { SourceValue } from "../../../core/sourceValue";
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from "../../astKind";
 import { AstLookupResult } from "../../astLookupResult";
 import { AstNode } from "../../astNode";
@@ -18,9 +19,9 @@ export class SpcTaskAttributeNode extends AstNode {
 
     override documentationProvider(): undefined { return undefined; }
 
-    override lookupSourceValue(offset: number): AstLookupResult | undefined {
-        return this.lookupOwnSourceValue(offset, this.keyword)
-            ?? this.global?.lookupSourceValue(offset);
+    override lookupSourceValue(position: SourceOffset): AstLookupResult | undefined {
+        return this.lookupOwnSourceValue(position, this.keyword)
+            ?? this.global?.lookupSourceValue(position);
     }
 
     override dumpLabel(): string { return "SpcTaskAttribute"; }

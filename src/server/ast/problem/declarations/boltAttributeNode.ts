@@ -3,6 +3,7 @@
 
 import { SourceValue } from "../../../core/sourceValue";
 
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from "../../astKind";
 import { AstLookupResult } from "../../astLookupResult";
 import { AstNode } from "../../astNode";
@@ -35,11 +36,11 @@ export class BoltAttributeNode extends AstNode {
     }
 
     override lookupSourceValue(
-        offset: number
+        position: SourceOffset
     ): AstLookupResult | undefined {
 
         const keyword = this.lookupOwnSourceValue(
-            offset,
+            position,
             this.keyword
         );
 
@@ -47,7 +48,7 @@ export class BoltAttributeNode extends AstNode {
             return keyword;
         }
 
-        return this.global?.lookupSourceValue(offset);
+        return this.global?.lookupSourceValue(position);
     }
 
     public override dumpLabel(): string {

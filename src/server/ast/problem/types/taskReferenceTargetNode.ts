@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { SourceValue } from "../../../core/sourceValue";
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from "../../astKind";
 import { AstNode } from "../../astNode";
 import { AstLookupResult } from "../../astLookupResult";
@@ -13,8 +14,8 @@ export class TaskReferenceTargetNode extends AstNode {
 
     override documentationProvider(): undefined { return undefined; }
 
-    override lookupSourceValue(offset: number): AstLookupResult | undefined {
-        return this.lookupOwnSourceValue(offset, this.keyword);
+    override lookupSourceValue(position: SourceOffset): AstLookupResult | undefined {
+        return this.lookupOwnSourceValue(position, this.keyword);
     }
 
     override dumpLabel(): string { return "TaskReferenceTarget(TASK)"; }

@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { SourceValue } from '../../../core/sourceValue';
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from '../../astKind';
 import { AstLookupResult } from '../../astLookupResult';
 import { AstNode } from '../../astNode';
@@ -27,11 +28,11 @@ export class ProcedureSignatureNode extends AstNode {
     override documentationProvider(): DocumentationProvider<ProcedureSignatureNode> {
         return ProcedureSignatureNode.provider;
     }
-    override lookupSourceValue(offset: number): AstLookupResult | undefined {
-        return this.lookupOwnSourceValue(offset, this.keyword)
-            ?? this.parameters.map(p => p.lookupSourceValue(offset)).find(Boolean)
-            ?? this.lookupOwnSourceValue(offset, this.returnsKeyword)
-            ?? this.resultType?.lookupSourceValue(offset);
+    override lookupSourceValue(position: SourceOffset): AstLookupResult | undefined {
+        return this.lookupOwnSourceValue(position, this.keyword)
+            ?? this.parameters.map(p => p.lookupSourceValue(position)).find(Boolean)
+            ?? this.lookupOwnSourceValue(position, this.returnsKeyword)
+            ?? this.resultType?.lookupSourceValue(position);
     }
     override getChildren(): readonly AstNode[] {
         return [...this.parameters, ...(this.resultType ? [this.resultType] : [])];

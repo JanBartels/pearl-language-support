@@ -211,7 +211,7 @@ export class DocumentRegistry {
    * including root. With multiple roots the semantics may differ, so there
    * is intentionally no arbitrary choice of parent.
    */
-  getAnalysisResultForReferences(uri: string, version: number): AnalysisResult | undefined {
+  getAnalysisResultForSource(uri: string, version: number): AnalysisResult | undefined {
     const visited = new Set<string>([uri]);
     const parents = [uri];
     const candidates = new Set<AnalysisResult>();
@@ -232,6 +232,11 @@ export class DocumentRegistry {
     return this.getAnalysisResult(uri, version);
   }
 
+
+  /** Kept for existing Find References clients. All navigation uses the same policy. */
+  getAnalysisResultForReferences(uri: string, version: number): AnalysisResult | undefined {
+    return this.getAnalysisResultForSource(uri, version);
+  }
 
   stats(): { openDocuments: number; cachedIncludes: number } {
     return {

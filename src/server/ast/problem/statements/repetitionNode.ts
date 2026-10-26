@@ -4,6 +4,7 @@
 import { SourceValue } from "../../../core/sourceValue";
 import { Source } from "../../../source/source";
 import { AstNode } from "../../astNode";
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from "../../astKind";
 import { AstLookupResult } from "../../astLookupResult";
 import { DocumentationProvider } from "../../../documentation/documentationProvider";
@@ -42,17 +43,17 @@ export class RepetitionNode extends AstNode {
         return RepetitionNode.provider;
     }
 
-    override lookupSourceValue(offset: number): AstLookupResult | undefined {
+    override lookupSourceValue(position: SourceOffset): AstLookupResult | undefined {
         for (const child of this.getChildren()) {
-            const result = child.lookupSourceValue(offset);
+            const result = child.lookupSourceValue(position);
             if (result) {
                 return result;
             }
         }
 
-        return this.lookupOwnSourceValue(offset, this.repeatKeyword)
-            ?? this.lookupOwnSourceValue(offset, this.endKeyword)
-            ?? this.lookupOwnSourceValue(offset, this.endIdentifier);
+        return this.lookupOwnSourceValue(position, this.repeatKeyword)
+            ?? this.lookupOwnSourceValue(position, this.endKeyword)
+            ?? this.lookupOwnSourceValue(position, this.endIdentifier);
     }
 
     override addFoldingRegionsTo(source: Source, regions: FoldingRegionCollection): void {

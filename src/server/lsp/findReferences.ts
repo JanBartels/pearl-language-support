@@ -22,8 +22,8 @@ export function findReferences(
     const index = analysis.symbolOccurrences;
     const candidates: SymbolOccurrences[] = [];
 
-    // AST lookupSourceValue(offset) alone cannot distinguish an included
-    // file's offset 20 from the root file's offset 20. Match URI *and* range.
+    // Match an editor position using URI and range. The AST has a source-aware
+    // lookup too; the occurrence index preserves semantic identity here.
     for (const group of index.all) {
         const occurrences = [...group.declarations, ...group.references];
         if (occurrences.some(value => atCursor(value, uri, position, registry))) {

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from "../../astKind";
 import { AstLookupResult } from "../../astLookupResult";
 import { AstNode } from "../../astNode";
@@ -47,12 +48,12 @@ export class ProblemDataAttributeNode extends AstNode {
     }
 
     override lookupSourceValue(
-        offset: number
+        position: SourceOffset
     ): AstLookupResult | undefined {
 
         const inv =
             this.lookupOwnSourceValue(
-                offset,
+                position,
                 this.inv
             );
 
@@ -61,20 +62,20 @@ export class ProblemDataAttributeNode extends AstNode {
         }
 
         const type =
-            this.type?.lookupSourceValue(offset);
+            this.type?.lookupSourceValue(position);
 
         if (type) {
             return type;
         }
 
         const global =
-            this.global?.lookupSourceValue(offset);
+            this.global?.lookupSourceValue(position);
 
         if (global) {
             return global;
         }
 
-        return this.initialization?.lookupSourceValue(offset);
+        return this.initialization?.lookupSourceValue(position);
     }
 
     public override dumpLabel(): string {

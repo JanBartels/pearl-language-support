@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { SourceValue } from '../../../core/sourceValue';
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from '../../astKind';
 import { AstLookupResult } from '../../astLookupResult';
 import { AstNode } from '../../astNode';
@@ -23,12 +24,12 @@ export class ReturnStatementNode extends AstNode {
         return ReturnStatementNode.provider;
     }
 
-    override lookupSourceValue(offset: number): AstLookupResult | undefined {
+    override lookupSourceValue(position: SourceOffset): AstLookupResult | undefined {
         for (const token of this.expression ?? []) {
-            const result = this.lookupOwnSourceValue(offset, token);
+            const result = this.lookupOwnSourceValue(position, token);
             if (result) return result;
         }
-        return this.lookupOwnSourceValue(offset, this.keyword);
+        return this.lookupOwnSourceValue(position, this.keyword);
     }
 
     override dumpLabel(): string {

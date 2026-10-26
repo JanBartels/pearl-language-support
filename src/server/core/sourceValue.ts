@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { Location } from './location';
-import { contains } from '../core/span';
+import { SourceOffset, containsSourceOffset } from './sourceOffset';
 
 /**
  * Fachlicher Wert mit optionalem Bezug zum Quelltext.
@@ -27,9 +27,7 @@ export class SourceValue<T> {
         return new SourceValue(value);
     }
 
-    contains(offset: number): boolean {
-
-        return this.location !== undefined &&
-            contains(this.location.span, offset);
+    contains(position: SourceOffset): boolean {
+        return containsSourceOffset(this.location, position);
     }    
 }

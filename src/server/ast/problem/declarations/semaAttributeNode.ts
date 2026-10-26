@@ -3,6 +3,7 @@
 
 import { SourceValue } from "../../../core/sourceValue";
 
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from "../../astKind";
 import { AstLookupResult } from "../../astLookupResult";
 import { AstNode } from "../../astNode";
@@ -44,11 +45,11 @@ export class SemaAttributeNode extends AstNode {
     }
 
     override lookupSourceValue(
-        offset: number
+        position: SourceOffset
     ): AstLookupResult | undefined {
 
         const keyword = this.lookupOwnSourceValue(
-            offset,
+            position,
             this.keyword
         );
 
@@ -56,14 +57,14 @@ export class SemaAttributeNode extends AstNode {
             return keyword;
         }
 
-        const global = this.global?.lookupSourceValue(offset);
+        const global = this.global?.lookupSourceValue(position);
 
         if (global) {
             return global;
         }
 
         const presetKeyword = this.lookupOwnSourceValue(
-            offset,
+            position,
             this.presetKeyword
         );
 
@@ -72,7 +73,7 @@ export class SemaAttributeNode extends AstNode {
         }
 
         for (const value of this.presetValues) {
-            const result = value.lookupSourceValue(offset);
+            const result = value.lookupSourceValue(position);
 
             if (result) {
                 return result;

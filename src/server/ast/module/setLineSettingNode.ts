@@ -3,6 +3,7 @@
 
 import { SourceValue } from '../../core/sourceValue';
 import { AstNode } from '../astNode';
+import { SourceOffset } from '../../core/sourceOffset';
 import { AstKind } from '../astKind';
 import { AstLookupResult } from '../astLookupResult';
 import { DocumentationProvider } from '../../documentation/documentationProvider';
@@ -23,10 +24,10 @@ export class SetLineSettingNode extends AstNode {
         return SetLineSettingNode.provider;
     }
 
-    override lookupSourceValue(offset: number): AstLookupResult | undefined {
-        return this.lookupOwnSourceValue(offset, this.keyword)
-            ?? this.lookupOwnSourceValue(offset, this.firstLine)
-            ?? this.lookupOwnSourceValue(offset, this.moduleId);
+    override lookupSourceValue(position: SourceOffset): AstLookupResult | undefined {
+        return this.lookupOwnSourceValue(position, this.keyword)
+            ?? this.lookupOwnSourceValue(position, this.firstLine)
+            ?? this.lookupOwnSourceValue(position, this.moduleId);
     }
 
     override dumpLabel(): string {

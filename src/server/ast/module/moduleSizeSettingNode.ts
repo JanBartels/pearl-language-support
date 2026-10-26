@@ -3,6 +3,7 @@
 
 import { SourceValue } from '../../core/sourceValue';
 import { AstNode } from '../astNode';
+import { SourceOffset } from '../../core/sourceOffset';
 import { AstKind } from '../astKind';
 import { AstLookupResult } from '../astLookupResult';
 import { DocumentationProvider } from '../../documentation/documentationProvider';
@@ -27,13 +28,13 @@ export class ModuleSizeSettingNode extends AstNode {
         return ModuleSizeSettingNode.provider;
     }
 
-    override lookupSourceValue(offset: number): AstLookupResult | undefined {
-        return this.lookupOwnSourceValue(offset, this.keyword)
-            ?? this.lookupOwnSourceValue(offset, this.size)
-            ?? this.lookupOwnSourceValue(offset, this.codeKeyword)
-            ?? this.lookupOwnSourceValue(offset, this.codeAddress)
-            ?? this.lookupOwnSourceValue(offset, this.varKeyword)
-            ?? this.lookupOwnSourceValue(offset, this.varAddress);
+    override lookupSourceValue(position: SourceOffset): AstLookupResult | undefined {
+        return this.lookupOwnSourceValue(position, this.keyword)
+            ?? this.lookupOwnSourceValue(position, this.size)
+            ?? this.lookupOwnSourceValue(position, this.codeKeyword)
+            ?? this.lookupOwnSourceValue(position, this.codeAddress)
+            ?? this.lookupOwnSourceValue(position, this.varKeyword)
+            ?? this.lookupOwnSourceValue(position, this.varAddress);
     }
 
     override dumpLabel(): string {

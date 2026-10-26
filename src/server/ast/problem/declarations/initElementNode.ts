@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from '../../astKind';
 import { AstLookupResult } from '../../astLookupResult';
 import { AstNode } from '../../astNode';
@@ -34,7 +35,8 @@ export type InitElementValue =
     }
     | {
         readonly kind: 'characterString';
-        readonly literal: SourceValue<string>;
+        /** Raw literal fragments in source order, possibly from macro expansion. */
+        readonly literals: readonly SourceValue<string>[];
     }
     | {
         readonly kind: 'bitString';
@@ -84,35 +86,38 @@ export class InitElementNode extends AstNode {
     }
 
     override lookupSourceValue(
-        offset: number
+        position: SourceOffset
     ): AstLookupResult | undefined {
         switch (this.value.kind) {
             case 'constantFixedExpression':
-                return this.value.expression.lookupSourceValue(offset);
+                return this.value.expression.lookupSourceValue(position);
 
             case 'nil':
-                return this.lookupOwnSourceValue(offset, this.value.keyword);
+                return this.lookupOwnSourceValue(position, this.value.keyword);
 
             case 'identifier':
                 return this.lookupOwnSourceValue(
-                    offset,
+                    position,
                     this.value.identifier
                 );
 
             case 'floatingPoint':
-            case 'characterString':
             case 'bitString':
-                return this.lookupOwnSourceValue(
-                    offset,
-                    this.value.literal
-                );
+                return this.lookupOwnSourceValue(position, this.value.literal);
+
+            case 'characterString':
+                for (const literal of this.value.literals) {
+                    const result = this.lookupOwnSourceValue(position, literal);
+                    if (result) return result;
+                }
+                return undefined;
 
             case 'clock':
             case 'duration':
-                return this.value.constant.lookupSourceValue(offset);
+                return this.value.constant.lookupSourceValue(position);
 
             case 'signedConstantExpression':
-                return this.value.expression.lookupSourceValue(offset);
+                return this.value.expression.lookupSourceValue(position);
         }
     }
 
@@ -131,7 +136,7 @@ export class InitElementNode extends AstNode {
                 return `InitElement(FLOAT ${this.value.literal.value})`;
 
             case 'characterString':
-                return `InitElement(CHAR ${this.value.literal.value})`;
+                return `InitElement(CHAR ${this.value.literals.map(part => part.value).join('')})`;
 
             case 'bitString':
                 return `InitElement(BIT ${this.value.literal.value})`;

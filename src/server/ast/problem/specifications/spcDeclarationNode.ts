@@ -6,6 +6,7 @@ import { DocumentationProvider } from '../../../documentation/documentationProvi
 import {
     SpcDeclarationDocumentationProvider
 } from '../../../documentation/problem/specifications/spcDeclarationDocumentationProvider';
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from '../../astKind';
 import { AstLookupResult } from '../../astLookupResult';
 import { AstNode } from '../../astNode';
@@ -26,15 +27,15 @@ export class SpcDeclarationNode extends AstNode {
         return SpcDeclarationNode.provider;
     }
 
-    override lookupSourceValue(offset: number): AstLookupResult | undefined {
+    override lookupSourceValue(position: SourceOffset): AstLookupResult | undefined {
         for (const specification of this.specifications) {
-            const result = specification.lookupSourceValue(offset);
+            const result = specification.lookupSourceValue(position);
             if (result) {
                 return result;
             }
         }
 
-        return this.lookupOwnSourceValue(offset, this.keyword);
+        return this.lookupOwnSourceValue(position, this.keyword);
     }
 
     override dumpLabel(): string {

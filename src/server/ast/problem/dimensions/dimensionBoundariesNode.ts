@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from "../../astKind";
 import { AstLookupResult } from "../../astLookupResult";
 import { AstNode } from "../../astNode";
@@ -35,11 +36,11 @@ export class DimensionBoundariesNode extends AstNode {
     }
 
     override lookupSourceValue(
-        offset: number
+        position: SourceOffset
     ): AstLookupResult | undefined {
 
-        return this.lowerBoundary?.lookupSourceValue(offset)
-            ?? this.upperBoundary.lookupSourceValue(offset);
+        return this.lowerBoundary?.lookupSourceValue(position)
+            ?? this.upperBoundary.lookupSourceValue(position);
     }
 
     public override dumpLabel(): string {

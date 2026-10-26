@@ -3,6 +3,7 @@
 
 import { SourceValue } from "../../../core/sourceValue";
 import { AstNode } from "../../astNode";
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from "../../astKind";
 import { AstLookupResult } from "../../astLookupResult";
 import { DocumentationProvider } from "../../../documentation/documentationProvider";
@@ -25,14 +26,14 @@ export class RepetitionExpressionClauseNode extends AstNode {
         return RepetitionExpressionClauseNode.provider;
     }
 
-    override lookupSourceValue(offset: number): AstLookupResult | undefined {
-        const own = this.lookupOwnSourceValue(offset, this.keyword);
+    override lookupSourceValue(position: SourceOffset): AstLookupResult | undefined {
+        const own = this.lookupOwnSourceValue(position, this.keyword);
         if (own) {
             return own;
         }
 
         for (const token of this.expressionTokens) {
-            const result = this.lookupOwnSourceValue(offset, token);
+            const result = this.lookupOwnSourceValue(position, token);
             if (result) {
                 return result;
             }

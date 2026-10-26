@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from '../../astKind';
 import { AstLookupResult } from '../../astLookupResult';
 import { AstNode } from '../../astNode';
@@ -12,8 +13,8 @@ export class ProcedureReferenceTargetNode extends AstNode {
         this.adopt(signature);
     }
     override documentationProvider(): undefined { return undefined; }
-    override lookupSourceValue(offset: number): AstLookupResult | undefined {
-        return this.signature.lookupSourceValue(offset);
+    override lookupSourceValue(position: SourceOffset): AstLookupResult | undefined {
+        return this.signature.lookupSourceValue(position);
     }
     override getChildren(): readonly AstNode[] { return [this.signature]; }
     override dumpLabel(): string { return 'ProcedureReferenceTarget'; }

@@ -106,7 +106,6 @@ const RESERVED_WORDS = new Set<string>([
   'PROC',
   'PROCEDURE',
   'PUT',
-  'READ',
   'REENT',
   'REF',
   'RELEASE',
@@ -134,7 +133,6 @@ const RESERVED_WORDS = new Set<string>([
   'TAKE',
   'TASK',
   'TERMINATE',
-  'TFU',
   'THEN',
   'TO',
   'TOFIXED',  
@@ -145,8 +143,7 @@ const RESERVED_WORDS = new Set<string>([
   'UPON',
   'USING',
   'WHEN',
-  'WHILE',
-  'WRITE'
+  'WHILE'
 ]);
 
 export abstract class ParserBase {

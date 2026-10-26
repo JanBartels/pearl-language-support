@@ -55,7 +55,7 @@ Floating-point constant \`${node.value.literal.value}\` in an initialization lis
 
             case "characterString":
 
-                if (lookup.element === node.value.literal) {
+                if (node.value.literals.includes(lookup.element as SourceValue<string>)) {
                     return `
 # Character initialization value
 

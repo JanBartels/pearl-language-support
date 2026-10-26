@@ -3,6 +3,7 @@
 
 import { SourceValue } from '../../core/sourceValue';
 import { AstNode } from '../astNode';
+import { SourceOffset } from '../../core/sourceOffset';
 import { AstKind } from '../astKind';
 import { AstLookupResult } from '../astLookupResult';
 
@@ -28,11 +29,11 @@ export class ShellCommandNode extends AstNode {
     }
 
     override lookupSourceValue(
-        offset: number
+        position: SourceOffset
     ): AstLookupResult | undefined {
 
         let result = this.lookupOwnSourceValue(
-            offset,
+            position,
             this.procedureName
         );
         if (result) {
@@ -40,7 +41,7 @@ export class ShellCommandNode extends AstNode {
         }
 
         return this.lookupOwnSourceValue(
-            offset,
+            position,
             this.commandName
         );
     }

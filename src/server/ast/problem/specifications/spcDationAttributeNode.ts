@@ -6,6 +6,7 @@ import { DocumentationProvider } from '../../../documentation/documentationProvi
 import {
     SpcDationAttributeDocumentationProvider
 } from '../../../documentation/problem/specifications/spcDationAttributeDocumentationProvider';
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from '../../astKind';
 import { AstLookupResult } from '../../astLookupResult';
 import { AstNode } from '../../astNode';
@@ -33,13 +34,13 @@ export class SpcDationAttributeNode extends AstNode {
         return SpcDationAttributeNode.provider;
     }
 
-    override lookupSourceValue(offset: number): AstLookupResult | undefined {
-        return this.lookupOwnSourceValue(offset, this.keyword)
-            ?? this.lookupOwnSourceValue(offset, this.direction)
-            ?? this.lookupOwnSourceValue(offset, this.dationClass)
-            ?? this.lookupOwnSourceValue(offset, this.controlKeyword)
-            ?? this.lookupOwnSourceValue(offset, this.controlAll)
-            ?? this.global?.lookupSourceValue(offset);
+    override lookupSourceValue(position: SourceOffset): AstLookupResult | undefined {
+        return this.lookupOwnSourceValue(position, this.keyword)
+            ?? this.lookupOwnSourceValue(position, this.direction)
+            ?? this.lookupOwnSourceValue(position, this.dationClass)
+            ?? this.lookupOwnSourceValue(position, this.controlKeyword)
+            ?? this.lookupOwnSourceValue(position, this.controlAll)
+            ?? this.global?.lookupSourceValue(position);
     }
 
     override dumpLabel(): string {

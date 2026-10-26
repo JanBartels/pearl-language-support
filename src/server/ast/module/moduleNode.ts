@@ -4,6 +4,7 @@
 import { Source } from "../../source/source";
 import { SourceValue } from '../../core/sourceValue';
 import { AstNode } from '../astNode';
+import { SourceOffset } from '../../core/sourceOffset';
 import { AstKind } from '../astKind';
 import { AstLookupResult } from '../astLookupResult';
 
@@ -50,44 +51,44 @@ export class ModuleNode extends AstNode {
     }
 
     override lookupSourceValue(
-        offset: number
+        position: SourceOffset
     ): AstLookupResult | undefined {
 
         let result: AstLookupResult | undefined;
 
         for (const shellCommand of this.shellCommands) {
-            result = shellCommand.lookupSourceValue(offset);
+            result = shellCommand.lookupSourceValue(position);
             if (result) {
                 return result;
             }
         }
 
-        result = this.systemPart?.lookupSourceValue(offset);
+        result = this.systemPart?.lookupSourceValue(position);
         if (result) {
             return result;
         }
 
-        result = this.problemPart?.lookupSourceValue(offset);
+        result = this.problemPart?.lookupSourceValue(position);
         if (result) {
             return result;
         }
 
-        result = this.lookupOwnSourceValue(offset, this.keyword);
+        result = this.lookupOwnSourceValue(position, this.keyword);
         if (result) {
             return result;
         }
 
-        result = this.lookupOwnSourceValue(offset, this.name);
+        result = this.lookupOwnSourceValue(position, this.name);
         if (result) {
             return result;
         }
 
-        result = this.lookupOwnSourceValue(offset, this.modendKeyword);
+        result = this.lookupOwnSourceValue(position, this.modendKeyword);
         if (result) {
             return result;
         }
 
-        result = this.lookupOwnSourceValue(offset, this.debugKeyword);
+        result = this.lookupOwnSourceValue(position, this.debugKeyword);
         if (result) {
             return result;
         }

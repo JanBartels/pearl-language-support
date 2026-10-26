@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from "../../astKind";
 import { AstLookupResult } from "../../astLookupResult";
 import { AstNode } from "../../astNode";
@@ -71,12 +72,12 @@ export class ConstantFixedFactorNode extends AstNode {
     }
 
     override lookupSourceValue(
-        offset: number
+        position: SourceOffset
     ): AstLookupResult | undefined {
 
         const sign =
             this.lookupOwnSourceValue(
-                offset,
+                position,
                 this.sign
             );
 
@@ -85,7 +86,7 @@ export class ConstantFixedFactorNode extends AstNode {
         }
 
         const operand =
-            this.lookupOperandSourceValue(offset);
+            this.lookupOperandSourceValue(position);
 
         if (operand) {
             return operand;
@@ -95,7 +96,7 @@ export class ConstantFixedFactorNode extends AstNode {
 
             const keyword =
                 this.lookupOwnSourceValue(
-                    offset,
+                    position,
                     this.fit.keyword
                 );
 
@@ -103,43 +104,43 @@ export class ConstantFixedFactorNode extends AstNode {
                 return keyword;
             }
 
-            return this.fit.expression.lookupSourceValue(offset);
+            return this.fit.expression.lookupSourceValue(position);
         }
 
         return undefined;
     }
 
     private lookupOperandSourceValue(
-        offset: number
+        position: SourceOffset
     ): AstLookupResult | undefined {
 
         switch (this.operand.kind) {
 
             case "integer":
                 return this.lookupOwnSourceValue(
-                    offset,
+                    position,
                     this.operand.literal
                 ) ?? this.lookupOwnSourceValue(
-                    offset,
+                    position,
                     this.operand.precision
                 );
 
             case "identifier":
                 return this.lookupOwnSourceValue(
-                    offset,
+                    position,
                     this.operand.identifier
                 );
 
             case "parenthesized":
-                return this.operand.expression.lookupSourceValue(offset);
+                return this.operand.expression.lookupSourceValue(position);
 
             case "toFixedCharacter":
             case "toFixedBit":
                 return this.lookupOwnSourceValue(
-                    offset,
+                    position,
                     this.operand.keyword
                 ) ?? this.lookupOwnSourceValue(
-                    offset,
+                    position,
                     this.operand.literal
                 );
         }

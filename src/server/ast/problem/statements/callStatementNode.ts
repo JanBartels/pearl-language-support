@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { SourceValue } from '../../../core/sourceValue';
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from '../../astKind';
 import { AstLookupResult } from '../../astLookupResult';
 import { AstNode } from '../../astNode';
@@ -20,9 +21,9 @@ export class CallStatementNode extends AstNode {
     override documentationProvider(): DocumentationProvider<CallStatementNode> {
         return CallStatementNode.provider;
     }
-    override lookupSourceValue(offset: number): AstLookupResult | undefined {
+    override lookupSourceValue(position: SourceOffset): AstLookupResult | undefined {
         for (const source of [this.keyword, this.target, ...(this.argumentsList?.flat() ?? [])]) {
-            const found = this.lookupOwnSourceValue(offset, source);
+            const found = this.lookupOwnSourceValue(position, source);
             if (found) return found;
         }
         return undefined;

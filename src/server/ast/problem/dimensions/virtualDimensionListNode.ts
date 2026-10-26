@@ -5,6 +5,7 @@ import { DocumentationProvider } from '../../../documentation/documentationProvi
 import {
     VirtualDimensionListDocumentationProvider
 } from '../../../documentation/problem/dimensions/virtualDimensionListDocumentationProvider';
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from '../../astKind';
 import { AstLookupResult } from '../../astLookupResult';
 import { AstNode } from '../../astNode';
@@ -20,7 +21,7 @@ export class VirtualDimensionListNode extends AstNode {
         return VirtualDimensionListNode.provider;
     }
 
-    override lookupSourceValue(_offset: number): AstLookupResult | undefined {
+    override lookupSourceValue(_position: SourceOffset): AstLookupResult | undefined {
         return undefined;
     }
 

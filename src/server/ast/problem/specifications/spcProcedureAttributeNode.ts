@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { SourceValue } from '../../../core/sourceValue';
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from '../../astKind';
 import { AstLookupResult } from '../../astLookupResult';
 import { AstNode } from '../../astNode';
@@ -19,10 +20,10 @@ export class SpcProcedureAttributeNode extends AstNode {
         if (global) this.adopt(global);
     }
     override documentationProvider(): undefined { return undefined; }
-    override lookupSourceValue(offset: number): AstLookupResult | undefined {
-        return this.lookupOwnSourceValue(offset, this.colon)
-            ?? this.signature.lookupSourceValue(offset)
-            ?? this.global?.lookupSourceValue(offset);
+    override lookupSourceValue(position: SourceOffset): AstLookupResult | undefined {
+        return this.lookupOwnSourceValue(position, this.colon)
+            ?? this.signature.lookupSourceValue(position)
+            ?? this.global?.lookupSourceValue(position);
     }
     override getChildren(): readonly AstNode[] {
         return [this.signature, ...(this.global ? [this.global] : [])];

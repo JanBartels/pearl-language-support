@@ -118,8 +118,10 @@ export class SemanticTypeResolver {
                 const values = node.qualifiers.map(value => value.value);
                 const direction = values.find(value => value === 'IN' || value === 'OUT' || value === 'INOUT');
                 const dationClass = values.find(value => value === 'ALPHIC' || value === 'BASIC' || value === 'ALL');
-                if ((direction === 'IN' || direction === 'OUT' || direction === 'INOUT')
-                    && (dationClass === 'ALPHIC' || dationClass === 'BASIC' || dationClass === 'ALL')) {
+                // RTOS-UH 5.7.10: missing direction is intentional in
+                // ENTRY(DATION ALPHIC IDENT). It accepts IN, OUT and INOUT
+                // dations, unlike an explicitly specified INOUT parameter.
+                if (dationClass === 'ALPHIC' || dationClass === 'BASIC' || dationClass === 'ALL') {
                     return { kind: SemanticTypeKind.Dation, direction, dationClass };
                 }
                 return undefined;

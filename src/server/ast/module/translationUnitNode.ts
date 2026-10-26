@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { AstNode } from '../astNode';
+import { SourceOffset } from '../../core/sourceOffset';
 import { AstKind } from '../astKind';
 import { AstLookupResult } from '../astLookupResult';
 
@@ -25,13 +26,13 @@ export class TranslationUnitNode extends AstNode {
     }
 
     override lookupSourceValue(
-        offset: number
+        position: SourceOffset
     ): AstLookupResult | undefined {
 
         let result: AstLookupResult | undefined;
 
         for (const child of this.children) {
-            result = child.lookupSourceValue(offset);
+            result = child.lookupSourceValue(position);
             if (result) {
                 return result;
             }

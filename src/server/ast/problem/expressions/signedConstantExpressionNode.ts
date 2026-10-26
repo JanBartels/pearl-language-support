@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from '../../astKind';
 import { AstLookupResult } from '../../astLookupResult';
 import { AstNode } from '../../astNode';
@@ -40,9 +41,9 @@ export class SignedConstantExpressionNode extends AstNode {
     }
 
     override lookupSourceValue(
-        offset: number
+        position: SourceOffset
     ): AstLookupResult | undefined {
-        const sign = this.lookupOwnSourceValue(offset, this.sign);
+        const sign = this.lookupOwnSourceValue(position, this.sign);
 
         if (sign) {
             return sign;
@@ -50,12 +51,12 @@ export class SignedConstantExpressionNode extends AstNode {
 
         switch (this.operand.kind) {
             case 'floatingPoint':
-                return this.lookupOwnSourceValue(offset, this.operand.literal);
+                return this.lookupOwnSourceValue(position, this.operand.literal);
 
             case 'duration':
                 for (const component of this.operand.constant.components) {
-                    const result = this.lookupOwnSourceValue(offset, component.value)
-                        ?? this.lookupOwnSourceValue(offset, component.unit);
+                    const result = this.lookupOwnSourceValue(position, component.value)
+                        ?? this.lookupOwnSourceValue(position, component.unit);
 
                     if (result) {
                         return result;

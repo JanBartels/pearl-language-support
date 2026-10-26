@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from "../../astKind";
 import { AstLookupResult } from "../../astLookupResult";
 import { AstNode } from "../../astNode";
@@ -36,12 +37,12 @@ export class StructTypeNode extends AstNode {
     }
 
     override lookupSourceValue(
-        offset: number
+        position: SourceOffset
     ): AstLookupResult | undefined {
 
         const keyword =
             this.lookupOwnSourceValue(
-                offset,
+                position,
                 this.keyword
             );
 
@@ -52,7 +53,7 @@ export class StructTypeNode extends AstNode {
         for (const component of this.components) {
 
             const result =
-                component.lookupSourceValue(offset);
+                component.lookupSourceValue(position);
 
             if (result) {
                 return result;

@@ -26,15 +26,31 @@ hallo: 'welt';
 
 SYSTEM;
    A1;
+   File: /ED/MyFile.txt.................................;
    MyEv: EV(12345678);
 
 PROBLEM;
 !   SPC A1 DATION INOUT ALPHIC;
+   SPC File DATION INOUT ALPHIC;
 
 #define MacroMitSemikolon "Wert";
 
+#define Progname "'MyProg'"
+#define Version "'V1.2.3'"
+DCL VersionStr CHAR(40) INIT( ''\AEB1\''Progname''\3D\''Version''\FF\'');
+
 TYPE Counter FIXED(31);
 
+SPC MYPROC ENTRY( () FIXED ) GLOBAL;
+#ifdef PEARL90
+   #define INOUTP90_ " "
+#else
+   #define INOUTP90 "INOUT"
+#endif   
+SPC ASSIGN ENTRY( DATION INOUTP90_ ALPHIC IDENT, CHAR(24)) GLOBAL;
+SPC Boeser_Unterstrich ENTRY GLOBAL;
+
+DCL TFU FIXED;
 DCL x FIXED;
 DCL y Counter;
 DCL (a, b) FLOAT(55);
@@ -60,6 +76,7 @@ TYPE MyTestStruct2 STRUCT [
 ];
 
 SPC DationProc PROC(D REF DATION INOUT ALPHIC CONTROL(ALL) IDENT) GLOBAL;
+SPC DationProc2 PROC( DATION ALPHIC IDENT) GLOBAL;
 
 SPC FREE PROC( REF STRUCT[] IDENT ) GLOBAL;
 
@@ -182,6 +199,8 @@ HuhuTask: TASK PRIO 23;
 DCL HuhuA FIXED;
 DCL Var FLOAT;
 
+CALL ASSIGN(A1,'/TY');
+CALL Boeser_Unterstrich;
 END;
 
 DCL RefTask REF TASK;

@@ -4,7 +4,7 @@
 import { Analysis } from './analysis';
 import { ProblemCollection } from '../core/problemCollection';
 import { MacroReference } from '../preproc/macroReference';
-import { contains } from '../core/span';
+import { SourceOffset, containsSourceOffset } from '../core/sourceOffset';
 import { Severity } from '../core/severity';
 
 export class AnalysisResult {
@@ -71,9 +71,9 @@ readonly rootAnalysis: Analysis;
       .flatMap(f => f.tokens);
   }
 
-  lookupMacro(offset: number): MacroReference | undefined {
+  lookupMacro(position: SourceOffset): MacroReference | undefined {
     for (const reference of this.macroReferences) {
-        if (contains(reference.location.span, offset)) {
+        if (containsSourceOffset(reference.location, position)) {
             return reference;
         }
     }

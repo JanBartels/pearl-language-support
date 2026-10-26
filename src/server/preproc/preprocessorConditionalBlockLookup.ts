@@ -1,26 +1,20 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
-import { contains } from "../core";
-import { Source } from "../source/source";
+import { SourceOffset, containsSourceOffset } from "../core/sourceOffset";
 import { PreprocessorConditionalBlockCollection } from "./preprocessorConditionalBlockCollection";
 import { PreprocessorConditionalLookupResult, PreprocessorDirectiveKind } from "./preprocessorConditionalLookupResult";
 
 export class PreprocessorConditionalBlockLookup {
 
     static lookup(
-        source: Source,
         blocks: PreprocessorConditionalBlockCollection,
-        offset: number
+        position: SourceOffset
     ): PreprocessorConditionalLookupResult | undefined {
 
         for (const block of blocks) {
 
-            if (block.ifLocation.source !== source) {
-                continue;
-            }
-
-            if (contains(block.ifLocation.span, offset)) {
+            if (containsSourceOffset(block.ifLocation, position)) {
                 return {
                     block,
                     directive: block.ifdef
@@ -31,7 +25,7 @@ export class PreprocessorConditionalBlockLookup {
 
             if (
                 block.elseLocation
-                && contains(block.elseLocation.span, offset)
+                && containsSourceOffset(block.elseLocation, position)
             ) {
                 return {
                     block,
@@ -39,7 +33,7 @@ export class PreprocessorConditionalBlockLookup {
                 };
             }
 
-            if (contains(block.endifLocation.span, offset)) {
+            if (containsSourceOffset(block.endifLocation, position)) {
                 return {
                     block,
                     directive: PreprocessorDirectiveKind.Endif

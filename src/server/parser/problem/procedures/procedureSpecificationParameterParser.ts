@@ -34,6 +34,12 @@ export class ProcedureSpecificationParameterParser extends ParserBase {
             }
         }
 
+        // The documentary parameter name is optional. An unnamed array
+        // parameter therefore starts directly with its virtual dimensions:
+        // ENTRY( () FIXED ) or ENTRY( (,) FIXED ).
+        // When a name was present, its dimensions have already been parsed.
+        dimensions ??= new VirtualDimensionListParser(this.context).parse();
+
         type ??= new ProcedureParameterTypeParser(this.context).parse()
             ?? new ProblemDataTypeParser(this.context).parse();
         if (!type) {

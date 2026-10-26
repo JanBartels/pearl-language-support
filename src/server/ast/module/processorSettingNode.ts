@@ -3,6 +3,7 @@
 
 import { SourceValue } from '../../core/sourceValue';
 import { AstNode } from '../astNode';
+import { SourceOffset } from '../../core/sourceOffset';
 import { AstKind } from '../astKind';
 import { AstLookupResult } from '../astLookupResult';
 import { DocumentationProvider } from '../../documentation/documentationProvider';
@@ -26,12 +27,12 @@ export class ProcessorSettingNode extends AstNode {
         return ProcessorSettingNode.provider;
     }
 
-    override lookupSourceValue(offset: number): AstLookupResult | undefined {
-        return this.lookupOwnSourceValue(offset, this.keyword)
-            ?? this.lookupOwnSourceValue(offset, this.processor)
-            ?? this.lookupOwnSourceValue(offset, this.plusOperator)
-            ?? this.lookupOwnSourceValue(offset, this.fpuKeyword)
-            ?? this.lookupOwnSourceValue(offset, this.registerCount);
+    override lookupSourceValue(position: SourceOffset): AstLookupResult | undefined {
+        return this.lookupOwnSourceValue(position, this.keyword)
+            ?? this.lookupOwnSourceValue(position, this.processor)
+            ?? this.lookupOwnSourceValue(position, this.plusOperator)
+            ?? this.lookupOwnSourceValue(position, this.fpuKeyword)
+            ?? this.lookupOwnSourceValue(position, this.registerCount);
     }
 
     override dumpLabel(): string {

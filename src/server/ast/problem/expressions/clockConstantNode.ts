@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
+import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from '../../astKind';
 import { AstLookupResult } from '../../astLookupResult';
 import { AstNode } from '../../astNode';
@@ -28,11 +29,11 @@ export class ClockConstantNode extends AstNode {
     }
 
     override lookupSourceValue(
-        offset: number
+        position: SourceOffset
     ): AstLookupResult | undefined {
-        return this.lookupOwnSourceValue(offset, this.hours)
-            ?? this.lookupOwnSourceValue(offset, this.minutes)
-            ?? this.lookupOwnSourceValue(offset, this.seconds);
+        return this.lookupOwnSourceValue(position, this.hours)
+            ?? this.lookupOwnSourceValue(position, this.minutes)
+            ?? this.lookupOwnSourceValue(position, this.seconds);
     }
 
     public override dumpLabel(): string {
