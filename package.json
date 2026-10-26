@@ -13,7 +13,7 @@
   },
   "license": "GPL-3.0-or-later",
   "engines": {
-    "vscode": "^1.80.0"
+    "vscode": "^1.109.0"
   },
   "categories": [
     "Programming Languages"
@@ -150,7 +150,7 @@
     "clean": "rm -rf dist",
     "test": "echo \"no tests\"",
     "typecheck": "tsc --noEmit",    
-    "prepublish": "npm run build",
+    "vscode:prepublish": "npm run build",
     "package": "npm run typecheck && npm run build && vsce package"
   },
   "dependencies": {
