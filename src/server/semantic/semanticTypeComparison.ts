@@ -98,8 +98,10 @@ function identical(left: SemanticType, right: SemanticType): boolean {
         case SemanticTypeKind.Bolt:
         case SemanticTypeKind.Interrupt:
         case SemanticTypeKind.Task:
-        case SemanticTypeKind.VoidReference:
             return true;
+        case SemanticTypeKind.VoidReference:
+            return right.kind === SemanticTypeKind.VoidReference
+                && left.targetInvariant === right.targetInvariant;
         case SemanticTypeKind.Dation:
             return right.kind === SemanticTypeKind.Dation
                 && left.direction === right.direction
@@ -123,6 +125,7 @@ function identical(left: SemanticType, right: SemanticType): boolean {
                     && identical(component.type, right.components[index].type));
         case SemanticTypeKind.Reference:
             return right.kind === SemanticTypeKind.Reference
+                && left.targetInvariant === right.targetInvariant
                 && identical(left.target, right.target);
         case SemanticTypeKind.Procedure:
             return right.kind === SemanticTypeKind.Procedure
@@ -156,10 +159,23 @@ export function isTypeAssignable(
     source: SemanticType,
     lengths: SimpleTypeLengths = RTOS_UH_DEFAULT_TYPE_LENGTHS
 ): boolean {
-    return semanticTypeEquals(target, source, lengths)
-        || (target.kind === SemanticTypeKind.VoidReference
-            && (source.kind === SemanticTypeKind.Reference
-                || source.kind === SemanticTypeKind.VoidReference));
+    if (semanticTypeEquals(target, source, lengths)) return true;
+
+    // A read-only reference can point to a writable object, but never vice versa.
+    if (target.kind === SemanticTypeKind.Reference
+        && source.kind === SemanticTypeKind.Reference) {
+        return target.targetInvariant && !source.targetInvariant
+            && semanticTypeEquals(target.target, source.target, lengths);
+    }
+
+    // VOID references accept arbitrary referenced types while preserving INV.
+    if (target.kind === SemanticTypeKind.VoidReference
+        && (source.kind === SemanticTypeKind.Reference
+            || source.kind === SemanticTypeKind.VoidReference)) {
+        return target.targetInvariant || !source.targetInvariant;
+    }
+
+    return false;
 }
 
 /** NIL is compatible with reference destinations, but not with scalar types. */

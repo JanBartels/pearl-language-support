@@ -27,7 +27,7 @@ export class ProcedureDeclarationDocumentationProvider
         if (lookup.element === node.name) {
             let text = md`# Procedure ${node.name.value}
 
-${node.parameters.reduce((n, parameter) => n + parameter.identifiers.identifiers.length, 0)}
+${node.parameters.reduce((n, parameter) => n + (parameter.identifiers?.identifiers.length ?? 1), 0)}
 formal parameter(s)${node.returnsKeyword ? ', with a result' : ', without a result'}.
 `;
             const symbol = semanticContext

@@ -35,6 +35,7 @@ export enum SemanticDiagnosticCode {
     SystemSpecificationMismatch = 'semantic.system-specification-mismatch',
     MissingSystemDeclarationForSpecification = 'semantic.missing-system-declaration-for-specification',
     InvalidDeclarationScope = 'semantic.invalid-declaration-scope',
+    InvalidDationCreationSource = 'semantic.invalid-dation-creation-source',
     GlobalDeclarationOutsideModule = 'semantic.global-declaration-outside-module',
     InvariantWithoutInitialization = 'semantic.invariant-without-initialization',
     InvalidSemaPresetValue = 'semantic.invalid-sema-preset-value',

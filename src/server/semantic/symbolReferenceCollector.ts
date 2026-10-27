@@ -6,6 +6,7 @@ import type { AstNode } from '../ast/astNode';
 import type { SourceValue } from '../core/sourceValue';
 import type { ShellCommandNode } from '../ast/module/shellCommandNode';
 import type { InitElementNode } from '../ast/problem/declarations/initElementNode';
+import type { DclDationAttributeNode } from '../ast/problem/declarations/dclDationAttributeNode';
 import type { ConstantFixedFactorNode } from '../ast/problem/expressions/constantFixedFactorNode';
 import type { NamedTypeNode } from '../ast/problem/types/namedTypeNode';
 import type { CallStatementNode } from '../ast/problem/statements/callStatementNode';
@@ -60,6 +61,11 @@ export class SymbolReferenceCollector {
                     }
                     break;
                 }
+
+                case AstKind.DclDationAttribute:
+                    add(node, (node as DclDationAttributeNode).systemDation,
+                        SymbolReferenceKind.DationCreationSource);
+                    break;
 
                 case AstKind.InitElement: {
                     const initializer = (node as InitElementNode).value;

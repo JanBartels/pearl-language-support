@@ -35,6 +35,7 @@ export enum AstKind {
     NamedType,
 
     ProblemDataAttribute,
+    DclDationAttribute,
     GlobalAttribute,
     InitializationAttribute,
     InitElement,

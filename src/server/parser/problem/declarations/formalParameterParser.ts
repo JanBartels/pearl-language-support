@@ -8,21 +8,24 @@ import { VirtualDimensionListParser } from '../dimensions/virtualDimensionListPa
 import { ProblemDataTypeParser } from '../types/problemDataTypeParser';
 import { ProcedureParameterTypeParser } from './procedureParameterTypeParser';
 
-/** FormalParameter ::= IdentifierOrList [VirtualDimensions] [INV] ParameterType [IDENT]. */
+/** FormalParameter ::= [IdentifierOrList [VirtualDimensions]] [INV] ParameterType [IDENT]. */
 export class FormalParameterParser extends ParserBase {
     override parse(): FormalParameterNode | undefined {
         this.skipTrivia();
         const identifiers = new OneIdentifierOrListParser(this.context).parse();
-        if (!identifiers) return undefined;
-
-        const dimension = new VirtualDimensionListParser(this.context).parse();
+        // RTOS-UH permits unnamed formal parameters, e.g. PROC(FLOAT IDENT).
+        const dimension = identifiers
+            ? new VirtualDimensionListParser(this.context).parse()
+            : undefined;
         this.skipTrivia();
         const inv = this.acceptKeyword('INV');
 
         const type = new ProcedureParameterTypeParser(this.context).parse()
             ?? new ProblemDataTypeParser(this.context).parse();
         if (!type) {
-            this.problems.error(this.location(), 'Expected formal parameter type.');
+            if (identifiers) {
+                this.problems.error(this.location(), 'Expected formal parameter type.');
+            }
             return undefined;
         }
 

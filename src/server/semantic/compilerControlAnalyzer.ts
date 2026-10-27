@@ -83,8 +83,8 @@ export class CompilerControlAnalyzer {
      * structure, even though it is not stated explicitly as a placement rule
      * in the RTOS-UH manual.
      *
-     * RTOS-UH 5.4.6 additionally requires the PEARL GLOBAL attribute;
-     * the compiler option does not itself make a procedure global.
+     * RTOS-UH 5.4.6 distinguishes the +G option from the PEARL GLOBAL
+     * attribute; the compiler option does not itself make a procedure global.
      */
     private analyzeGOption(
         root: AstNode,
@@ -104,16 +104,6 @@ export class CompilerControlAnalyzer {
                     continue;
                 }
 
-                if (!procedure.global) {
-                    diagnostics.push({
-                        code: SemanticDiagnosticCode.GProcedureRequiresGlobal,
-                        severity: SemanticDiagnosticSeverity.Error,
-                        location: comment.location,
-                        message: `PROC '${procedure.name.value}' mit /*+G*/ benötigt `
-                            + 'das Attribut GLOBAL (RTOS-UH, Abschnitt 5.4.6).'
-                    });
-                }
-
                 const firstTaskIndex = declarations.findIndex(
                     child => child.kind === AstKind.TaskDeclaration
                 );
@@ -126,6 +116,7 @@ export class CompilerControlAnalyzer {
                             + 'ersten TASK des Moduls stehen (RTOS-UH-Laderbedingung).'
                     });
                 }
+
                 return;
             }
         }

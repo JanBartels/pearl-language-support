@@ -21,6 +21,7 @@ export enum SymbolReferenceKind {
     Type = 'type',
     JumpTarget = 'jumpTarget',
     Initialization = 'initialization',
+    DationCreationSource = 'dationCreationSource',
     ShellEntryPoint = 'shellEntryPoint',
     BlockEnd = 'blockEnd',
     RepetitionEnd = 'repetitionEnd'

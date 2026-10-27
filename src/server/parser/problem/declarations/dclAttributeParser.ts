@@ -8,6 +8,7 @@ import { DclAttributeNode } from "../../../ast/problem/declarations/dclAttribute
 import { ProblemDataAttributeParser } from "./problemDataAttributeParser";
 import { SemaAttributeParser } from "./semaAttributeParser";
 import { BoltAttributeParser } from "./boltAttributeParser";
+import { DclDationAttributeParser } from "./dclDationAttributeParser";
 
 export class DclAttributeParser extends ParserBase {
 
@@ -27,6 +28,11 @@ export class DclAttributeParser extends ParserBase {
 
         if (bolt) {
             return bolt;
+        }
+
+        const dation = new DclDationAttributeParser(this.context).parse();
+        if (dation) {
+            return dation;
         }
 
         return new ProblemDataAttributeParser(

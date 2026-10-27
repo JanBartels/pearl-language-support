@@ -15,7 +15,7 @@ export class FormalParameterDocumentationProvider extends DocumentationProvider<
         lookup: AstLookupResult,
         semanticContext?: SemanticContext
     ): string | undefined {
-        const name = node.identifiers.identifiers.find(value => value === lookup.element);
+        const name = node.identifiers?.identifiers.find(value => value === lookup.element);
         if (name) {
             const text = md`# Parameter ${name.value}
 

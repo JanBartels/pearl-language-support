@@ -29,6 +29,10 @@ export class RefTypeParser extends ParserBase {
             return undefined;
         }
 
+        // INV here protects the referenced object, not the REF variable.
+        // REF [INV] TargetType (PEARL 90, section 5.9).
+        this.skipTrivia();
+        const inv = this.acceptKeyword("INV");
         const target = this.parseTarget();
 
         if (!target) {
@@ -38,7 +42,11 @@ export class RefTypeParser extends ParserBase {
             return undefined;
         }
 
-        return new RefTypeNode( this.tokenValue(keyword), target );
+        return new RefTypeNode(
+            this.tokenValue(keyword),
+            target,
+            inv ? this.tokenValue(inv) : undefined
+        );
     }
 
     private parseTarget(): RefTargetTypeNode | undefined {

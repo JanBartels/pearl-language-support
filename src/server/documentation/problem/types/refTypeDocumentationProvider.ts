@@ -15,6 +15,12 @@ export class RefTypeDocumentationProvider
         lookup: AstLookupResult
     ): string | undefined {
 
+        if (lookup.element === node.targetInv) {
+            return md`# INV (referenced object)
+
+In \`REF INV\`, the referenced object is protected against assignment through this reference. This is distinct from \`INV REF\`, which protects the reference variable itself.`;
+        }
+
         if (lookup.element !== node.keyword) {
             return undefined;
         }
@@ -31,6 +37,7 @@ Examples:
 \`\`\`pearl
 DCL Counter FIXED;
 DCL Pointer REF FIXED;
+DCL ReadOnlyPointer REF INV FIXED;
 DCL MyBolt REF BOLT;
 DCL MySemaphore REF SEMA;
 DCL MyDation REF DATION INOUT ALPHIC;

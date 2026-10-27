@@ -19,14 +19,14 @@ export class FormalParameterNode extends AstNode {
     private static readonly provider = new FormalParameterDocumentationProvider();
 
     constructor(
-        public readonly identifiers: OneIdentifierOrListNode,
+        public readonly identifiers: OneIdentifierOrListNode | undefined,
         public readonly dimension: VirtualDimensionListNode | undefined,
         public readonly invKeyword: SourceValue<string> | undefined,
         public readonly type: FormalParameterTypeNode,
         public readonly identKeyword: SourceValue<string> | undefined
     ) {
         super(AstKind.FormalParameter);
-        this.adopt(identifiers);
+        if (identifiers) this.adopt(identifiers);
         if (dimension) this.adopt(dimension);
         this.adopt(type);
     }
@@ -37,7 +37,7 @@ export class FormalParameterNode extends AstNode {
 
     override lookupSourceValue(position: SourceOffset): AstLookupResult | undefined {
         // Bind parameter names to this node, not to the generic identifier-list provider.
-        for (const name of this.identifiers.identifiers) {
+        for (const name of this.identifiers?.identifiers ?? []) {
             const result = this.lookupOwnSourceValue(position, name);
             if (result) return result;
         }
@@ -48,11 +48,12 @@ export class FormalParameterNode extends AstNode {
     }
 
     override getChildren(): readonly AstNode[] {
-        return [this.identifiers, ...(this.dimension ? [this.dimension] : []), this.type];
+        return [...(this.identifiers ? [this.identifiers] : []),
+            ...(this.dimension ? [this.dimension] : []), this.type];
     }
 
     override dumpLabel(): string {
-        return `FormalParameter(${this.identifiers.identifiers.map(n => n.value).join(', ')}${
+        return `FormalParameter(${this.identifiers?.identifiers.map(n => n.value).join(', ') ?? '<unnamed>'}${
             this.identKeyword ? ', IDENT' : ''}${this.invKeyword ? ', INV' : ''})`;
     }
 }

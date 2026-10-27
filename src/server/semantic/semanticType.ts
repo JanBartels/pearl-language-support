@@ -175,6 +175,9 @@ export interface ReferenceType {
     readonly kind: SemanticTypeKind.Reference;
 
     readonly target: SemanticType;
+
+    /** INV on the target (REF INV T), independent of INV on the reference variable. */
+    readonly targetInvariant: boolean;
 }
 
 
@@ -189,6 +192,9 @@ export interface NamedType {
 export interface VoidReferenceType {
 
     readonly kind: SemanticTypeKind.VoidReference;
+
+    /** Even an untyped REF STRUCT[] preserves the target's INV protection. */
+    readonly targetInvariant: boolean;
 }
 
 

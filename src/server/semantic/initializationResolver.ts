@@ -70,6 +70,7 @@ export interface InitializationResolverContext {
     resolveReferenceInitializer(
         identifier: SourceValue<string>,
         expectedTargetType: SemanticType | undefined,
+        targetInvariant: boolean,
         environment: Environment
     ): DataObjectSymbol | TaskSymbol | ProcedureSymbol | undefined;
 
@@ -153,6 +154,7 @@ export class InitializationResolver {
             return this.resolveReferenceInitialization(
                 initialization,
                 underlyingType.target,
+                underlyingType.targetInvariant,
                 identifierCount
             );
         }
@@ -161,6 +163,7 @@ export class InitializationResolver {
             return this.resolveReferenceInitialization(
                 initialization,
                 undefined,
+                underlyingType.targetInvariant,
                 identifierCount
             );
         }
@@ -240,6 +243,7 @@ export class InitializationResolver {
                 initialization,
                 type,
                 elementType.target,
+                elementType.targetInvariant,
                 identifierCount,
                 environment
             );
@@ -250,6 +254,7 @@ export class InitializationResolver {
                 initialization,
                 type,
                 undefined,
+                elementType.targetInvariant,
                 identifierCount,
                 environment
             );
@@ -312,6 +317,7 @@ export class InitializationResolver {
     private resolveReferenceInitialization(
         initialization: InitializationAttributeNode,
         expectedTargetType: SemanticType | undefined,
+        targetInvariant: boolean,
         identifierCount: number
     ): DataObjectInitialization | undefined {
         if (initialization.elements.length !== identifierCount) {
@@ -347,6 +353,7 @@ export class InitializationResolver {
                 const target = this.context.resolveReferenceInitializer(
                     element.value.identifier,
                     expectedTargetType,
+                    targetInvariant,
                     environment
                 );
                 if (!target) return;
@@ -364,6 +371,7 @@ export class InitializationResolver {
         initialization: InitializationAttributeNode,
         type: ArrayType,
         expectedTargetType: SemanticType | undefined,
+        targetInvariant: boolean,
         identifierCount: number,
         environment: Environment
     ): DataObjectInitialization | undefined {
@@ -398,6 +406,7 @@ export class InitializationResolver {
             const target = this.context.resolveReferenceInitializer(
                 element.value.identifier,
                 expectedTargetType,
+                targetInvariant,
                 environment
             );
             if (!target) return undefined;

@@ -195,9 +195,16 @@ SPC HuhuTask TASK;
 TYPE TRefProc REF PROC( FIXED ) RETURNS( FIXED );
 DCL MyRefProc TRefProc;
 
+DCL RIS REF INV STRUCT[];
+
+FloatProc: PROC( FLOAT IDENT ) RETURNS( BIT );
+   RETURN('1'B);
+END;
+
 HuhuTask: TASK PRIO 23;
 DCL HuhuA FIXED;
 DCL Var FLOAT;
+DCL LocalDation DATION INOUT ALPHIC CREATED(File);
 
 HuhuA = LEN( AusEinerAnderenWelt );
 CALL ASSIGN(A1,'/TY');

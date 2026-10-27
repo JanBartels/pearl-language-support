@@ -18,6 +18,7 @@ import { SpcProcedureAttributeNode } from '../ast/problem/specifications/spcProc
 import { CallStatementNode } from '../ast/problem/statements/callStatementNode';
 import { RepetitionNode } from '../ast/problem/statements/repetitionNode';
 import { ProblemDataAttributeNode } from '../ast/problem/declarations/problemDataAttributeNode';
+import { DclDationAttributeNode } from '../ast/problem/declarations/dclDationAttributeNode';
 import { SemaAttributeNode } from '../ast/problem/declarations/semaAttributeNode';
 import { BoltAttributeNode } from '../ast/problem/declarations/boltAttributeNode';
 import type { GlobalAttributeNode } from '../ast/problem/declarations/globalAttributeNode';
@@ -395,6 +396,7 @@ class SemanticAnalysisState implements
     resolveReferenceInitializer(
         identifier: SourceValue<string>,
         expectedTargetType: SemanticType | undefined,
+        targetInvariant: boolean,
         environment: Environment
     ): DataObjectSymbol | TaskSymbol | ProcedureSymbol | undefined {
         const symbol = resolveSymbol(environment, identifier.value);
@@ -431,6 +433,13 @@ class SemanticAnalysisState implements
         }
 
         if (expectedTargetType && !semanticTypeEquals(expectedTargetType, symbol.type)) {
+            this.reportInvalidInitialization(identifier, 'REF');
+            return undefined;
+        }
+
+        // An INV object must not be writable through an ordinary REF.
+        // REF INV may also refer to an ordinary (writable) object.
+        if (symbol.assignmentProtected && !targetInvariant) {
             this.reportInvalidInitialization(identifier, 'REF');
             return undefined;
         }
@@ -699,6 +708,15 @@ class SemanticAnalysisState implements
             severity: SemanticDiagnosticSeverity.Error,
             location: keyword.location,
             message: `${contextName} erwartet einen auswertbaren konstanten FIXED-Ausdruck.`
+        });
+    }
+
+    reportInvalidDationCreationSource(name: SourceValue<string>): void {
+        this.diagnostics.push({
+            code: SemanticDiagnosticCode.InvalidDationCreationSource,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: name.location,
+            message: `CREATED(${name.value}) erwartet eine spezifizierte System-DATION.`
         });
     }
 
@@ -1159,7 +1177,7 @@ export class SemanticAnalyzer {
         state: SemanticAnalysisState
     ): void {
         for (const parameter of node.parameters) {
-            for (const name of parameter.identifiers.identifiers) {
+            for (const name of parameter.identifiers?.identifiers ?? []) {
                 const kind = parameter.identKeyword
                     ? SymbolKind.Identification : SymbolKind.Parameter;
                 const existing = state.declarationIndex.index(scope, { kind, name });
@@ -1479,7 +1497,7 @@ export class SemanticAnalyzer {
         const signature: ProcedureType = {
             kind: SemanticTypeKind.Procedure,
             parameters: node.parameters.flatMap(parameter =>
-                parameter.identifiers.identifiers.map(() => ({
+                Array.from({ length: parameter.identifiers?.identifiers.length ?? 1 }, () => ({
                     type: parameterTypes.get(parameter),
                     byIdentification: parameter.identKeyword !== undefined
                 }))
@@ -1524,7 +1542,7 @@ export class SemanticAnalyzer {
         let procedureEnvironment = this.createEnvironment(scope, outerEnvironment);
         for (const parameter of node.parameters) {
             const type = parameterTypes.get(parameter);
-            for (const name of parameter.identifiers.identifiers) {
+            for (const name of parameter.identifiers?.identifiers ?? []) {
                 const indexed = state.declarationIndex.lookupInScope(scope, name.value);
                 if (indexed?.name !== name) continue;
                 const original = state.parameterSymbols.get(name);
@@ -1668,6 +1686,14 @@ export class SemanticAnalyzer {
         }
 
         switch (node.attribute.kind) {
+            case AstKind.DclDationAttribute:
+                return this.analyzeDationDeclaration(
+                    node,
+                    node.attribute as DclDationAttributeNode,
+                    environment,
+                    state
+                );
+
             case AstKind.ProblemDataAttribute:
                 return this.analyzeProblemDataDeclaration(
                     node,
@@ -1699,6 +1725,48 @@ export class SemanticAnalyzer {
             default:
                 return environment;
         }
+    }
+
+    private analyzeDationDeclaration(
+        node: DclDeclarationSentenceNode,
+        attribute: DclDationAttributeNode,
+        environment: Environment,
+        state: SemanticAnalysisState
+    ): Environment {
+        if (attribute.global && environment.scope.kind !== ScopeKind.Module) {
+            state.reportGlobalDeclarationOutsideModule(attribute.global.keyword);
+        }
+
+        // CREATED denotes a system-dation name in the existing semantic scope.
+        // Its binding is shared with Hover, Definition and Find References.
+        if (attribute.systemDation) {
+            const source = resolveSymbol(environment, attribute.systemDation.value);
+            if (!source) {
+                state.reportUnknownIdentifier(attribute.systemDation);
+            } else {
+                state.bind(attribute.systemDation, source);
+                if (source.kind !== SymbolKind.DataObject
+                    || source.type.kind !== SemanticTypeKind.Dation) {
+                    state.reportInvalidDationCreationSource(attribute.systemDation);
+                }
+            }
+        }
+
+        if (!attribute.direction || !attribute.dationClass) {
+            return environment;
+        }
+        const direction = this.dationDirection(attribute.direction.value);
+        const dationClass = this.dationClass(attribute.dationClass.value);
+        if (!direction || !dationClass) return environment;
+
+        return this.introduceDeclaredDataObjects(
+            node.identifiers,
+            { kind: SemanticTypeKind.Dation, direction, dationClass },
+            false,
+            this.globalSymbolAttribute(attribute.global),
+            environment,
+            state
+        );
     }
 
     private analyzeProblemDataDeclaration(

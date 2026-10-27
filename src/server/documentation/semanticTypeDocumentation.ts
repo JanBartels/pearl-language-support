@@ -58,13 +58,13 @@ export function formatSemanticType(type: SemanticType): string {
                 ? ` RETURNS(${type.resultType ? formatSemanticType(type.resultType) : '?'})` : ''}`;
 
         case SemanticTypeKind.Reference:
-            return `REF ${formatSemanticType(type.target)}`;
+            return `REF ${type.targetInvariant ? 'INV ' : ''}${formatSemanticType(type.target)}`;
 
         case SemanticTypeKind.Named:
             return type.symbol.name.value;
 
         case SemanticTypeKind.VoidReference:
-            return 'REF STRUCT[]';
+            return `REF ${type.targetInvariant ? 'INV ' : ''}STRUCT[]`;
     }
 }
 

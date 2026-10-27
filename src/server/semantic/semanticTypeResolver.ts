@@ -278,7 +278,8 @@ export class SemanticTypeResolver {
             && (node.target as StructTypeNode).components.length === 0
         ) {
             return {
-                kind: SemanticTypeKind.VoidReference
+                kind: SemanticTypeKind.VoidReference,
+                targetInvariant: node.targetInv !== undefined
             };
         }
 
@@ -290,7 +291,8 @@ export class SemanticTypeResolver {
 
         return {
             kind: SemanticTypeKind.Reference,
-            target
+            target,
+            targetInvariant: node.targetInv !== undefined
         };
     }
 

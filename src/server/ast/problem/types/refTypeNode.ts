@@ -35,7 +35,9 @@ export class RefTypeNode extends AstNode {
 
     constructor(
         public readonly keyword: SourceValue<string>,
-        public readonly target: RefTargetTypeNode
+        public readonly target: RefTargetTypeNode,
+        /** INV qualifies the referenced object, not this reference variable. */
+        public readonly targetInv: SourceValue<string> | undefined = undefined
     ) {
         super(AstKind.RefType);
 
@@ -55,11 +57,12 @@ export class RefTypeNode extends AstNode {
             return keyword;
         }
 
-        return this.target.lookupSourceValue(position);
+        return this.lookupOwnSourceValue(position, this.targetInv)
+            ?? this.target.lookupSourceValue(position);
     }
 
     public override dumpLabel(): string {
-        return "RefType";
+        return this.targetInv ? "RefType(INV)" : "RefType";
     }
 
     public override getChildren(): readonly AstNode[] {
