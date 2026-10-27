@@ -194,10 +194,15 @@ SPC HuhuTask TASK;
 
 TYPE TRefProc REF PROC( FIXED ) RETURNS( FIXED );
 DCL MyRefProc TRefProc;
+TYPE TRefProc2 REF PROC( FIXED );
+DCL MyRefProc2 TRefProc2;
 
 DCL RIS REF INV STRUCT[];
 
 FloatProc: PROC( FLOAT IDENT ) RETURNS( BIT );
+   CALL MyRefProc2(42);
+   MyRefProc2(42);
+
    RETURN('1'B);
 END;
 
@@ -267,6 +272,7 @@ STR.CHAR(3) = 'D';
 STR = KON( 'String1', 2, 4, 'STRING2', 4, 6 );
 PUT STR TO D BY LIST,SKIP;
 CALL GlobProc;    ! Aus Include-Datei
+GlobProc();
 SEMASET 3, MySema;
 REQUEST MySema;
 END;
@@ -297,6 +303,7 @@ FIN;
 IF x = 0 THEN     ! Operator = ist Fehler!
    ! Kommentar
    CALL something( A1, 5,12.3 );
+   something( A1, 5,12.3 );
    CALL somethingSPC;
    x = somethingREF(5);
    GOTO MyLabel;

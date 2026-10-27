@@ -1582,17 +1582,31 @@ export class SemanticAnalyzer {
                 }
                 return environment;
             }
-            // Forward references and general expression names will be resolved later.
+            // The statement is syntactically a CALL, even when its target is
+            // unknown. Report this at the semantic lookup site rather than
+            // manufacturing a binding or a diagnostic in the reference index.
+            state.reportUnknownIdentifier(node.target);
             return environment;
         }
         state.bind(node.target, symbol);
         let signature: ProcedureType | undefined;
         if (symbol.kind === SymbolKind.Procedure) {
             signature = symbol.signature;
-        } else if (symbol.kind === SymbolKind.DataObject
-            && symbol.type.kind === SemanticTypeKind.Reference
-            && symbol.type.target.kind === SemanticTypeKind.Procedure) {
-            signature = symbol.type.target;
+        } else if (symbol.kind === SymbolKind.DataObject) {
+            // TYPE aliases retain their identity on the symbol. Unwrap only
+            // for the question whether the referenced object is callable.
+            // Both the reference itself and its target may be named types.
+            const type = state.resolveUnderlyingType(symbol.type);
+            if (!type) return environment; // already invalid/unresolved TYPE
+            if (type.kind === SemanticTypeKind.Reference) {
+                const target = state.resolveUnderlyingType(type.target);
+                if (!target) return environment;
+                if (target.kind === SemanticTypeKind.Procedure) signature = target;
+            }
+            if (!signature) {
+                state.reportInvalidCallTarget(node.target);
+                return environment;
+            }
         } else {
             state.reportInvalidCallTarget(node.target);
             return environment;

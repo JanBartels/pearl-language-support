@@ -10,7 +10,7 @@ import { CaseStatementParser } from "./caseStatementParser";
 import { CallStatementParser } from "./callStatementParser";
 import { ReturnStatementParser } from "./returnStatementParser";
 import { GotoStatementParser } from "./gotoStatementParser";
-import { LabeledStatementParser } from "./labeledStatementParser";
+import { IdentifierStatementTailParser } from "./identifierStatementTailParser";
 import { EmptyStatementNode } from "../../../ast/problem/statements/emptyStatementNode";
 
 /** All nested statement constructs are dispatched through this common entry point. */
@@ -47,16 +47,13 @@ export class StatementParser extends ParserBase {
             return new GotoStatementParser(this.context).parse();
         }
 
-        // Identifier is a shared prefix of labels and identifier-led
-        // statements. Only ':' introduces a label. Other tails (currently
-        // unsupported assignments, etc.) keep the previous recovery behavior.
+        // Labels, implicit calls and future assignments share an identifier prefix.
+        // The tail parser only commits to the forms established by the grammar.
         if (this.isIdentifier()) {
             const identifier = this.acceptIdentifier()!;
-            this.skipTrivia();
-            if (this.isOperator(":")) {
-                return new LabeledStatementParser(this.context)
-                    .parseAfterIdentifier(identifier);
-            }
+            const statement = new IdentifierStatementTailParser(this.context)
+                .parseAfterIdentifier(identifier);
+            if (statement) return statement;
             this.skipUnsupportedStatement();
             return undefined;
         }
