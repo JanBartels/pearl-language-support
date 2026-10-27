@@ -4,6 +4,7 @@
 import { AstNode } from '../ast/astNode';
 import { AstLookupResult } from '../ast/astLookupResult';
 import type { SemanticContext } from '../semantic/semanticContext';
+import type { CallSignatureIndex } from '../semantic/callSignatureIndex';
 
 /**
  * Provides end-user documentation for a specific AST node type.
@@ -25,7 +26,8 @@ export abstract class DocumentationProvider<T extends AstNode> {
     abstract getDocumentation(
         node: T,
         lookup: AstLookupResult,
-        semanticContext?: SemanticContext
+        semanticContext?: SemanticContext,
+        callSignatures?: CallSignatureIndex
     ): string | undefined;
 
 }

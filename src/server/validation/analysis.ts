@@ -14,6 +14,8 @@ import { SemanticContext } from "../semantic/semanticContext";
 import { SymbolReferenceIndex } from '../semantic/symbolReferenceIndex';
 import { SymbolReferenceResolutionIndex } from '../semantic/symbolReferenceResolutionIndex';
 import { SymbolOccurrenceIndex } from '../semantic/symbolOccurrenceIndex';
+import { CallSignatureIndex } from '../semantic/callSignatureIndex';
+import { CallSignatureHelpIndex } from '../semantic/callSignatureHelpIndex';
 
 export function collectBlockComments(tokens: readonly Token[]): readonly CommentToken[] {
     return tokens.filter(
@@ -54,9 +56,37 @@ export class Analysis {
         readonly macroDefinitions: readonly MacroDefinition[] = [],
 
         /** Macro occurrence groups, independent of semantic PEARL symbols. */
-        readonly macroOccurrences: MacroOccurrenceIndex = new MacroOccurrenceIndex(macroDefinitions, macroReferences)
+        readonly macroOccurrences: MacroOccurrenceIndex = new MacroOccurrenceIndex(macroDefinitions, macroReferences),
+
+        /** Active block comments from this translation unit, including nested includes. */
+        readonly activeBlockComments: readonly CommentToken[] = []
 
     ) {
+    }
+
+    private cachedCallSignatureIndex?: CallSignatureIndex;
+
+    /** Shared compiler-side index, built once per analysis. */
+    get callSignatures(): CallSignatureIndex | undefined {
+        if (!this.semanticContext) return undefined;
+        if (!this.cachedCallSignatureIndex) {
+            this.cachedCallSignatureIndex = new CallSignatureIndex(
+                this.ast, this.semanticContext, this.activeBlockComments);
+        }
+        return this.cachedCallSignatureIndex;
+    }
+
+    private cachedCallSignatureHelp?: CallSignatureHelpIndex;
+
+    /** Built once per completed translation-unit analysis and reused on edits. */
+    get callSignatureHelp(): CallSignatureHelpIndex | undefined {
+        if (!this.semanticContext) return undefined;
+        if (!this.cachedCallSignatureHelp) {
+            const signatures = this.callSignatures;
+            if (!signatures) return undefined;
+            this.cachedCallSignatureHelp = new CallSignatureHelpIndex(this.ast, signatures);
+        }
+        return this.cachedCallSignatureHelp;
     }
 
     private cachedBlockComments?: readonly CommentToken[];

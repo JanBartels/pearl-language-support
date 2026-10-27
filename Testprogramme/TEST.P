@@ -194,7 +194,7 @@ SPC HuhuTask TASK;
 
 TYPE TRefProc REF PROC( FIXED ) RETURNS( FIXED );
 DCL MyRefProc TRefProc;
-TYPE TRefProc2 REF PROC( FIXED );
+TYPE TRefProc2 REF PROC( /* aParameter */ FIXED );
 DCL MyRefProc2 TRefProc2;
 
 DCL RIS REF INV STRUCT[];
@@ -202,7 +202,7 @@ DCL RIS REF INV STRUCT[];
 FloatProc: PROC( FLOAT IDENT ) RETURNS( BIT );
    CALL MyRefProc2(42);
    MyRefProc2(42);
-
+   MyRefProc2( 4 );
    RETURN('1'B);
 END;
 
@@ -213,6 +213,7 @@ DCL LocalDation DATION INOUT ALPHIC CREATED(File);
 
 HuhuA = LEN( AusEinerAnderenWelt );
 CALL ASSIGN(A1,'/TY');
+CALL ASSIGN( A1, 'Huhu');
 CALL Boeser_Unterstrich;
 END;
 
@@ -259,6 +260,10 @@ DCL SpecialChar CHAR(20);
 END;
 
 something2: PROC( D DATION INOUT ALPHIC IDENT, A FIXED, B FLOAT) RETURNS( FIXED );
+IF something2( A1, 45,47.11 ) == 2
+THEN
+   ASSIGN( A1, '/B3' );
+FIN;
 END;
 
 something: PROC( D DATION INOUT ALPHIC IDENT, A FIXED, B FLOAT);

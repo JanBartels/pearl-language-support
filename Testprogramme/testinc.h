@@ -15,7 +15,7 @@ der ganz lang ist,
 um den Collector der Hauptdatei
 zu verwirren */
 
-SPC ASSIGN ENTRY( DATION INOUTP90_ ALPHIC IDENT, CHAR(24)) GLOBAL;
+SPC ASSIGN ENTRY( /* Dation */ DATION INOUTP90_ ALPHIC IDENT, /* Devicename */ CHAR(24)) GLOBAL;
 
 #define AusEinerAnderenWelt "'Ich bin ein Alien"
 

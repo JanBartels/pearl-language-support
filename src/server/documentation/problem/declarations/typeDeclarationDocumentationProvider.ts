@@ -5,6 +5,10 @@ import { DocumentationProvider } from "../../documentationProvider";
 import { AstLookupResult } from "../../../ast/astLookupResult";
 import { md } from "../../markdownUtils";
 
+import type { CallSignatureIndex } from '../../../semantic/callSignatureIndex';
+import type { SemanticContext } from '../../../semantic/semanticContext';
+import { formatCallSignatures } from '../../callSignatureFormatting';
+
 import { TypeDeclarationNode } from "../../../ast/problem/declarations/typeDeclarationNode";
 
 export class TypeDeclarationDocumentationProvider
@@ -12,7 +16,9 @@ export class TypeDeclarationDocumentationProvider
 
     override getDocumentation(
         node: TypeDeclarationNode,
-        lookup: AstLookupResult
+        lookup: AstLookupResult,
+        _semanticContext?: SemanticContext,
+        callSignatures?: CallSignatureIndex
     ): string | undefined {
 
         if (lookup.element === node.keyword) {
@@ -30,11 +36,13 @@ TYPE Counter FIXED(31);
         }
 
         if (lookup.element === node.name) {
-            return md`
+            const documentation = md`
 # Type definition
 
 Defines the data type \`${node.name.value}\`.
 `;
+            const signature = formatCallSignatures(callSignatures?.getForElement(node.name));
+            return signature ? `${documentation}\n\n**Signature:** \`${signature}\`` : documentation;
         }
 
         return undefined;

@@ -68,6 +68,7 @@ import { CommentFoldingCollector } from './lexer/commentFoldingCollector';
 import { PreprocessorFoldingCollector } from './preproc/preprocessorFoldingCollector';
 import { AstFoldingCollector } from './ast/astFoldingCollector';
 import { SourceOffset } from './core/sourceOffset';
+import { createSignatureHelp } from './lsp/createSignatureHelp';
 
 const connection = createConnection(ProposedFeatures.all);
 
@@ -112,6 +113,10 @@ connection.onInitialize((params: InitializeParams) => {
       definitionProvider: true,
       declarationProvider: true,
       referencesProvider: true,
+      signatureHelpProvider: {
+        triggerCharacters: ['(', ','],
+        retriggerCharacters: [',']
+      },
       foldingRangeProvider: true,
       semanticTokensProvider: {
         legend: tokenLegend.getLegend(),
@@ -190,7 +195,8 @@ connection.onHover(params => {
 
         const markdown = AstLookupResultDocumentationProvider.getDocumentation(
             result,
-            analysisResult.rootAnalysis.semanticContext
+            analysisResult.rootAnalysis.semanticContext,
+            analysisResult.rootAnalysis.callSignatures
         );
         if (markdown) {
             const symbol = analysisResult.rootAnalysis.semanticContext
@@ -334,6 +340,27 @@ connection.onReferences(params => {
         params.context.includeDeclaration,
         documentRegistry
     );
+});
+
+// ------------------------------
+// Signature Help (compiler-side call position index)
+// ------------------------------
+
+connection.onSignatureHelp(params => {
+    const document = documentRegistry.get(params.textDocument.uri);
+    if (!document) return undefined;
+
+    const analysisResult = documentRegistry.getAnalysisResultForSource(
+        params.textDocument.uri, document.version
+    );
+    if (!analysisResult) return undefined;
+
+    const position: SourceOffset = {
+        uri: params.textDocument.uri,
+        offset: document.offsetAt(params.position)
+    };
+    const context = analysisResult.rootAnalysis.callSignatureHelp?.lookup(position);
+    return context ? createSignatureHelp(context) : undefined;
 });
 
 // ------------------------------

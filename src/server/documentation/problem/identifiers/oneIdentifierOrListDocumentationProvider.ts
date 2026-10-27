@@ -13,12 +13,15 @@ import {
     appendSemanticPresetValues
 } from '../../semanticConstantValueDocumentation';
 import { appendSemanticSymbolDocumentation } from '../../semanticSymbolDocumentation';
+import type { CallSignatureIndex } from '../../../semantic/callSignatureIndex';
+import { formatCallSignatures } from '../../callSignatureFormatting';
 
 export class OneIdentifierOrListDocumentationProvider extends DocumentationProvider<OneIdentifierOrListNode> {
     override getDocumentation(
         node: OneIdentifierOrListNode,
         lookup: AstLookupResult,
-        semanticContext?: SemanticContext
+        semanticContext?: SemanticContext,
+        callSignatures?: CallSignatureIndex
     ): string | undefined {
         for (const identifier of node.identifiers) {
             if (lookup.element !== identifier) {
@@ -44,7 +47,8 @@ ${node.parenthesized
                 return documentation;
             }
 
-            documentation = appendSemanticSymbolDocumentation(documentation, symbol, semanticContext);
+            documentation = appendSemanticSymbolDocumentation(documentation, symbol, semanticContext,
+                formatCallSignatures(callSignatures?.getForElement(identifier)));
 
             if (symbol.kind === SymbolKind.DataObject) {
                 const constantValue = semanticContext.namedConstantValues.get(symbol);

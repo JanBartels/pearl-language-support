@@ -9,12 +9,15 @@ import { formatBuiltinSignature } from '../../../semantic/builtins/builtinSignat
 import { DocumentationProvider } from '../../documentationProvider';
 import { md } from '../../markdownUtils';
 import { appendSemanticSymbolDocumentation } from '../../semanticSymbolDocumentation';
+import type { CallSignatureIndex } from '../../../semantic/callSignatureIndex';
+import { formatCallSignatures } from '../../callSignatureFormatting';
 
 export class CallStatementDocumentationProvider extends DocumentationProvider<CallStatementNode> {
     override getDocumentation(
         node: CallStatementNode,
         lookup: AstLookupResult,
-        semanticContext?: SemanticContext
+        semanticContext?: SemanticContext,
+        callSignatures?: CallSignatureIndex
     ): string | undefined {
         if (lookup.element === node.keyword) {
             return '# CALL\n\nRuft eine Prozedur oder einen REF-PROC-Zeiger auf.';
@@ -27,7 +30,8 @@ ${node.argumentsList === undefined ? 'Ohne Parameterliste' :
             const symbol = semanticContext && node.target
                 ? lookupBoundSymbol(semanticContext.bindings, node.target) : undefined;
             if (symbol && semanticContext) {
-                return appendSemanticSymbolDocumentation(text, symbol, semanticContext);
+                return appendSemanticSymbolDocumentation(text, symbol, semanticContext,
+                    node.target ? formatCallSignatures(callSignatures?.getForElement(node.target)) : undefined);
             }
             const builtin = semanticContext && node.target
                 ? semanticContext.builtinBindings.get(node.target) : undefined;

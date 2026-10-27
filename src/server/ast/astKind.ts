@@ -86,5 +86,8 @@ export enum AstKind {
     Operator,
     Literal,
 
-    Identifier
+    Identifier,
+
+    ActualParameterList,
+    ActualParameter
 }

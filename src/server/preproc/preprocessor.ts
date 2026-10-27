@@ -7,7 +7,7 @@ import { ProblemCollection } from '../core/problemCollection';
 import { Span } from '../core/span';
 import { Location } from '../core/location';
 
-import { Token, TokenKind } from '../lexer/token';
+import { Token, TokenKind, CommentKind, isCommentToken } from '../lexer/token';
 import { TokenStream } from '../lexer/tokenStream';
 
 import { Source } from "../source/source";
@@ -282,6 +282,11 @@ export class Preprocessor implements TokenStream {
 
             }
 
+            // Capture only active comments. Child preprocessors capture their
+            // own comments, so an expansion is not recorded a second time.
+            if (isCommentToken(token) && token.commentKind === CommentKind.Block) {
+                this.context.activeBlockComments.push(token);
+            }
             this.currentToken = token;
             stream.next();
             return;

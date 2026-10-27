@@ -8,12 +8,15 @@ import type { SemanticContext } from '../../../semantic/semanticContext';
 import { DocumentationProvider } from '../../documentationProvider';
 import { md } from '../../markdownUtils';
 import { appendSemanticSymbolDocumentation } from '../../semanticSymbolDocumentation';
+import type { CallSignatureIndex } from '../../../semantic/callSignatureIndex';
+import { formatCallSignatures } from '../../callSignatureFormatting';
 
 export class NamedTypeDocumentationProvider extends DocumentationProvider<NamedTypeNode> {
     override getDocumentation(
         node: NamedTypeNode,
         lookup: AstLookupResult,
-        semanticContext?: SemanticContext
+        semanticContext?: SemanticContext,
+        callSignatures?: CallSignatureIndex
     ): string | undefined {
         if (lookup.element !== node.name) {
             return undefined;
@@ -30,6 +33,7 @@ Reference to the user-defined type \`${node.name.value}\`.
         }
 
         const symbol = lookupBoundSymbol(semanticContext.bindings, node.name);
-        return symbol ? appendSemanticSymbolDocumentation(documentation, symbol, semanticContext) : documentation;
+        return symbol ? appendSemanticSymbolDocumentation(documentation, symbol, semanticContext,
+            formatCallSignatures(callSignatures?.getForElement(node.name))) : documentation;
     }
 }

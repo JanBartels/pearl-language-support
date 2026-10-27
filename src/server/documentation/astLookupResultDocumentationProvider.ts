@@ -3,12 +3,14 @@
 
 import { AstLookupResult } from "../ast/astLookupResult";
 import type { SemanticContext } from "../semantic/semanticContext";
+import type { CallSignatureIndex } from "../semantic/callSignatureIndex";
 
 export class AstLookupResultDocumentationProvider {
 
     static getDocumentation(
         result: AstLookupResult,
-        semanticContext?: SemanticContext
+        semanticContext?: SemanticContext,
+        callSignatures?: CallSignatureIndex
     ): string | undefined {
 
         const provider =
@@ -21,7 +23,8 @@ export class AstLookupResultDocumentationProvider {
         return provider.getDocumentation(
             result.node,
             result,
-            semanticContext
+            semanticContext,
+            callSignatures
         );
     }
 }

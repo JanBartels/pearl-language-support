@@ -9,15 +9,18 @@ import { formatSemanticType } from './semanticTypeDocumentation';
 export function appendSemanticSymbolDocumentation(
     documentation: string,
     symbol: SemanticSymbol,
-    semanticContext: SemanticContext
+    semanticContext: SemanticContext,
+    displaySignature?: string
 ): string {
     switch (symbol.kind) {
         case SymbolKind.DataObject:
-            return appendDataObjectDocumentation(documentation, symbol);
+            return appendDataObjectDocumentation(documentation, symbol, displaySignature);
 
         case SymbolKind.Type: {
             const type = semanticContext.typeDefinitions.get(symbol);
-            return type ? `${documentation}\n\n**Type:** \`${formatSemanticType(type)}\`` : documentation;
+            return type ? `${documentation}\n\n**Type:** \`${formatSemanticType(type)}\``
+                + (displaySignature ? `\n\n**Signature:** \`${displaySignature}\`` : '')
+                : documentation;
         }
 
         case SymbolKind.Module:
@@ -32,7 +35,7 @@ export function appendSemanticSymbolDocumentation(
         case SymbolKind.Procedure:
             return `${documentation}\n\n**Symbol:** procedure`
                 + (symbol.signature
-                    ? `\n\n**Signature:** \`${formatSemanticType(symbol.signature)}\`` : '')
+                    ? `\n\n**Signature:** \`${displaySignature ?? formatSemanticType(symbol.signature)}\`` : '')
                 + (symbol.resultType
                     ? `\n\n**Result type:** \`${formatSemanticType(symbol.resultType)}\``
                     : '');
@@ -51,9 +54,14 @@ export function appendSemanticSymbolDocumentation(
 
 function appendDataObjectDocumentation(
     documentation: string,
-    symbol: Extract<SemanticSymbol, { kind: SymbolKind.DataObject }>
+    symbol: Extract<SemanticSymbol, { kind: SymbolKind.DataObject }>,
+    displaySignature?: string
 ): string {
     let result = `${documentation}\n\n**Type:** \`${formatSemanticType(symbol.type)}\``;
+
+    if (displaySignature) {
+        result += `\n\n**Signature:** \`${displaySignature}\``;
+    }
 
     if (symbol.assignmentProtected) {
         result += '\n\n**Assignment protection:** `INV`';

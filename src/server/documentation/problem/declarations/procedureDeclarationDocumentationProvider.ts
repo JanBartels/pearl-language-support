@@ -7,6 +7,8 @@ import { SemanticContext } from '../../../semantic/semanticContext';
 import { lookupBoundSymbol } from '../../../semantic/bindingIndex';
 import { DocumentationProvider } from '../../documentationProvider';
 import { appendSemanticSymbolDocumentation } from '../../semanticSymbolDocumentation';
+import type { CallSignatureIndex } from '../../../semantic/callSignatureIndex';
+import { formatCallSignatures } from '../../callSignatureFormatting';
 import { md } from '../../markdownUtils';
 
 export class ProcedureDeclarationDocumentationProvider
@@ -14,7 +16,8 @@ export class ProcedureDeclarationDocumentationProvider
     override getDocumentation(
         node: ProcedureDeclarationNode,
         lookup: AstLookupResult,
-        semanticContext?: SemanticContext
+        semanticContext?: SemanticContext,
+        callSignatures?: CallSignatureIndex
     ): string | undefined {
         // The semantic shell mapping comes from SHELLMODULE validation.
         // Do not inspect unrelated AST nodes or repeat name resolution here.
@@ -35,7 +38,8 @@ formal parameter(s)${node.returnsKeyword ? ', with a result' : ', without a resu
                 : undefined;
             text += shellDocumentation;
             return symbol && semanticContext
-                ? appendSemanticSymbolDocumentation(text, symbol, semanticContext)
+                ? appendSemanticSymbolDocumentation(text, symbol, semanticContext,
+                    formatCallSignatures(callSignatures?.getForElement(node.name)))
                 : text;
         }
         if (lookup.element === node.xhelpText) {

@@ -183,7 +183,9 @@ export class Validator {
             symbolReferences,
             symbolReferenceResolutions,
             symbolOccurrences,
-            context.macroDefinitions
+            context.macroDefinitions,
+            undefined,
+            context.activeBlockComments
         );
 
         return AnalysisResult.create(
