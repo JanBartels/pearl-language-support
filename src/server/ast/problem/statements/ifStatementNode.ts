@@ -4,6 +4,7 @@
 import { SourceValue } from "../../../core/sourceValue";
 import { Source } from "../../../source/source";
 import { AstNode } from "../../astNode";
+import type { ExpressionNode } from "../expressions/expressionNode";
 import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from "../../astKind";
 import { AstLookupResult } from "../../astLookupResult";
@@ -27,9 +28,11 @@ export class IfStatementNode extends AstNode {
         public readonly thenBody: readonly AstNode[],
         public readonly elseKeyword: SourceValue<string> | undefined,
         public readonly elseBody: readonly AstNode[],
-        public readonly finKeyword: SourceValue<string> | undefined
+        public readonly finKeyword: SourceValue<string> | undefined,
+        public readonly condition: ExpressionNode | undefined = undefined
     ) {
         super(AstKind.IfStatement);
+        if (condition) this.adopt(condition);
         this.adoptAll(thenBody);
         this.adoptAll(elseBody);
     }
@@ -39,7 +42,7 @@ export class IfStatementNode extends AstNode {
     }
 
     override getChildren(): readonly AstNode[] {
-        return [...this.thenBody, ...this.elseBody];
+        return [...(this.condition ? [this.condition] : []), ...this.thenBody, ...this.elseBody];
     }
 
     override lookupSourceValue(position: SourceOffset): AstLookupResult | undefined {

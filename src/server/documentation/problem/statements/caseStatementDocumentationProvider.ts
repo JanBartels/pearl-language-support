@@ -14,7 +14,7 @@ export class CaseStatementDocumentationProvider extends DocumentationProvider<Ca
 # CASE
 
 Selects an ALT branch using either its position or an explicit list of selection values.
-The selector expression is not semantically checked yet.
+The selector is analyzed as an expression. Positional CASE requires FIXED; indexed CASE permits FIXED or CHAR(1).
 `;
         }
 
@@ -22,7 +22,7 @@ The selector expression is not semantically checked yet.
             return md`
 # CASE selector
 
-The selector is preserved for later expression and type analysis.
+The selector is analyzed whenever the expression grammar supports its syntax.
 `;
         }
 

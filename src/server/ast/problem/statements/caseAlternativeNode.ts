@@ -11,6 +11,7 @@ import { DocumentationProvider } from "../../../documentation/documentationProvi
 import { CaseAlternativeDocumentationProvider } from
     "../../../documentation/problem/statements/caseAlternativeDocumentationProvider";
 import { statementTokenText } from "./statementTokenText";
+import { CaseIndexRangeNode } from "./caseIndexRangeNode";
 
 export class CaseAlternativeNode extends AstNode {
 
@@ -22,9 +23,11 @@ export class CaseAlternativeNode extends AstNode {
         public readonly caseListTokens: readonly SourceValue<string>[] | undefined,
         public readonly body: readonly AstNode[],
         /** 1-based position in the containing CASE; also retained for indexed ALT. */
-        public readonly position: number
+        public readonly position: number,
+        public readonly ranges: readonly CaseIndexRangeNode[] = []
     ) {
         super(AstKind.CaseAlternative);
+        this.adoptAll(ranges);
         this.adoptAll(body);
     }
 
@@ -41,11 +44,11 @@ export class CaseAlternativeNode extends AstNode {
     }
 
     override getChildren(): readonly AstNode[] {
-        return this.body;
+        return [...this.ranges, ...this.body];
     }
 
     override lookupSourceValue(position: SourceOffset): AstLookupResult | undefined {
-        for (const child of this.body) {
+        for (const child of this.getChildren()) {
             const result = child.lookupSourceValue(position);
             if (result) {
                 return result;

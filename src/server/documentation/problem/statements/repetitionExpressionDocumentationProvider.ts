@@ -31,7 +31,11 @@ export class RepetitionExpressionDocumentationProvider
 
 ${DESCRIPTIONS[node.keyword.value] ?? "Repetition control clause."}
 
-Expression syntax and typing are not yet analyzed.
+${node.expression
+    ? node.keyword.value === "WHILE"
+        ? "The condition is parsed and checked as a BIT(1) expression."
+        : "The expression is parsed and checked as a FIXED expression."
+    : "Expression syntax is not yet fully supported."}
 `;
     }
 }

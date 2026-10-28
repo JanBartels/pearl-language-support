@@ -13,7 +13,7 @@ export class IfStatementDocumentationProvider extends DocumentationProvider<IfSt
             return md`
 # IF
 
-Conditional statement. The condition must have type BIT(1); type checking is not implemented yet.
+Conditional statement. The condition must have type BIT(1).
 `;
         }
 
@@ -21,7 +21,7 @@ Conditional statement. The condition must have type BIT(1); type checking is not
             return md`
 # IF condition
 
-Expression tokens are preserved for later expression parsing and semantic analysis.
+The condition is analyzed as an expression whenever its syntax is supported.
 `;
         }
 

@@ -13,6 +13,7 @@ import { CaseStatementDocumentationProvider } from
 import { FoldingRegionCollection } from "../../../folding/foldingRegionCollection";
 import { createInclusiveFoldingRegion } from "../../../folding/foldingRegion";
 import { CaseAlternativeNode } from "./caseAlternativeNode";
+import type { ExpressionNode } from "../expressions/expressionNode";
 import { CaseOutNode } from "./caseOutNode";
 import { statementTokenText } from "./statementTokenText";
 import { addConditionalBranchFoldingRegion } from "./conditionalBranchFolding";
@@ -27,9 +28,11 @@ export class CaseStatementNode extends AstNode {
         public readonly selectorTokens: readonly SourceValue<string>[],
         public readonly alternatives: readonly CaseAlternativeNode[],
         public readonly outClause: CaseOutNode | undefined,
-        public readonly finKeyword: SourceValue<string> | undefined
+        public readonly finKeyword: SourceValue<string> | undefined,
+        public readonly selector: ExpressionNode | undefined = undefined
     ) {
         super(AstKind.CaseStatement);
+        if (selector) this.adopt(selector);
         this.adoptAll(alternatives);
         if (outClause) {
             this.adopt(outClause);
@@ -41,7 +44,8 @@ export class CaseStatementNode extends AstNode {
     }
 
     override getChildren(): readonly AstNode[] {
-        return this.outClause ? [...this.alternatives, this.outClause] : this.alternatives;
+        return [...(this.selector ? [this.selector] : []), ...this.alternatives,
+            ...(this.outClause ? [this.outClause] : [])];
     }
 
     override lookupSourceValue(position: SourceOffset): AstLookupResult | undefined {

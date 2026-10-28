@@ -7,6 +7,8 @@ import { RepetitionForClauseNode } from "../../../ast/problem/statements/repetit
 import { RepetitionExpressionClauseNode } from
     "../../../ast/problem/statements/repetitionExpressionClauseNode";
 import { ParserBase } from "../../parserBase";
+import type { Token } from "../../../lexer/token";
+import { parseBufferedExpression } from "../expressions/parseBufferedExpression";
 import { BodyParser } from "./bodyParser";
 
 type ExpressionKeyword = "FROM" | "BY" | "TO" | "WHILE";
@@ -22,8 +24,8 @@ const CLAUSE_ORDER: Readonly<Record<string, number>> = {
 const HEADER_KEYWORDS = ["FOR", "FROM", "BY", "TO", "WHILE"] as const;
 
 /**
- * Parses the complete repetition header structure. Expression tokens are stored
- * by clause until the general expression parser is introduced.
+ * Parses the complete repetition header structure. Each expression clause
+ * uses the shared expression grammar while retaining its original tokens.
  */
 export class RepetitionParser extends ParserBase {
 
@@ -95,8 +97,11 @@ export class RepetitionParser extends ParserBase {
                 continue;
             }
 
-            const tokens = this.parseClauseExpression(keyword as ExpressionKeyword, header);
-            const clause = new RepetitionExpressionClauseNode(keywordValue, tokens);
+            const buffered = this.parseClauseExpression(keyword as ExpressionKeyword, header);
+            const expression = parseBufferedExpression(buffered.tokens, this.context);
+            const clause = new RepetitionExpressionClauseNode(
+                keywordValue, buffered.values, expression
+            );
 
             switch (keyword) {
                 case "FROM":
@@ -151,8 +156,9 @@ export class RepetitionParser extends ParserBase {
     private parseClauseExpression(
         keyword: ExpressionKeyword,
         header: SourceValue<string>[]
-    ): SourceValue<string>[] {
+    ): { values: SourceValue<string>[]; tokens: Token[] } {
         const expression: SourceValue<string>[] = [];
+        const originalTokens: Token[] = [];
         const delimiters: string[] = [];
 
         while (!this.eof()) {
@@ -188,6 +194,7 @@ export class RepetitionParser extends ParserBase {
 
             const value = this.tokenValue(token);
             expression.push(value);
+            originalTokens.push(token);
             header.push(value);
             this.next();
         }
@@ -200,7 +207,7 @@ export class RepetitionParser extends ParserBase {
             this.problems.error(this.location(), `Expected expression after '${keyword}'.`);
         }
 
-        return expression;
+        return { values: expression, tokens: originalTokens };
     }
 
     /** Recovery boundaries not belonging to a repetition header. */

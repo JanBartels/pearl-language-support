@@ -33,7 +33,7 @@ Positionale Alternative Nummer **${node.position}** der CASE-Anweisung.
             return md`
 # ALT case list
 
-Selection values and ranges. Their semantic validity is not checked yet.
+Selection values and ranges are checked against the CASE selector type and must be constant.
 `;
         }
         return undefined;

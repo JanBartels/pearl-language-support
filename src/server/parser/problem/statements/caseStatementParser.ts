@@ -8,6 +8,7 @@ import { ParserBase } from "../../parserBase";
 import { BodyParser } from "./bodyParser";
 import { StatementHeaderParser } from "./statementHeaderParser";
 import { CaseAlternativeParser } from "./caseAlternativeParser";
+import { parseBufferedExpression } from "../expressions/parseBufferedExpression";
 
 export class CaseStatementParser extends ParserBase {
 
@@ -18,9 +19,10 @@ export class CaseStatementParser extends ParserBase {
             return undefined;
         }
 
-        const selector = new StatementHeaderParser(this.context).readUntil(
+        const selector = new StatementHeaderParser(this.context).readUntilWithTokens(
             ["ALT", "OUT", "FIN"], "CASE selector"
         );
+        const expression = parseBufferedExpression(selector.tokens, this.context);
         const alternatives: CaseAlternativeNode[] = [];
         let outClause: CaseOutNode | undefined;
         let indexed: boolean | undefined;
@@ -79,10 +81,11 @@ export class CaseStatementParser extends ParserBase {
 
         return new CaseStatementNode(
             this.tokenValue(caseToken),
-            selector,
+            selector.values,
             alternatives,
             outClause,
-            finToken ? this.tokenValue(finToken) : undefined
+            finToken ? this.tokenValue(finToken) : undefined,
+            expression
         );
     }
 }

@@ -30,6 +30,9 @@ export interface ExpressionTypeResolverContext {
     ): void;
     reportInvalidArrayIndexCount(source: SourceValue<string>, expected: number, actual: number): void;
     reportInvalidArrayIndexType(source: SourceValue<string>): void;
+    reportInvalidArrayBoundDimension(
+        source: SourceValue<string>, operator: SourceValue<string>, dimension: bigint, rank: number
+    ): void;
     reportConstantIndexOutOfBounds(
         source: SourceValue<string>, owner: SourceValue<string>, dimension: number | undefined,
         index: bigint, lower: bigint, upper: bigint | undefined
@@ -417,6 +420,17 @@ export class ExpressionTypeResolver {
                     return { kind: SemanticTypeKind.Fixed, precision: 1 };
                 }
                 break;
+            case 'LWB':
+            case 'UPB':
+                if (this.arrayType(operand)) {
+                    return { kind: SemanticTypeKind.Fixed, precision: 31 };
+                }
+                // PEARL 90 also permits monadic UPB on a character string.
+                // Its result precision is FIXED(15), unlike array bounds.
+                if (node.operator.value === 'UPB' && operand.kind === SemanticTypeKind.Character) {
+                    return { kind: SemanticTypeKind.Fixed, precision: 15 };
+                }
+                break;
             default:
                 // Other PEARL monadic operators need dedicated rules.
                 return undefined;
@@ -435,6 +449,25 @@ export class ExpressionTypeResolver {
         if (this.reference(left) || this.reference(right)) return undefined;
 
         const op = node.operator.value;
+        if (op === 'LWB' || op === 'UPB') {
+            if (left.kind !== SemanticTypeKind.Fixed || !this.arrayType(right)) {
+                this.context.reportInvalidExpressionOperands(node.operator);
+                return undefined;
+            }
+            const rank = right.kind === SemanticTypeKind.Array
+                ? right.dimensions.length : right.rank;
+            // A dynamic dimension is valid; only known, invalid dimension
+            // numbers can be rejected statically. Virtual arrays still have
+            // a known rank even though their element bounds are unknown.
+            const dimension = this.context.tryEvaluateFixedExpression(node.left, environment);
+            if (dimension !== undefined && (dimension < BigInt(1) || dimension > BigInt(rank))) {
+                this.context.reportInvalidArrayBoundDimension(
+                    this.argumentDiagnosticSource(node.left) ?? node.operator,
+                    node.operator, dimension, rank);
+                return undefined;
+            }
+            return { kind: SemanticTypeKind.Fixed, precision: 31 };
+        }
         if (['+', '-', '*', '/', '//', 'REM', '**'].includes(op)) {
             const result = this.arithmetic(op, left, right);
             if (result) return result;
@@ -464,6 +497,10 @@ export class ExpressionTypeResolver {
         }
         // Operator forms not covered by the first slice remain untyped.
         return undefined;
+    }
+
+    private arrayType(type: SemanticType): type is ArrayType | VirtualArrayType {
+        return type.kind === SemanticTypeKind.Array || type.kind === SemanticTypeKind.VirtualArray;
     }
 
     private reference(type: SemanticType): boolean {

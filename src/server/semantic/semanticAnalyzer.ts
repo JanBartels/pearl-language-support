@@ -3,7 +3,7 @@
 
 import { AstKind } from '../ast/astKind';
 import type { AstNode } from '../ast/astNode';
-import type { SourceValue } from '../core/sourceValue';
+import { SourceValue } from '../core/sourceValue';
 import type { CommentToken } from '../lexer/token';
 import type { ModuleNode } from '../ast/module/moduleNode';
 import type { ShellCommandNode } from '../ast/module/shellCommandNode';
@@ -17,11 +17,19 @@ import { TaskDeclarationNode } from '../ast/problem/declarations/taskDeclaration
 import { ProcedureDeclarationNode } from '../ast/problem/declarations/procedureDeclarationNode';
 import { SpcProcedureAttributeNode } from '../ast/problem/specifications/spcProcedureAttributeNode';
 import { ReturnStatementNode } from '../ast/problem/statements/returnStatementNode';
+import { IfStatementNode } from '../ast/problem/statements/ifStatementNode';
+import { CaseStatementNode } from '../ast/problem/statements/caseStatementNode';
+import { CaseIndexRangeNode } from '../ast/problem/statements/caseIndexRangeNode';
+import { LiteralExpressionNode } from '../ast/problem/expressions/literalExpressionNode';
+import { NameExpressionNode } from '../ast/problem/expressions/nameExpressionNode';
+import { ParenthesizedExpressionNode } from '../ast/problem/expressions/parenthesizedExpressionNode';
+import { MonadicExpressionNode } from '../ast/problem/expressions/monadicExpressionNode';
 import type { ExpressionNode } from '../ast/problem/expressions/expressionNode';
 import { ExpressionTypeResolver, ExpressionTypeResolverContext } from './expressionTypeResolver';
 import { ProcedureParameterNameIndex } from './procedureParameterNameIndex';
 import { CallStatementNode } from '../ast/problem/statements/callStatementNode';
 import { RepetitionNode } from '../ast/problem/statements/repetitionNode';
+import { RepetitionExpressionClauseNode } from '../ast/problem/statements/repetitionExpressionClauseNode';
 import { ProblemDataAttributeNode } from '../ast/problem/declarations/problemDataAttributeNode';
 import { DclDationAttributeNode } from '../ast/problem/declarations/dclDationAttributeNode';
 import { SemaAttributeNode } from '../ast/problem/declarations/semaAttributeNode';
@@ -298,6 +306,18 @@ class SemanticAnalysisState implements
         });
     }
 
+    reportInvalidArrayBoundDimension(
+        source: SourceValue<string>, operator: SourceValue<string>, dimension: bigint, rank: number
+    ): void {
+        if (!source.location) return;
+        this.diagnostics.push({
+            code: SemanticDiagnosticCode.InvalidArrayBoundDimension,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: source.location,
+            message: `Dimension ${dimension} bei '${operator.value}' liegt außerhalb des Feldrangs 1:${rank}.`
+        });
+    }
+
     reportInvalidArrayIndexType(source: SourceValue<string>): void {
         if (!source.location) return;
         this.diagnostics.push({
@@ -345,6 +365,82 @@ class SemanticAnalysisState implements
             severity: SemanticDiagnosticSeverity.Error,
             location: source.location,
             message: `Prozedur '${source.value}' liefert keinen Wert für einen Ausdruck.`
+        });
+    }
+
+    reportCaseProblem(
+        code: SemanticDiagnosticCode, source: SourceValue<string>, message: string
+    ): void {
+        if (!source.location) return;
+        this.diagnostics.push({ code, severity: SemanticDiagnosticSeverity.Error,
+            location: source.location, message });
+    }
+
+    reportOverlappingCaseAlternative(
+        source: SourceValue<string>, previous: SourceValue<string>, message: string
+    ): void {
+        if (!source.location) return;
+        this.diagnostics.push({
+            code: SemanticDiagnosticCode.OverlappingCaseAlternative,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: source.location,
+            message,
+            relatedLocations: previous.location ? [{
+                location: previous.location,
+                message: 'Dieser Auswahlwert ist bereits hier abgedeckt.'
+            }] : undefined
+        });
+    }
+
+    /** Only named invariant objects, not mutable variables with INIT, are constants. */
+    tryEvaluateCaseCharacter(expression: ExpressionNode, environment: Environment): string | undefined {
+        if (expression.kind === AstKind.ParenthesizedExpression) {
+            const inner = (expression as ParenthesizedExpressionNode).expression;
+            return inner ? this.tryEvaluateCaseCharacter(inner, environment) : undefined;
+        }
+        if (expression.kind === AstKind.LiteralExpression) {
+            const spelling = (expression as LiteralExpressionNode).literal.value;
+            return /^'(?:[^']|'')*'$/.test(spelling)
+                ? spelling.slice(1, -1).replace(/''/g, "'") : undefined;
+        }
+        if (expression.kind === AstKind.NameExpression) {
+            const name = expression as NameExpressionNode;
+            if (name.segments.length !== 1 || name.segments[0].suffix) return undefined;
+            const symbol = resolveSymbol(environment, name.segments[0].identifier.value);
+            if (symbol?.kind !== SymbolKind.DataObject) return undefined;
+            const value = this.namedConstantValues.get(symbol);
+            return value?.kind === SemanticConstantKind.Character ? value.value : undefined;
+        }
+        return undefined;
+    }
+
+    reportInvalidIfCondition(source: SourceValue<string>): void {
+        if (!source.location) return;
+        this.diagnostics.push({
+            code: SemanticDiagnosticCode.InvalidIfCondition,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: source.location,
+            message: 'Die IF-Bedingung muss den Typ BIT(1) besitzen.'
+        });
+    }
+
+    reportInvalidWhileCondition(source: SourceValue<string>): void {
+        if (!source.location) return;
+        this.diagnostics.push({
+            code: SemanticDiagnosticCode.InvalidWhileCondition,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: source.location,
+            message: 'Die WHILE-Bedingung muss den Typ BIT(1) besitzen.'
+        });
+    }
+
+    reportInvalidRepetitionFixedExpression(source: SourceValue<string>, clause: 'FROM' | 'BY' | 'TO'): void {
+        if (!source.location) return;
+        this.diagnostics.push({
+            code: SemanticDiagnosticCode.InvalidRepetitionFixedExpression,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: source.location,
+            message: `Die ${clause}-Angabe muss vom Typ FIXED sein.`
         });
     }
 
@@ -1539,6 +1635,24 @@ export class SemanticAnalyzer {
             );
         }
 
+        if (node.kind === AstKind.CaseStatement) {
+            if (!environment) return environment;
+            this.analyzeCaseStatement(node as CaseStatementNode, environment, state);
+            return this.analyzeChildren(node, environment, state);
+        }
+
+        if (node.kind === AstKind.IfStatement) {
+            if (!environment) return environment;
+            const statement = node as IfStatementNode;
+            if (statement.condition) {
+                this.analyzeBitCondition(
+                    statement.condition, statement.conditionTokens[0] ?? statement.ifKeyword,
+                    'IF', environment, state
+                );
+            }
+            return this.analyzeChildren(node, environment, state);
+        }
+
         if (node.kind === AstKind.ReturnStatement) {
             if (!environment) return environment;
             const expected = state.procedureReturnTypeStack[state.procedureReturnTypeStack.length - 1];
@@ -1597,6 +1711,166 @@ export class SemanticAnalyzer {
             default:
                 return this.analyzeChildren(node, environment, state);
         }
+    }
+
+    /** IF and REPEAT/WHILE share the same condition typing rules.
+     * REF dereferencing and context-dependent LENGTH are not fully modeled;
+     * do not infer errors for those unresolved cases.
+     */
+    private analyzeBitCondition(
+        expression: ExpressionNode,
+        source: SourceValue<string>,
+        clause: 'IF' | 'WHILE',
+        environment: Environment,
+        state: SemanticAnalysisState
+    ): void {
+        const type = state.expressionTypeResolver.resolve(expression, environment);
+        const effective = type && state.resolveUnderlyingType(type);
+        if (effective && effective.kind !== SemanticTypeKind.Reference
+            && effective.kind !== SemanticTypeKind.VoidReference
+            && (effective.kind !== SemanticTypeKind.Bit
+                || (effective.length !== undefined && effective.length !== 1))) {
+            if (clause === 'IF') state.reportInvalidIfCondition(source);
+            else state.reportInvalidWhileCondition(source);
+        }
+    }
+
+    /** FROM, BY and TO are FIXED expressions. Undefined types (e.g. from an
+     * unsupported construct or contextual REF conversion) are left undecided;
+     * their own expression diagnostics remain authoritative.
+     */
+    private analyzeRepetitionFixedExpression(
+        clause: RepetitionExpressionClauseNode,
+        environment: Environment,
+        state: SemanticAnalysisState
+    ): void {
+        if (!clause.expression) return;
+        const type = state.expressionTypeResolver.resolve(clause.expression, environment);
+        const effective = type && state.resolveUnderlyingType(type);
+        if (effective && effective.kind !== SemanticTypeKind.Reference
+            && effective.kind !== SemanticTypeKind.VoidReference
+            && effective.kind !== SemanticTypeKind.Fixed) {
+            state.reportInvalidRepetitionFixedExpression(
+                clause.expressionTokens[0] ?? clause.keyword,
+                clause.keyword.value as 'FROM' | 'BY' | 'TO'
+            );
+        }
+    }
+
+    /** CASE expressions are always read with the shared expression grammar.
+     * Positional ALT requires FIXED; indexed ALT accepts FIXED or CHAR(1).
+     * Explicit ALT bounds must be compile-time constants of the selector type.
+     */
+    private analyzeCaseStatement(
+        statement: CaseStatementNode, environment: Environment, state: SemanticAnalysisState
+    ): void {
+        const type = state.expressionTypeResolver.resolve(statement.selector, environment);
+        const effective = type && state.resolveUnderlyingType(type);
+        const indexed = statement.alternatives.some(alt => alt.caseListTokens !== undefined);
+        const valid = effective?.kind === SemanticTypeKind.Fixed
+            || (indexed && effective?.kind === SemanticTypeKind.Character
+                && (effective.length === 1 || effective.length === undefined));
+        if (effective && effective.kind !== SemanticTypeKind.Reference
+            && effective.kind !== SemanticTypeKind.VoidReference && !valid) {
+            state.reportCaseProblem(SemanticDiagnosticCode.InvalidCaseSelector,
+                statement.selectorTokens[0] ?? statement.caseKeyword,
+                indexed ? 'CASE-Selektor muss FIXED oder CHAR(1) sein.'
+                    : 'Positionaler CASE-Selektor muss vom Typ FIXED sein.');
+        }
+
+        // One index interval per valid ALT range. Do not enumerate FIXED values:
+        // even FIXED(31) ranges can cover many millions of integers.
+        // This collection belongs to this CASE statement only (not its nested CASEs).
+        const occupied: Array<{
+            lower: bigint | string;
+            upper: bigint | string;
+            source: SourceValue<string>;
+        }> = [];
+        for (const alternative of statement.alternatives) {
+            for (const range of alternative.ranges) {
+                const lower = this.analyzeCaseBound(range.lower, effective, environment, state);
+                const explicitUpper = this.analyzeCaseBound(range.upper, effective, environment, state);
+                const upper = range.colon ? explicitUpper : lower;
+                // Nonconstant/ill-typed/incomplete ranges have their own diagnostics.
+                // Never claim that their unknown values overlap another ALT.
+                if (lower === undefined || upper === undefined
+                    || typeof lower !== typeof upper) continue;
+                if (lower > upper) {
+                    if (range.colon) {
+                        state.reportCaseProblem(SemanticDiagnosticCode.InvalidCaseRange, range.colon,
+                            'Die untere Grenze des ALT-Bereichs ist größer als die obere.');
+                    }
+                    continue;
+                }
+                if (!range.lower) continue;
+                const source = this.caseBoundSource(range.lower);
+                const previous = occupied.find(other =>
+                    typeof lower === typeof other.lower
+                    && lower <= other.upper && other.lower <= upper);
+                if (previous) {
+                    const display = (value: bigint | string): string =>
+                        typeof value === 'string' ? `'${value.replace(/'/g, "''")}'` : value.toString();
+                    const label = range.colon
+                        ? `ALT-Bereich ${display(lower)}:${display(upper)}`
+                        : `ALT-Auswahlwert ${display(lower)}`;
+                    state.reportOverlappingCaseAlternative(source, previous.source,
+                        `${label} überschneidet sich mit einer vorherigen ALT-Angabe.`);
+                }
+                // Keep overlapping intervals too, for future diagnostics: the next
+                // interval must be compared against every earlier declaration.
+                occupied.push({ lower, upper, source });
+            }
+        }
+    }
+
+    private analyzeCaseBound(
+        expression: ExpressionNode | undefined, selector: SemanticType | undefined,
+        environment: Environment, state: SemanticAnalysisState
+    ): bigint | string | undefined {
+        if (!expression) return undefined;
+        const type = state.expressionTypeResolver.resolve(expression, environment);
+        const effective = type && state.resolveUnderlyingType(type);
+        if (!effective) return undefined;
+        const isFixed = effective.kind === SemanticTypeKind.Fixed;
+        const isChar = effective.kind === SemanticTypeKind.Character
+            && (effective.length === undefined || effective.length === 1);
+        const matchesSelector = !selector
+            || selector.kind === SemanticTypeKind.Fixed && isFixed
+            || selector.kind === SemanticTypeKind.Character && isChar;
+        const source = this.caseBoundSource(expression);
+        if (!matchesSelector || (!isFixed && !isChar)) {
+            state.reportCaseProblem(SemanticDiagnosticCode.InvalidCaseAlternativeType, source,
+                'ALT-Konstante muss zum Typ des CASE-Selektors passen (FIXED oder CHAR(1)).');
+            return undefined;
+        }
+        const value = isFixed ? state.tryEvaluateFixedExpression(expression, environment)
+            : state.tryEvaluateCaseCharacter(expression, environment);
+        if (value === undefined) {
+            state.reportCaseProblem(SemanticDiagnosticCode.NonConstantCaseAlternative, source,
+                'ALT-Auswahlwert muss eine Konstante sein.');
+        }
+        return value;
+    }
+
+    private caseBoundSource(expression: ExpressionNode): SourceValue<string> {
+        // The expression AST already preserves source locations; select the
+        // outermost token at the beginning, rather than a synthetic location.
+        let first: SourceValue<string> | undefined;
+        const find = (node: AstNode): void => {
+            if (node.kind === AstKind.LiteralExpression) {
+                first ??= (node as LiteralExpressionNode).literal;
+            } else if (node.kind === AstKind.NameExpression) {
+                first ??= (node as NameExpressionNode).segments[0]?.identifier;
+            } else if (node.kind === AstKind.MonadicExpression) {
+                // Prefix signs are the start of the expression.
+                const unary = node as MonadicExpressionNode;
+                first ??= unary.operator;
+            } else {
+                for (const child of node.getChildren()) find(child);
+            }
+        };
+        find(expression);
+        return first ?? SourceValue.synthetic('ALT');
     }
 
     private analyzeTaskDeclaration(
@@ -1871,14 +2145,23 @@ export class SemanticAnalyzer {
             ? this.introduceSymbol(innerEnvironment, symbol)
             : innerEnvironment;
 
-        // FROM, BY and TO are evaluated before the control variable is available;
-        // WHILE may refer to it. Expression ASTs will be analyzed here later.
-        for (const clause of [node.forClause, node.fromClause, node.byClause, node.toClause]) {
-            if (clause) {
-                this.analyzeNode(clause, environment, state);
-            }
+        // FROM, BY and TO are evaluated in the enclosing environment, before
+        // the implicit FOR variable becomes visible. WHILE and the body use
+        // bodyEnvironment. Do not introduce the variable into these clauses.
+        if (node.forClause) this.analyzeNode(node.forClause, environment, state);
+        for (const clause of [node.fromClause, node.byClause, node.toClause]) {
+            if (!clause) continue;
+            this.analyzeRepetitionFixedExpression(clause, environment, state);
+            this.analyzeNode(clause, environment, state);
         }
         if (node.whileClause) {
+            if (node.whileClause.expression) {
+                this.analyzeBitCondition(
+                    node.whileClause.expression,
+                    node.whileClause.expressionTokens[0] ?? node.whileClause.keyword,
+                    'WHILE', bodyEnvironment, state
+                );
+            }
             this.analyzeNode(node.whileClause, bodyEnvironment, state);
         }
 

@@ -30,7 +30,7 @@ SYSTEM;
    MyEv: EV(12345678);
 
 PROBLEM;
-!   SPC A1 DATION INOUT ALPHIC;
+   SPC A1 DATION INOUT ALPHIC;
    SPC File DATION INOUT ALPHIC;
 
 #define MacroMitSemikolon "Wert";
@@ -294,7 +294,7 @@ x = MyRefProc( 7 );
 UnusedLabel:
 y := SIN( 47.11E+10 );
 AlreadyDefinedLabel:
-IF x = 0 THEN     ! Operator = ist Fehler!
+IF x == 0 THEN
    ! Kommentar
    CALL something( A1, 5,12.3 );
    x = something2( A1, 5,12.3 );
@@ -487,5 +487,83 @@ DCL B16 BIT(16);
    RETURN( B16.BIT(4) );
    RETURN( B16.BIT(20) );
 END;
+
+R6: PROC(I FIXED);
+    DCL RA(10) FIXED;
+
+    IF RA(I) > 0 THEN
+        RETURN;
+    FIN;
+
+    IF RA(11) > 0 THEN
+        RETURN;
+    FIN;
+
+    IF I + 1 THEN
+        RETURN;
+    FIN;
+
+    IF R5() THEN
+      RETURN;
+   FIN;
+
+   IF F(7) == 8.0 THEN
+      RETURN;
+   FIN;
+END;
+
+
+R7: PROC(I FIXED);
+DCL RA(10) FIXED;
+    CASE RA(I) + 1
+        ALT (1:5) RETURN;
+        ALT (7, 9) RETURN;
+        ALT ('Huhu') RETURN;
+        ALT (8) RETURN;
+        ALT (9) RETURN;
+        ALT (4) RETURN;
+        ALT (5:6) RETURN;
+        ALT(I) RETURN;
+        OUT RETURN;
+    FIN;
+END;
+
+R8: PROC(I FIXED);
+   FOR I2 FROM 3 TO 5 WHILE I2 < 10 REPEAT
+      X = I2;
+   END;
+   FOR I2 FROM 3 TO I2 + 5 WHILE I2 < 10 REPEAT
+      X = I2;
+   END;
+   FROM I+3 BY 4 TO 5 REPEAT
+      X = I2;
+   END;
+   BEGIN
+      DCL RA(10) FIXED;
+
+      FOR J FROM I + 1 BY I * 2 TO RA(5)
+         WHILE J < I + 100
+      REPEAT
+         RETURN;
+      END;
+      FOR J FROM 1.5 BY 'A' TO I*1.0
+      REPEAT
+         RETURN;
+      END;
+      FOR J FROM RA(11) TO RA(0)
+      REPEAT
+         RETURN;
+      END;            
+      FOR J FROM 1 LWB RA TO 1 UPB RA
+      REPEAT
+         RETURN;
+      END;            
+      FOR J FROM 2 LWB RA TO 1 UPB RA
+      REPEAT
+         RETURN;
+      END;            
+   END;   
+END;   
+
 
 MODEND DEBUG;

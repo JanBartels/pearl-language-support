@@ -96,5 +96,6 @@ export enum AstKind {
     Identifier,
 
     ActualParameterList,
-    ActualParameter
+    ActualParameter,
+    CaseIndexRange
 }
