@@ -58,6 +58,7 @@ export enum SemanticDiagnosticCode {
     InvalidCompilerSettingValue = 'semantic.invalid-compiler-setting-value',
     DuplicateCompilerSetting = 'semantic.duplicate-compiler-setting',
     PreferScModuleSize = 'semantic.prefer-sc-module-size',
+    MissingProcessorSetting = 'semantic.missing-processor-setting',
     MissingScModuleSize = 'semantic.missing-sc-module-size',
     CompilerSettingWithoutModule = 'semantic.compiler-setting-without-module',
     ReservedModuleId = 'semantic.reserved-module-id',

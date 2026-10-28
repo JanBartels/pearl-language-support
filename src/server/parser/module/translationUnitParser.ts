@@ -36,15 +36,27 @@ export class TranslationUnitParser extends ParserBase {
                 continue;
             }
 
-            this.problems.error(
-                this.location(),
-                `Unexpected token '${this.tokenText()}'.`
-            );
-
-            this.next();
+            this.recoverUnknownCompilerControl();
         }
 
         return root;
+    }
+
+    /**
+     * An unknown preamble statement is one malformed compiler control, not a
+     * series of independent unexpected tokens. Resume at its statement end,
+     * or at the next module header if the semicolon is missing.
+     */
+    private recoverUnknownCompilerControl(): void {
+        const token = this.current();
+        this.problems.error(
+            this.location(token),
+            this.tokenKind(token) === TokenKind.Identifier
+                ? `Unknown compiler control '${this.tokenText(token)}'.`
+                : `Unexpected token '${this.tokenText(token)}' before MODULE.`
+        );
+        this.synchronize([';', 'MODULE', 'SHELLMODULE']);
+        this.acceptSemicolon();
     }
 
     /** Skip comment/newline trivia and optional semicolons in the module preamble. */

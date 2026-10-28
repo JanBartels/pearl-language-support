@@ -69,6 +69,7 @@ MODEND;`);
     assert.deepEqual(parsed.problems.toArray().map(issue => issue.message), []);
     assert.ok(parsed.semantic.diagnostics.every(
         diagnostic => diagnostic.code === SemanticDiagnosticCode.MissingScModuleSize
+            || diagnostic.code === SemanticDiagnosticCode.MissingProcessorSetting
     ), 'no unexpected semantic errors');
     const parameter = parsed.symbol.signature!.parameters[0];
     assert.equal(parameter.type?.kind, SemanticTypeKind.Dation);
@@ -97,6 +98,7 @@ MODEND;`);
     assert.deepEqual(parsed.problems.toArray().map(issue => issue.message), []);
     assert.ok(parsed.semantic.diagnostics.every(
         diagnostic => diagnostic.code === SemanticDiagnosticCode.MissingScModuleSize
+            || diagnostic.code === SemanticDiagnosticCode.MissingProcessorSetting
     ), 'no unexpected semantic errors');
     assert.ok(parsed.hover.includes('`PROC(DATION ALPHIC IDENT, CHAR(24))`'));
 });
@@ -110,6 +112,7 @@ END;
 MODEND;`);
     assert.ok(parsed.semantic.diagnostics.every(
         diagnostic => diagnostic.code === SemanticDiagnosticCode.MissingScModuleSize
+            || diagnostic.code === SemanticDiagnosticCode.MissingProcessorSetting
     ), 'no unexpected semantic errors');
     assert.ok(parsed.hover.includes('`PROC(DATION INOUT ALPHIC IDENT, CHAR(24))`'));
 });

@@ -202,6 +202,14 @@ export function resolveModuleControls(root: AstNode): ResolvedModuleControls {
             }
         }
 
+        if (!seen.has(AstKind[AstKind.ProcessorSetting])) {
+            report(module.keyword, Code.MissingProcessorSetting,
+                'Keine Prozessorsteueranweisung P=...; angegeben. RTOS-UH verwendet ' +
+                'eine vom Compiler beziehungsweise Entwicklungsrechner abhängige ' +
+                'Voreinstellung. Für einen eindeutig festgelegten Zielprozessor ' +
+                'P=...; vor MODULE angeben.', Severity.Warning);
+        }
+
         if (!seen.has('S/SC')) {
             report(module.keyword, Code.MissingScModuleSize,
                 'Es ist weder S=...; noch SC=...; angegeben. Verwende SC=...; '
