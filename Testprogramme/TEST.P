@@ -421,7 +421,7 @@ T2: TASK;
 END;
 
 P2: PROC /*+G*/ ( A FIXED, B FIXED );
-  A := 1;
+  A := 2+3*5;
 END;
 
 aloha: PROC(
@@ -430,6 +430,62 @@ aloha: PROC(
     Text CHAR(255)
 ) RETURNS(BIT(1));
 
+END;
+
+RetTest: PROC( A FIXED ) RETURNS( FIXED );
+DCL F8 (10) FIXED;
+   RETURN( A + F8(RetTest('7'B4)) + 2*3 );
+END;
+
+
+F: PROC(I FIXED) RETURNS(FIXED);
+   RETURN(I * 2);
+END;
+
+R: PROC(I FIXED) RETURNS(FIXED);
+DCL A8(10) FIXED;
+   RETURN(A8(I) + F(I*1));
+END;
+
+TYPE TMeta STRUCT[
+   Count FIXED
+];
+
+TYPE TRecord STRUCT[
+    Value FIXED,
+    Meta TMeta
+];
+
+DCL Records(10) STRUCT[
+    Value FIXED,
+    Meta STRUCT[
+        Count FIXED
+    ]
+];
+
+DCL Records2(10) TRecord;
+
+R2: PROC(I FIXED) RETURNS(FIXED);
+    RETURN(Records2(11).Value +
+           Records(I).Meta.Count);
+END;
+
+R3: PROC( Records2 () TRecord IDENT, I FIXED) RETURNS(FIXED);
+    RETURN(Records2(11).Value +
+           Records2(3).Meta.Count + 
+           Records(I).Meta.Count);
+END;
+
+R4: PROC RETURNS(FIXED);
+DCL Ch CHAR(10);
+   RETURN( TOFIXED( Ch.CHAR(4) ) );
+   RETURN( TOFIXED( Ch.CHAR(40) ) );
+END;
+
+R5: PROC RETURNS(BIT);
+DCL B16 BIT(16);
+   RETURN( B16.BIT(4) );
+   RETURN( B16.BIT(20) );
 END;
 
 MODEND DEBUG;

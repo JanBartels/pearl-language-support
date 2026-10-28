@@ -21,6 +21,13 @@ export enum AstKind {
     ProblemPart,
 
     OneIdentifierOrList,
+    LiteralExpression,
+    NameExpression,
+    NameSegment,
+    NameArgumentList,
+    ParenthesizedExpression,
+    MonadicExpression,
+    DyadicExpression,
     ConstantFixedExpression,
     ConstantFixedTerm,
     ConstantFixedFactor,

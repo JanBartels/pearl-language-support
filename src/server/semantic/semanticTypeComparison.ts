@@ -178,6 +178,36 @@ export function isTypeAssignable(
     return false;
 }
 
+/**
+ * Value transfer uses the same scalar widening rules as an assignment.
+ * This is deliberately distinct from exact type identity and from REF
+ * compatibility; callers must resolve TYPE aliases and handle reference
+ * dereferencing and IDENT parameters separately.
+ *
+ * Default lengths are effective only for this comparison. Neither original
+ * SemanticType nor the syntax tree is modified.
+ */
+export function isScalarValueAssignable(
+    target: SemanticType,
+    source: SemanticType,
+    lengths: SimpleTypeLengths = RTOS_UH_DEFAULT_TYPE_LENGTHS
+): boolean {
+    const to = canonicalizeSemanticType(target, lengths);
+    const from = canonicalizeSemanticType(source, lengths);
+    if (to.kind === SemanticTypeKind.Fixed && from.kind === SemanticTypeKind.Fixed) {
+        return to.precision! >= from.precision!;
+    }
+    if (to.kind === SemanticTypeKind.Float &&
+        (from.kind === SemanticTypeKind.Fixed || from.kind === SemanticTypeKind.Float)) {
+        return to.precision! >= from.precision!;
+    }
+    if (to.kind === SemanticTypeKind.Bit && from.kind === SemanticTypeKind.Bit
+        || to.kind === SemanticTypeKind.Character && from.kind === SemanticTypeKind.Character) {
+        return to.length! >= from.length!;
+    }
+    return semanticTypeEquals(target, source, lengths);
+}
+
 /** NIL is compatible with reference destinations, but not with scalar types. */
 export function isNilAssignableTo(type: SemanticType): boolean {
     return type.kind === SemanticTypeKind.Reference

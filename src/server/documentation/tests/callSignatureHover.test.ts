@@ -112,3 +112,68 @@ test('old Hover output works without passing the new index', () => {
     const documentation = AstLookupResultDocumentationProvider.getDocumentation(lookup, p.semantic);
     assert.match(documentation ?? '', /\*\*Signature:\*\* `PROC\(FIXED\)`/);
 });
+
+test('function name in RETURN shows the named formal parameters and result type', () => {
+    const p = make(`DCL A(10) FIXED;
+        F: PROC(I FIXED, Scale FLOAT) RETURNS(FIXED);
+            RETURN(I);
+        END;
+        R: PROC(I FIXED) RETURNS(FIXED);
+            RETURN(A(I) + F(I, 2.0));
+        END;`);
+    const functionHover = p.hover('F', 1);
+    assert.match(functionHover, /\*\*Signature:\*\* `F\(I FIXED, Scale FLOAT\) RETURNS\(FIXED\)`/);
+    assert.equal((functionHover.match(/\*\*Signature:\*\*/g) ?? []).length, 1);
+    assert.match(functionHover, /\*\*Expression type:\*\* `FIXED`/);
+    const arrayHover = p.hover('A', 1);
+    assert.doesNotMatch(arrayHover, /\*\*Signature:\*\*/);
+});
+
+test('nested function call has the same named signature as its declaration', () => {
+    const p = make(`RetTest: PROC(A FIXED) RETURNS(FIXED);
+            DCL F8(10) FIXED;
+            RETURN(A + F8(RetTest(7)) + 2*3);
+        END;`);
+    const expected = /RetTest\(A FIXED\) RETURNS\(FIXED\)/;
+    assert.match(p.hover('RetTest', 0), expected);
+    assert.match(p.hover('RetTest', 1), expected);
+    assert.equal((p.hover('RetTest', 1).match(/\*\*Signature:\*\*/g) ?? []).length, 1);
+    assert.doesNotMatch(p.hover('F8', 1), /\*\*Signature:\*\*/);
+});
+
+test('CALL procedures and functions in expressions use the same signature formatter', () => {
+    const p = make(`P: PROC(I FIXED, Scale FLOAT); END;
+        F: PROC(I FIXED, Scale FLOAT) RETURNS(FIXED); RETURN(I); END;
+        R: PROC RETURNS(FIXED);
+            CALL P(1, 2.0);
+            RETURN(F(1, 2.0));
+        END;`);
+    assert.match(p.hover('P', 1), /\*\*Signature:\*\* `P\(I FIXED, Scale FLOAT\)`/);
+    assert.match(p.hover('F', 1), /\*\*Signature:\*\* `F\(I FIXED, Scale FLOAT\) RETURNS\(FIXED\)`/);
+});
+
+test('without signature index, expression hover retains its old procedure signature', () => {
+    const p = make(`F: PROC(I FIXED) RETURNS(FIXED); RETURN(I); END;
+        R: PROC RETURNS(FIXED); RETURN(F(1)); END;`);
+    const offset = p.text.indexOf('F(1)');
+    const lookup = p.ast.lookupSourceValue({ uri: p.source.uri, offset });
+    assert.ok(lookup);
+    const doc = AstLookupResultDocumentationProvider.getDocumentation(lookup, p.semantic);
+    assert.match(doc ?? '', /\*\*Signature:\*\* `PROC\(FIXED\) RETURNS\(FIXED\)`/);
+});
+
+test('function SPC documentary parameter names also appear at expression calls', () => {
+    const p = make(`SPC External ENTRY(/* Number */ FIXED, /* Coefficient */ FLOAT) RETURNS(FIXED) GLOBAL;
+        R: PROC RETURNS(FIXED); RETURN(External(7, 1.0)); END;`);
+    assert.match(p.hover('External', 0), /External\(Number FIXED, Coefficient FLOAT\) RETURNS\(FIXED\)/);
+    assert.match(p.hover('External', 1), /External\(Number FIXED, Coefficient FLOAT\) RETURNS\(FIXED\)/);
+});
+
+test('function REF PROC aliases preserve documentary argument names in expression hover', () => {
+    const p = make(`TYPE FuncType REF PROC(/* Input */ FIXED) RETURNS(FIXED);
+        TYPE FuncAlias FuncType;
+        DCL F FuncAlias;
+        R: PROC(I FIXED) RETURNS(FIXED); RETURN(F(I)); END;`);
+    assert.match(p.hover('F', 0), /F\(Input FIXED\) RETURNS\(FIXED\)/);
+    assert.match(p.hover('F', 1), /F\(Input FIXED\) RETURNS\(FIXED\)/);
+});

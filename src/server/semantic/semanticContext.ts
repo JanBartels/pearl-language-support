@@ -5,6 +5,7 @@ import type { AstNode } from '../ast/astNode';
 import type { ModuleNode } from '../ast/module/moduleNode';
 import type { ShellCommandNode } from '../ast/module/shellCommandNode';
 import type { ProcedureDeclarationNode } from '../ast/problem/declarations/procedureDeclarationNode';
+import type { ExpressionNode } from '../ast/problem/expressions/expressionNode';
 import type { ConstantFixedExpressionNode } from '../ast/problem/expressions/constantFixedExpressionNode';
 import type { BindingIndex } from './bindingIndex';
 import type { LocalSpecificationRelationIndex } from './localSpecificationRelation';
@@ -27,6 +28,7 @@ export class SemanticContext {
     readonly bindings: BindingIndex;
     readonly builtinBindings: ReadonlyMap<SourceValue<string>, BuiltinDefinition>;
     readonly diagnostics: readonly SemanticDiagnostic[];
+    readonly expressionTypes: ReadonlyMap<ExpressionNode, SemanticType>;
     readonly constantFixedExpressionValues: ReadonlyMap<ConstantFixedExpressionNode, FixedConstantValue>;
     readonly namedConstantValues: ReadonlyMap<DataObjectSymbol, SemanticConstantValue>;
     readonly initialValues: ReadonlyMap<DataObjectSymbol, SemanticInitialValue>;
@@ -50,9 +52,11 @@ export class SemanticContext {
         moduleConfigurations: ReadonlyMap<ModuleNode, ModuleConfiguration> = new Map(),
         shellCommandsByProcedure: ReadonlyMap<ProcedureDeclarationNode, ShellCommandNode> = new Map(),
         builtinBindings: ReadonlyMap<SourceValue<string>, BuiltinDefinition> = new Map(),
-        localSpecificationRelations: LocalSpecificationRelationIndex = new Map()
+        localSpecificationRelations: LocalSpecificationRelationIndex = new Map(),
+        expressionTypes: ReadonlyMap<ExpressionNode, SemanticType> = new Map()
     ) {
         this.typeDefinitions = new Map(typeDefinitions);
+        this.expressionTypes = new Map(expressionTypes);
         this.bindings = new Map(bindings);
         this.builtinBindings = new Map(builtinBindings);
         this.localSpecificationRelations = new Map(localSpecificationRelations);
@@ -121,7 +125,8 @@ export class SemanticContext {
             this.moduleConfigurations,
             this.shellCommandsByProcedure,
             this.builtinBindings,
-            this.localSpecificationRelations
+            this.localSpecificationRelations,
+            this.expressionTypes
         );
     }
 

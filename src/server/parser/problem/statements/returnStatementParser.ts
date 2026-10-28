@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
-import { SourceValue } from '../../../core/sourceValue';
 import { ReturnStatementNode } from '../../../ast/problem/statements/returnStatementNode';
+import { ExpressionNode } from '../../../ast/problem/expressions/expressionNode';
+import type { Token } from '../../../lexer/token';
 import { ParserBase } from '../../parserBase';
+import { ExpressionParser } from '../expressions/expressionParser';
 
-/** RETURN [ '(' Expression ')' ] ';'. Expressions remain source tokens for now. */
+/** RETURN [ '(' Expression ')' ] ';'. */
 export class ReturnStatementParser extends ParserBase {
     override parse(): ReturnStatementNode | undefined {
         this.skipTrivia();
@@ -13,9 +15,7 @@ export class ReturnStatementParser extends ParserBase {
         if (!keyword) return undefined;
         this.skipTrivia();
 
-        // RETURN; and RETURN(Expression); are the two grammar forms.
-        // A bare value (RETURN 1;) is not a missing semicolon.
-        // Recover at the statement boundary without accepting this syntax.
+        // Preserve previous recovery for an unparenthesized RETURN value.
         if (!this.isOperator(['(', ';']) && !this.isKeyword([
             'END', 'MODEND', 'FIN', 'ELSE', 'ALT', 'OUT'
         ])) {
@@ -23,36 +23,24 @@ export class ReturnStatementParser extends ParserBase {
                 "Expected '(' before RETURN expression. Use RETURN(<expression>);");
             this.synchronize([';', 'END', 'MODEND', 'FIN', 'ELSE', 'ALT', 'OUT']);
             this.acceptSemicolon();
-            return new ReturnStatementNode(this.tokenValue(keyword), undefined);
+            return new ReturnStatementNode(this.tokenValue(keyword));
         }
 
-        let expression: SourceValue<string>[] | undefined;
-        if (this.acceptLeftParenthesis()) {
-            expression = [];
-            let depth = 1;
-            while (!this.eof()) {
-                this.skipTrivia();
-                if (this.eof() || this.isOperator(';') || this.isKeyword([
-                    'END', 'MODEND', 'FIN', 'ELSE', 'ALT', 'OUT'
-                ])) break;
-
-                const token = this.current();
-                if (this.isOperator('(')) depth++;
-                if (this.isOperator(')')) {
-                    depth--;
-                    if (depth === 0) {
-                        this.next();
-                        break;
-                    }
-                }
-                expression.push(this.tokenValue(token));
-                this.next();
-            }
-            if (depth !== 0) {
-                this.problems.error(this.location(), "Expected ')' after RETURN expression.");
-            }
-            if (expression.length === 0) {
+        const opening = this.acceptOperator('(');
+        let expression: ExpressionNode | undefined;
+        let closing: Token | undefined;
+        if (opening) {
+            expression = new ExpressionParser(this.context).parse();
+            if (!expression) {
                 this.problems.error(this.location(), 'Expected expression in RETURN.');
+            }
+            this.skipTrivia();
+            closing = this.acceptOperator(')');
+            if (!closing) {
+                this.problems.error(this.location(), "Expected ')' after RETURN expression.");
+                // Keep the enclosing statement/block intact, even when an
+                // expression contains currently unsupported syntax.
+                this.synchronize([';', 'END', 'MODEND', 'FIN', 'ELSE', 'ALT', 'OUT']);
             }
         }
 
@@ -60,6 +48,11 @@ export class ReturnStatementParser extends ParserBase {
             this.synchronize([';', 'END', 'MODEND', 'FIN', 'ELSE', 'ALT', 'OUT']);
             this.acceptSemicolon();
         }
-        return new ReturnStatementNode(this.tokenValue(keyword), expression);
+        return new ReturnStatementNode(
+            this.tokenValue(keyword),
+            opening ? this.tokenValue(opening) : undefined,
+            expression,
+            closing ? this.tokenValue(closing) : undefined
+        );
     }
 }

@@ -51,6 +51,17 @@ export interface DataObjectSymbol extends GlobalSymbolBase {
     readonly assignmentProtected: boolean;
 }
 
+/** Struct components have their own declaration identity but are never scope members.
+ * Their name is the SourceValue in StructComponentType, so navigation and
+ * references target the actual STRUCT declaration, not the containing object.
+ */
+export interface StructComponentSymbol extends SymbolBase {
+
+    readonly kind: SymbolKind.StructComponent;
+
+    readonly type: SemanticType;
+}
+
 export interface ParameterSymbol extends SymbolBase {
 
     readonly kind: SymbolKind.Parameter | SymbolKind.Identification;
@@ -95,6 +106,7 @@ export type SemanticSymbol =
     | ModuleSymbol
     | TypeSymbol
     | DataObjectSymbol
+    | StructComponentSymbol
     | ParameterSymbol
     | IdentificationSymbol
     | ProcedureSymbol

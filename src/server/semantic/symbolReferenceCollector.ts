@@ -9,6 +9,7 @@ import type { InitElementNode } from '../ast/problem/declarations/initElementNod
 import type { DclDationAttributeNode } from '../ast/problem/declarations/dclDationAttributeNode';
 import type { ConstantFixedFactorNode } from '../ast/problem/expressions/constantFixedFactorNode';
 import type { NamedTypeNode } from '../ast/problem/types/namedTypeNode';
+import type { NameSegmentNode } from '../ast/problem/expressions/nameSegmentNode';
 import type { CallStatementNode } from '../ast/problem/statements/callStatementNode';
 import type { GotoStatementNode } from '../ast/problem/statements/gotoStatementNode';
 import type { BlockNode } from '../ast/problem/statements/blockNode';
@@ -21,10 +22,9 @@ import { SymbolReferenceIndex } from './symbolReferenceIndex';
  * Extracts symbol usages from the AST without consulting scope or bindings.
  *
  * Only grammatical name occurrences are registered. Raw expression token
- * sequences (CALL arguments, IF/CASE conditions, RETURN expressions and
- * repetition expressions) are deliberately excluded: their identifiers
- * cannot yet be distinguished reliably from other tokens by the AST.
- * As soon as these become expression nodes, add their usages here.
+ * sequences in as-yet-unparsed statements are deliberately excluded.
+ * Structured expression names are references, including each component;
+ * their interpretation comes only from semantic bindings.
  *
  * Declaration names (DCL, TYPE, PROC, TASK, parameters, labels, SPC) are
  * not references merely because they are SourceValue<string> objects.
@@ -50,6 +50,10 @@ export class SymbolReferenceCollector {
 
         const visit = (node: AstNode): void => {
             switch (node.kind) {
+                case AstKind.NameSegment:
+                    add(node, (node as NameSegmentNode).identifier, SymbolReferenceKind.Read);
+                    break;
+
                 case AstKind.NamedType:
                     add(node, (node as NamedTypeNode).name, SymbolReferenceKind.Type);
                     break;

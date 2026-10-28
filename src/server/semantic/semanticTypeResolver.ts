@@ -262,6 +262,14 @@ export class SemanticTypeResolver {
                     name: identifier,
                     type: componentType
                 });
+                // Component declarations are not lexical scope members. Bind
+                // their SourceValues so Find References also works when the
+                // cursor is on the declaration rather than on a use.
+                this.context.bind(identifier, {
+                    kind: SymbolKind.StructComponent,
+                    name: identifier,
+                    type: componentType
+                });
             }
         }
 

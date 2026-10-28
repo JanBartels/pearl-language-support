@@ -4,6 +4,7 @@
 import { AstKind } from '../ast/astKind';
 import type { AstNode } from '../ast/astNode';
 import type { SourceValue } from '../core/sourceValue';
+import type { CommentToken } from '../lexer/token';
 import type { ModuleNode } from '../ast/module/moduleNode';
 import type { ShellCommandNode } from '../ast/module/shellCommandNode';
 import { AlphicDationSystemDeclarationNode } from '../ast/system/declarations/alphicDationSystemDeclationNode';
@@ -15,6 +16,10 @@ import { DclDeclarationSentenceNode } from '../ast/problem/declarations/dclDecla
 import { TaskDeclarationNode } from '../ast/problem/declarations/taskDeclarationNode';
 import { ProcedureDeclarationNode } from '../ast/problem/declarations/procedureDeclarationNode';
 import { SpcProcedureAttributeNode } from '../ast/problem/specifications/spcProcedureAttributeNode';
+import { ReturnStatementNode } from '../ast/problem/statements/returnStatementNode';
+import type { ExpressionNode } from '../ast/problem/expressions/expressionNode';
+import { ExpressionTypeResolver, ExpressionTypeResolverContext } from './expressionTypeResolver';
+import { ProcedureParameterNameIndex } from './procedureParameterNameIndex';
 import { CallStatementNode } from '../ast/problem/statements/callStatementNode';
 import { RepetitionNode } from '../ast/problem/statements/repetitionNode';
 import { ProblemDataAttributeNode } from '../ast/problem/declarations/problemDataAttributeNode';
@@ -79,7 +84,10 @@ import {
 import { SymbolKind } from './symbolKind';
 import { resolveSymbol } from './symbolResolver';
 import { lookupBuiltin } from './builtins/builtinCatalog';
-import { semanticTypeEquals, procedureSignaturesEqual, isProcedureSignatureResolved } from './semanticTypeComparison';
+import {
+    semanticTypeEquals, procedureSignaturesEqual, isProcedureSignatureResolved,
+    isScalarValueAssignable
+} from './semanticTypeComparison';
 import type { BuiltinDefinition } from './builtins/builtinSignature';
 import { acceptsBuiltinArity, builtinExpectedArity } from './builtins/builtinSignature';
 import {
@@ -117,8 +125,17 @@ class SemanticAnalysisState implements
     SemanticTypeResolverContext,
     ConstantFixedExpressionEvaluatorContext,
     InitializationResolverContext,
-    TimeConstantEvaluatorContext {
+    TimeConstantEvaluatorContext,
+    ExpressionTypeResolverContext {
+    readonly parameterNames: ProcedureParameterNameIndex;
+
+    constructor(root: AstNode, comments: readonly CommentToken[]) {
+        this.parameterNames = new ProcedureParameterNameIndex(root, comments);
+    }
+
     readonly typeDefinitions = new Map<TypeSymbol, SemanticType>();
+    readonly expressionTypes = new Map<ExpressionNode, SemanticType>();
+    readonly procedureReturnTypeStack: (SemanticType | undefined)[] = [];
     readonly bindings = new Map<SourceValue<string>, SemanticSymbol>();
     readonly builtinBindings = new Map<SourceValue<string>, BuiltinDefinition>();
     readonly diagnostics: SemanticDiagnostic[] = [];
@@ -151,6 +168,7 @@ class SemanticAnalysisState implements
     readonly constantFixedExpressionEvaluator = new ConstantFixedExpressionEvaluator(this);
     readonly initializationResolver = new InitializationResolver(this);
     readonly timeConstantEvaluator = new TimeConstantEvaluator(this);
+    readonly expressionTypeResolver = new ExpressionTypeResolver(this);
 
     createContext(): SemanticContext {
         return new SemanticContext(
@@ -166,8 +184,178 @@ class SemanticAnalysisState implements
             this.moduleConfigurations,
             this.shellCommandsByProcedure,
             this.builtinBindings,
-            this.localSpecificationRelations
+            this.localSpecificationRelations,
+            this.expressionTypes
         );
+    }
+
+    tryEvaluateFixedExpression(expression: ExpressionNode, environment: Environment): bigint | undefined {
+        return this.constantFixedExpressionEvaluator.tryEvaluateExpression(expression, environment);
+    }
+
+    tryResolveConstantFixedIdentifier(
+        identifier: SourceValue<string>, environment: Environment
+    ): bigint | undefined {
+        const symbol = resolveSymbol(environment, identifier.value);
+        if (!symbol || symbol.kind !== SymbolKind.DataObject) return undefined;
+        const value = this.namedConstantValues.get(symbol);
+        return value?.kind === SemanticConstantKind.Fixed ? value.value : undefined;
+    }
+
+    recordExpressionType(expression: ExpressionNode, type: SemanticType): void {
+        this.expressionTypes.set(expression, type);
+    }
+
+    reportInvalidExpressionOperands(source: SourceValue<string>): void {
+        if (!source.location) return;
+        this.diagnostics.push({
+            code: SemanticDiagnosticCode.InvalidExpressionOperands,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: source.location,
+            message: `Unzulässige Operandentypen für Operator '${source.value}'.`
+        });
+    }
+
+    reportInvalidFunctionArgumentType(
+        source: SourceValue<string>, functionName: SourceValue<string>, position: number,
+        expected: SemanticType, actual: SemanticType
+    ): void {
+        if (!source.location) return;
+        const symbol = this.bindings.get(functionName);
+        const formalName = symbol
+            ? this.parameterNames.nameForSymbol(symbol, position - 1, this)?.name.value
+            : undefined;
+        const label = `Aktualparameter ${position}`
+            + (formalName ? ` ('${formalName}')` : '');
+        this.diagnostics.push({
+            code: SemanticDiagnosticCode.InvalidCallArgumentType,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: source.location,
+            message: `${label} von '${functionName.value}': `
+                + `erwartet ${this.scalarDiagnosticTypeName(expected)}, `
+                + `erhalten ${this.scalarDiagnosticTypeName(actual)}.`
+        });
+    }
+
+    private scalarDiagnosticTypeName(type: SemanticType): string {
+        switch (type.kind) {
+            case SemanticTypeKind.Fixed:
+            case SemanticTypeKind.Float:
+                return `${SemanticTypeKind[type.kind].toUpperCase()}`
+                    + (type.precision === undefined ? '' : `(${type.precision})`);
+            case SemanticTypeKind.Bit:
+            case SemanticTypeKind.Character:
+                return `${type.kind === SemanticTypeKind.Bit ? 'BIT' : 'CHAR'}`
+                    + (type.length === undefined ? '' : `(${type.length})`);
+            default:
+                return SemanticTypeKind[type.kind].toUpperCase();
+        }
+    }
+
+    reportInvalidArrayIndexCount(source: SourceValue<string>, expected: number, actual: number): void {
+        if (!source.location) return;
+        this.diagnostics.push({
+            code: SemanticDiagnosticCode.InvalidArrayIndexCount,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: source.location,
+            message: `Feld '${source.value}' erwartet ${expected} Indizes, erhalten: ${actual}.`
+        });
+    }
+
+    reportConstantIndexOutOfBounds(
+        source: SourceValue<string>, owner: SourceValue<string>, dimension: number | undefined,
+        index: bigint, lower: bigint, upper: bigint | undefined
+    ): void {
+        if (!source.location) return;
+        const description = dimension === undefined
+            ? `Selektor '.${owner.value}'` : `Feld '${owner.value}', Dimension ${dimension}`;
+        this.diagnostics.push({
+            code: SemanticDiagnosticCode.ConstantIndexOutOfBounds,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: source.location,
+            message: `Konstanter Index ${index} für ${description} liegt außerhalb der Grenzen `
+                + `${lower}:${upper === undefined ? '?' : upper}.`
+        });
+    }
+
+    reportInvalidStringSelectorIndexType(source: SourceValue<string>): void {
+        if (!source.location) return;
+        this.diagnostics.push({
+            code: SemanticDiagnosticCode.InvalidStringSelectorIndexType,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: source.location,
+            message: `Index für '.${source.value}' muss vom Typ FIXED sein.`
+        });
+    }
+
+    reportInvalidStringSelectorIndexCount(source: SourceValue<string>, actual: number): void {
+        if (!source.location) return;
+        this.diagnostics.push({
+            code: SemanticDiagnosticCode.InvalidStringSelectorIndexCount,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: source.location,
+            message: `Selektor '.${source.value}' erwartet genau einen Index, erhalten: ${actual}.`
+        });
+    }
+
+    reportInvalidArrayIndexType(source: SourceValue<string>): void {
+        if (!source.location) return;
+        this.diagnostics.push({
+            code: SemanticDiagnosticCode.InvalidArrayIndexType,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: source.location,
+            message: `Feldindizes für '${source.value}' müssen vom Typ FIXED sein.`
+        });
+    }
+
+    reportInvalidNameSuffix(source: SourceValue<string>): void {
+        if (!source.location) return;
+        this.diagnostics.push({
+            code: SemanticDiagnosticCode.InvalidNameSuffix,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: source.location,
+            message: `'${source.value}' bezeichnet weder ein Feld noch eine aufrufbare Prozedur.`
+        });
+    }
+
+    reportInvalidStructureSelection(source: SourceValue<string>): void {
+        if (!source.location) return;
+        this.diagnostics.push({
+            code: SemanticDiagnosticCode.InvalidStructureSelection,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: source.location,
+            message: `Strukturselektion '.${source.value}' erfordert einen STRUCT-Typ.`
+        });
+    }
+
+    reportUnknownStructureComponent(source: SourceValue<string>): void {
+        if (!source.location) return;
+        this.diagnostics.push({
+            code: SemanticDiagnosticCode.UnknownStructureComponent,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: source.location,
+            message: `Strukturkomponente '${source.value}' ist nicht deklariert.`
+        });
+    }
+
+    reportInvalidFunctionExpression(source: SourceValue<string>): void {
+        if (!source.location) return;
+        this.diagnostics.push({
+            code: SemanticDiagnosticCode.InvalidFunctionExpression,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: source.location,
+            message: `Prozedur '${source.value}' liefert keinen Wert für einen Ausdruck.`
+        });
+    }
+
+    reportInvalidReturnType(source: SourceValue<string>): void {
+        if (!source.location) return;
+        this.diagnostics.push({
+            code: SemanticDiagnosticCode.InvalidReturnType,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: source.location,
+            message: 'Der Ausdruckstyp ist mit dem Rückgabetyp der Prozedur nicht kompatibel.'
+        });
     }
 
     bind(source: SourceValue<string>, symbol: SemanticSymbol): void {
@@ -893,8 +1081,8 @@ class SemanticAnalysisState implements
 }
 
 export class SemanticAnalyzer {
-    analyze(root: AstNode): SemanticContext {
-        const state = new SemanticAnalysisState();
+    analyze(root: AstNode, comments: readonly CommentToken[] = []): SemanticContext {
+        const state = new SemanticAnalysisState(root, comments);
 
         this.indexNode(root, undefined, state);
         this.validateDataDeclarationShadowing(state);
@@ -1351,6 +1539,13 @@ export class SemanticAnalyzer {
             );
         }
 
+        if (node.kind === AstKind.ReturnStatement) {
+            if (!environment) return environment;
+            const expected = state.procedureReturnTypeStack[state.procedureReturnTypeStack.length - 1];
+            this.analyzeReturnStatement(node as ReturnStatementNode, environment, expected, state);
+            return environment;
+        }
+
         if (node.kind === AstKind.CallStatement) {
             if (!environment) throw new Error('CALL without semantic environment.');
             return this.analyzeCallStatement(node as CallStatementNode, environment, state);
@@ -1554,11 +1749,45 @@ export class SemanticAnalyzer {
                 procedureEnvironment = this.introduceSymbol(procedureEnvironment, resolved);
             }
         }
-        let current: Environment | undefined = procedureEnvironment;
-        for (const child of node.body) {
-            current = this.analyzeNode(child, current, state);
+        state.procedureReturnTypeStack.push(resultType);
+        try {
+            let current: Environment | undefined = procedureEnvironment;
+            for (const child of node.body) {
+                current = this.analyzeNode(child, current, state);
+            }
+        } finally {
+            state.procedureReturnTypeStack.pop();
         }
         return outerEnvironment;
+    }
+
+    private analyzeReturnStatement(
+        node: ReturnStatementNode,
+        environment: Environment,
+        resultType: SemanticType | undefined,
+        state: SemanticAnalysisState
+    ): void {
+        if (!node.expression) return;
+        const expressionType = state.expressionTypeResolver.resolve(node.expression, environment);
+        // Errors already reported in an operand must not cause a second return error.
+        if (!resultType || !expressionType) return;
+        const target = state.resolveUnderlyingType(resultType);
+        const source = state.resolveUnderlyingType(expressionType);
+        if (!target || !source) return;
+        // REF context-dependent implicit dereferencing is not implemented yet.
+        // Suppress a potentially false type mismatch until it is.
+        if (target.kind === SemanticTypeKind.Reference || target.kind === SemanticTypeKind.VoidReference
+            || source.kind === SemanticTypeKind.Reference || source.kind === SemanticTypeKind.VoidReference) {
+            return;
+        }
+        if (!this.returnTypeAccepts(target, source)) {
+            state.reportInvalidReturnType(node.keyword);
+        }
+    }
+
+    /** RETURN and scalar call-by-value both use the same assignment rules. */
+    private returnTypeAccepts(target: SemanticType, source: SemanticType): boolean {
+        return isScalarValueAssignable(target, source);
     }
 
     private analyzeCallStatement(
