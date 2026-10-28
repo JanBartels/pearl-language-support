@@ -10,6 +10,7 @@ import { appendSemanticSymbolDocumentation } from '../../semanticSymbolDocumenta
 import type { CallSignatureIndex } from '../../../semantic/callSignatureIndex';
 import { formatCallSignatures } from '../../callSignatureFormatting';
 import { md } from '../../markdownUtils';
+import { shellProcedureReturnStatusDocumentation } from '../../module/shellProcedureReturnStatusDocumentation';
 
 export class ProcedureDeclarationDocumentationProvider
     extends DocumentationProvider<ProcedureDeclarationNode> {
@@ -25,6 +26,7 @@ export class ProcedureDeclarationDocumentationProvider
         const shellName = shellCommand?.commandName.value.replace(/^['"]|['"]$/g, '');
         const shellDocumentation = shellName
             ? md`\n\n**Shell command:** \`${shellName}\``
+                + `\n\n${shellProcedureReturnStatusDocumentation}`
             : '';
 
         if (lookup.element === node.name) {
@@ -56,7 +58,8 @@ The body contains local declarations followed by statements.` + shellDocumentati
         if (lookup.element === node.returnsKeyword) {
             return md`# RETURNS
 
-Declares the type of the procedure result.`;
+Declares the type of the procedure result.`
+                + (shellCommand ? `\n\n${shellProcedureReturnStatusDocumentation}` : '');
         }
         if (lookup.element === node.endKeyword) {
             return md`# END

@@ -18,8 +18,8 @@ MODE=DEBUG;
 
 #define Mod "MODULE huhu"
 !Mod;
-MODULE huhu;
-!SHELLMODULE huhu;
+!MODULE huhu;
+SHELLMODULE huhu;
 
 aloha: 'he';
 hallo: 'welt';
@@ -422,6 +422,14 @@ END;
 
 P2: PROC /*+G*/ ( A FIXED, B FIXED );
   A := 1;
+END;
+
+aloha: PROC(
+    (Stdin, Stdout, Stderr) DATION INOUT ALPHIC IDENT,
+    Length FIXED,
+    Text CHAR(255)
+) RETURNS(BIT(1));
+
 END;
 
 MODEND DEBUG;

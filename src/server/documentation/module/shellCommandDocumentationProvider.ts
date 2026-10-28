@@ -8,6 +8,7 @@ import { AstLookupResult } from '../../ast/astLookupResult';
 import type { SemanticContext } from '../../semantic/semanticContext';
 import { lookupBoundSymbol } from '../../semantic/bindingIndex';
 import { appendSemanticSymbolDocumentation } from '../semanticSymbolDocumentation';
+import { shellProcedureReturnStatusDocumentation } from './shellProcedureReturnStatusDocumentation';
 
 export class ShellCommandDocumentationProvider
     extends DocumentationProvider<ShellCommandNode> {
@@ -36,7 +37,7 @@ ${node.procedureName.value}: PROC(
 ) RETURNS(BIT(1));
 END;
 \`\`\`
-`;
+` + `\n${shellProcedureReturnStatusDocumentation}`;
             const symbol = semanticContext
                 ? lookupBoundSymbol(semanticContext.bindings, node.procedureName)
                 : undefined;
@@ -58,7 +59,7 @@ ${node.commandName.value}
 
 invokes the PEARL procedure
 \`${node.procedureName.value}\`.
-`;
+` + `\n${shellProcedureReturnStatusDocumentation}`;
         }
 
         return undefined;
