@@ -10,6 +10,8 @@ import { ParserBase } from '../../parserBase';
 import { Token, TokenKind } from '../../../lexer/token';
 import { SourceValue } from '../../../core/sourceValue';
 import { NameExpressionParser } from './nameExpressionParser';
+import { ClockConstantTailParser } from './clockConstantTailParser';
+import { DurationConstantTailParser } from './durationConstantTailParser';
 
 /** Operator ranks from PEARL 90, section 6.1.3, Table 6.10.
  * Larger binding power means higher precedence. Rank 1 associates to the
@@ -34,7 +36,7 @@ const MONADIC_OPERATORS = [
 /** First vertical slice of the general expression grammar.
  * A deliberate standalone parser: statement token preservation and the
  * constant-FIXED-expression grammar are not changed in this milestone.
- * Unimplemented forms (e.g. clock/duration literals and IF expressions)
+ * Unimplemented forms (e.g. IF expressions)
  * are not silently consumed or guessed.
  */
 export class ExpressionParser extends ParserBase {
@@ -56,6 +58,14 @@ export class ExpressionParser extends ParserBase {
 
             const operatorToken = this.current();
             this.next();
+            this.skipTrivia();
+            // RTOS-UH requires parentheses around a negative SHIFT distance:
+            // B SHIFT (-2), not B SHIFT -2. The PEARL 90 report permits
+            // the latter, so this is an intentional dialect restriction.
+            if (this.tokenText(operatorToken) === 'SHIFT' && this.isOperator('-')) {
+                this.problems.error(this.location(),
+                    "Negativer SHIFT-Abstand muss geklammert werden: SHIFT (-2).");
+            }
             const right = this.parseWithMinimumPower(
                 operator.rightAssociative ? operator.power : operator.power + 1
             );
@@ -93,10 +103,27 @@ export class ExpressionParser extends ParserBase {
                 'Bedingte IF-Ausdrücke werden von RTOS-UH nicht unterstützt.');
             return undefined;
         }
-        if (this.isNumberLiteral() || this.isStringLiteral() || this.isBitLiteral()) {
+        if (this.isNumberLiteral()) {
             this.next();
-            return this.parseLiteral(this.tokenValue(token),
-                this.isNumberToken(token));
+            const value = this.tokenValue(token);
+            const integer = this.tokenKind(token) === TokenKind.IntegerLiteral;
+            this.skipTrivia();
+            // Reuse the existing temporal-constant tail parsers from INIT.
+            // The first numeric token belongs to the same expression and is
+            // consumed exactly once; do not reinterpret arbitrary expressions.
+            if (integer && this.beginsClockTail()) {
+                return new ClockConstantTailParser(this.context).parseTail(value);
+            }
+            if (this.isKeyword(['HRS', 'MIN', 'SEC'])) {
+                return new DurationConstantTailParser(this.context).parseTail({
+                    value, integer
+                });
+            }
+            return this.parseLiteral(value, true);
+        }
+        if (this.isStringLiteral() || this.isBitLiteral()) {
+            this.next();
+            return new LiteralExpressionNode(this.tokenValue(token));
         }
 
         if (this.isOperator('(')) {
@@ -122,9 +149,30 @@ export class ExpressionParser extends ParserBase {
         return undefined;
     }
 
-    private isNumberToken(token: Token): boolean {
-        return this.tokenKind(token) === TokenKind.IntegerLiteral
-            || this.tokenKind(token) === TokenKind.FloatingPointLiteral;
+    /** Distinguish CLOCK (12:30:00) from a CASE selection range (1:5).
+     * Inspect only the token pattern, without consuming or parsing a second
+     * expression. The tail parser handles the remaining CLOCK grammar.
+     */
+    private beginsClockTail(): boolean {
+        let offset = 0;
+        const nextSignificant = (): Token => {
+            let token = this.context.stream.peek(offset);
+            while (token.kind === TokenKind.Newline || token.kind === TokenKind.Comment) {
+                offset++;
+                token = this.context.stream.peek(offset);
+            }
+            return token;
+        };
+        const firstColon = nextSignificant();
+        if (firstColon.kind !== TokenKind.Operator || this.tokenText(firstColon) !== ':') {
+            return false;
+        }
+        offset++;
+        const minutes = nextSignificant();
+        if (minutes.kind !== TokenKind.IntegerLiteral) return false;
+        offset++;
+        const secondColon = nextSignificant();
+        return secondColon.kind === TokenKind.Operator && this.tokenText(secondColon) === ':';
     }
 
     private parseLiteral(

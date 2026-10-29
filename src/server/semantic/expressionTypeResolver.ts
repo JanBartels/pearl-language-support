@@ -5,18 +5,22 @@ import type { SourceValue } from '../core/sourceValue';
 import { AstKind } from '../ast/astKind';
 import type { ExpressionNode } from '../ast/problem/expressions/expressionNode';
 import { LiteralExpressionNode } from '../ast/problem/expressions/literalExpressionNode';
+import { ClockConstantNode } from '../ast/problem/expressions/clockConstantNode';
+import { DurationConstantNode } from '../ast/problem/expressions/durationConstantNode';
 import { NameExpressionNode } from '../ast/problem/expressions/nameExpressionNode';
 import type { NameSegmentNode } from '../ast/problem/expressions/nameSegmentNode';
 import { ParenthesizedExpressionNode } from '../ast/problem/expressions/parenthesizedExpressionNode';
 import { MonadicExpressionNode } from '../ast/problem/expressions/monadicExpressionNode';
 import { DyadicExpressionNode } from '../ast/problem/expressions/dyadicExpressionNode';
 import type { Environment } from './environment';
+import type { ClockConstantValue, DurationConstantValue } from './semanticConstantValue';
 import { resolveSymbol } from './symbolResolver';
 import { SymbolKind } from './symbolKind';
 import type { SemanticSymbol } from './symbol';
 import { SemanticTypeKind } from './semanticType';
 import type { SemanticType, ProcedureType, ArrayType, VirtualArrayType } from './semanticType';
-import { isScalarValueAssignable } from './semanticTypeComparison';
+import { classifyObjectExpression, expressionSource } from './expressionObject';
+import { validateProcedureActualParameters, validateBuiltinIdentificationParameters } from './procedureActualParameterValidator';
 import { lookupBuiltin } from './builtins/builtinCatalog';
 import type { BuiltinDefinition } from './builtins/builtinSignature';
 import { matchBuiltinSignature, builtinExpectedArity, acceptsBuiltinArity } from './builtins/builtinSignature';
@@ -29,7 +33,10 @@ export interface ExpressionTypeResolverContext {
     reportInvalidBuiltinArgumentType(source: SourceValue<string>, builtinName: string): void;
     reportUnknownIdentifier(source: SourceValue<string>): void;
     reportInvalidExpressionOperands(source: SourceValue<string>): void;
+    reportUnsupportedBitConcatenation(source: SourceValue<string>): void;
     reportInvalidCallArity(source: SourceValue<string>, expected: number, actual: number): void;
+    reportInvalidIdentificationArgument(source: SourceValue<string>, target: SourceValue<string>,
+        position: number, formalName?: string, reason?: 'protected'): void;
     reportInvalidFunctionArgumentType(
         source: SourceValue<string>, functionName: SourceValue<string>, position: number,
         expected: SemanticType, actual: SemanticType
@@ -52,6 +59,8 @@ export interface ExpressionTypeResolverContext {
     reportInvalidFunctionExpression(source: SourceValue<string>): void;
     resolveUnderlyingType(type: SemanticType): SemanticType | undefined;
     recordExpressionType(expression: ExpressionNode, type: SemanticType): void;
+    evaluateClockConstant(constant: ClockConstantNode, environment: Environment): ClockConstantValue | undefined;
+    evaluateDurationConstant(constant: DurationConstantNode, environment: Environment): DurationConstantValue | undefined;
 }
 
 /**
@@ -68,6 +77,16 @@ export class ExpressionTypeResolver {
         switch (node.kind) {
             case AstKind.LiteralExpression:
                 type = this.literal(node as LiteralExpressionNode);
+                break;
+            case AstKind.ClockConstant:
+                if (this.context.evaluateClockConstant(node as ClockConstantNode, environment)) {
+                    type = { kind: SemanticTypeKind.Clock };
+                }
+                break;
+            case AstKind.DurationConstant:
+                if (this.context.evaluateDurationConstant(node as DurationConstantNode, environment)) {
+                    type = { kind: SemanticTypeKind.Duration };
+                }
                 break;
             case AstKind.NameExpression:
                 type = this.name(node as NameExpressionNode, environment);
@@ -135,7 +154,7 @@ export class ExpressionTypeResolver {
         const argumentTypes = node.segments.map(segment =>
             (segment.suffix?.expressions ?? []).map(argument => this.resolve(argument, environment)));
         if (!symbol) {
-            return builtin ? this.builtinResult(node, builtin, argumentTypes) : undefined;
+            return builtin ? this.builtinResult(node, builtin, argumentTypes, environment) : undefined;
         }
 
         let type: SemanticType | undefined;
@@ -191,7 +210,7 @@ export class ExpressionTypeResolver {
                         segment.suffix.expressions, argumentTypes[index], environment);
                 } else if (selected.kind === SemanticTypeKind.Procedure) {
                     type = this.functionResult(segment.identifier, selected,
-                        segment.suffix.expressions, argumentTypes[index]);
+                        segment.suffix.expressions, argumentTypes[index], environment);
                 } else if (resolved.kind === SemanticTypeKind.Reference
                     || resolved.kind === SemanticTypeKind.VoidReference) {
                     // Context-dependent reference operations are deferred.
@@ -215,7 +234,8 @@ export class ExpressionTypeResolver {
      * the compiler builtin catalog and are shared with CALL and Hover. */
     private builtinResult(
         node: NameExpressionNode, builtin: BuiltinDefinition,
-        argumentTypes: readonly (readonly (SemanticType | undefined)[])[]
+        argumentTypes: readonly (readonly (SemanticType | undefined)[])[],
+        environment: Environment
     ): SemanticType | undefined {
         const first = node.segments[0];
         if (!first || node.segments.length !== 1) return undefined;
@@ -239,7 +259,8 @@ export class ExpressionTypeResolver {
             this.context.reportInvalidBuiltinArgumentType(first.identifier, builtin.name);
             return undefined;
         }
-        return match.resultType;
+        return validateBuiltinIdentificationParameters(first.identifier, match.signature,
+            args, environment, this.context) ? match.resultType : undefined;
     }
 
     /** Resolve one lexical component against the preceding STRUCT value. */
@@ -371,7 +392,8 @@ export class ExpressionTypeResolver {
         name: SourceValue<string>,
         signature: ProcedureType | undefined,
         argumentsNodes: readonly (ExpressionNode | undefined)[],
-        argumentsTypes: readonly (SemanticType | undefined)[]
+        argumentsTypes: readonly (SemanticType | undefined)[],
+        environment: Environment
     ): SemanticType | undefined {
         if (!signature) return undefined;
         if (signature.parameters.length !== argumentsTypes.length) {
@@ -382,64 +404,15 @@ export class ExpressionTypeResolver {
             this.context.reportInvalidFunctionExpression(name);
             return undefined;
         }
-
-        let valid = true;
-        for (let index = 0; index < signature.parameters.length; index++) {
-            const formal = signature.parameters[index];
-            const actual = argumentsTypes[index];
-            if (!actual || !formal.type) {
-                valid = false; // An operand or formal type is not yet resolvable.
-                continue;
-            }
-            // IDENT must validate an addressable object and exact type identity;
-            // it cannot reuse the value-transfer check.
-            if (formal.byIdentification) continue;
-            const expected = this.context.resolveUnderlyingType(formal.type);
-            const received = this.context.resolveUnderlyingType(actual);
-            if (!expected || !received) {
-                valid = false;
-                continue;
-            }
-            // REF values and complex parameter passing are contextual in UH-PEARL.
-            // Defer these cases rather than reporting possibly false errors.
-            if (!this.scalarParameterType(expected) || !this.scalarParameterType(received)) {
-                continue;
-            }
-            if (!isScalarValueAssignable(expected, received)) {
-                valid = false;
-                const expression = argumentsNodes[index];
-                const source = expression && this.argumentDiagnosticSource(expression);
-                this.context.reportInvalidFunctionArgumentType(
-                    source ?? name, name, index + 1, expected, received
-                );
-            }
-        }
-        // Suppress follow-on arithmetic or RETURN errors for a bad call.
+        const valid = validateProcedureActualParameters(name, signature, argumentsNodes,
+            argumentsTypes, environment, this.context);
+        // Do not cascade into outer expressions after an erroneous call.
         return valid ? signature.resultType : undefined;
-    }
-
-    /** Only the types whose value-transfer semantics are implemented here. */
-    private scalarParameterType(type: SemanticType): boolean {
-        return type.kind === SemanticTypeKind.Fixed || type.kind === SemanticTypeKind.Float
-            || type.kind === SemanticTypeKind.Bit || type.kind === SemanticTypeKind.Character
-            || type.kind === SemanticTypeKind.Clock || type.kind === SemanticTypeKind.Duration;
     }
 
     /** Diagnostics refer to actual source values, never to a synthetic AST location. */
     private argumentDiagnosticSource(node: ExpressionNode): SourceValue<string> | undefined {
-        switch (node.kind) {
-            case AstKind.NameExpression:
-                return (node as NameExpressionNode).segments[0]?.identifier;
-            case AstKind.LiteralExpression:
-                return (node as LiteralExpressionNode).literal;
-            case AstKind.ParenthesizedExpression:
-                return (node as ParenthesizedExpressionNode).openParenthesis;
-            case AstKind.MonadicExpression:
-                return (node as MonadicExpressionNode).operator;
-            case AstKind.DyadicExpression:
-                return this.argumentDiagnosticSource((node as DyadicExpressionNode).left);
-        }
-        return undefined;
+        return expressionSource(node);
     }
 
     private monadic(node: MonadicExpressionNode, environment: Environment): SemanticType | undefined {
@@ -461,6 +434,50 @@ export class ExpressionTypeResolver {
             case 'SIGN':
                 if (this.numeric(operand) || operand.kind === SemanticTypeKind.Duration) {
                     return { kind: SemanticTypeKind.Fixed, precision: 1 };
+                }
+                break;
+            case 'TOFIXED':
+                // RTOS-UH differs from PEARL 90 Table 6.2:
+                // BIT(lg) -> FIXED(lg - 1), accounting for the sign bit.
+                // CHAR(1) -> FIXED(7) remains unchanged.
+                // An unspecified CHAR length may depend on LENGTH; do not
+                // invent a fixed default length here.
+                if (operand.kind === SemanticTypeKind.Bit) {
+                    // FIXED(0) is not a valid RTOS-UH type. An unspecified
+                    // length remains unspecified until LENGTH is considered.
+                    if (operand.length !== undefined && operand.length < 2) {
+                        this.context.reportInvalidExpressionOperands(node.operator);
+                        return undefined;
+                    }
+                    return { kind: SemanticTypeKind.Fixed,
+                        precision: operand.length === undefined ? undefined : operand.length - 1 };
+                }
+                if (operand.kind === SemanticTypeKind.Character
+                    && (operand.length === undefined || operand.length === 1)) {
+                    return { kind: SemanticTypeKind.Fixed, precision: 7 };
+                }
+                break;
+            case 'TOFLOAT':
+                if (operand.kind === SemanticTypeKind.Fixed) {
+                    return { kind: SemanticTypeKind.Float, precision: operand.precision };
+                }
+                break;
+            case 'TOBIT':
+                if (operand.kind === SemanticTypeKind.Fixed) {
+                    // RTOS-UH: FIXED(g) -> BIT(g + 1), including the sign bit.
+                    return { kind: SemanticTypeKind.Bit,
+                        length: operand.precision === undefined ? undefined : operand.precision + 1 };
+                }
+                break;
+            case 'TOCHAR':
+                if (operand.kind === SemanticTypeKind.Fixed) {
+                    return { kind: SemanticTypeKind.Character, length: 1 };
+                }
+                break;
+            case 'ENTIER':
+            case 'ROUND':
+                if (operand.kind === SemanticTypeKind.Float) {
+                    return { kind: SemanticTypeKind.Fixed, precision: operand.precision };
                 }
                 break;
             case 'LWB':
@@ -487,11 +504,78 @@ export class ExpressionTypeResolver {
         const originalRight = this.resolve(node.right, environment);
         const left = originalLeft && this.context.resolveUnderlyingType(originalLeft);
         const right = originalRight && this.context.resolveUnderlyingType(originalRight);
-        if (!left || !right || !node.right) return undefined;
-        // No false operand diagnostics before contextual REF dereferencing exists.
-        if (this.reference(left) || this.reference(right)) return undefined;
+        if (!node.right) return undefined;
 
         const op = node.operator.value;
+        const leftIsNil = this.isNilLiteral(node.left);
+        const rightIsNil = this.isNilLiteral(node.right);
+        if (leftIsNil || rightIsNil) {
+            // NIL has no standalone type. In RTOS-UH it can be compared with
+            // IS/ISNT only when the other operand is a reference. Ordinary
+            // equality (==, /=, EQ, NE) and arithmetic with NIL are invalid.
+            if ((op === 'IS' || op === 'ISNT') && leftIsNil !== rightIsNil) {
+                const other = leftIsNil ? right : left;
+                if (!other) return undefined; // The other operand already failed.
+                if (this.reference(other)) {
+                    return { kind: SemanticTypeKind.Bit, length: 1 };
+                }
+            }
+            this.context.reportInvalidExpressionOperands(node.operator);
+            return undefined;
+        }
+        if (!left || !right) return undefined;
+        if (op === 'IS' || op === 'ISNT') {
+            // UH-PEARL 5.6.2.2: at least one operand must be a pointer;
+            // the other must denote an addressable object or be a pointer.
+            // NIL is handled separately above because it has no SemanticType.
+            if ((this.reference(left) || this.reference(right))
+                && (this.reference(left) || classifyObjectExpression(node.left, environment,
+                    type => this.context.resolveUnderlyingType(type)) === 'object')
+                && (this.reference(right) || classifyObjectExpression(node.right, environment,
+                    type => this.context.resolveUnderlyingType(type)) === 'object')) {
+                return { kind: SemanticTypeKind.Bit, length: 1 };
+            }
+            this.context.reportInvalidExpressionOperands(node.operator);
+            return undefined;
+        }
+        // Value comparisons are distinct from IS/ISNT reference comparisons.
+        // In a value context, a typed REF denotes the value of its target
+        // object. Only resolve that implicit dereference for comparisons here;
+        // other operators await the shared contextual-REF analysis.
+        if (['<', '>', '<=', '>=', 'LT', 'GT', 'LE', 'GE',
+            '==', '/=', 'EQ', 'NE'].includes(op)) {
+            const valueLeft = this.comparisonValueOperand(left);
+            const valueRight = this.comparisonValueOperand(right);
+            // Unknown/unsupported dereferencing must not trigger speculative
+            // secondary diagnostics (e.g. an unresolved or VOID reference).
+            if (!valueLeft || !valueRight) return undefined;
+            const ordered = !['==', '/=', 'EQ', 'NE'].includes(op);
+            if (this.numeric(valueLeft) && this.numeric(valueRight)
+                || valueLeft.kind === SemanticTypeKind.Clock && valueRight.kind === SemanticTypeKind.Clock
+                || valueLeft.kind === SemanticTypeKind.Duration && valueRight.kind === SemanticTypeKind.Duration
+                || valueLeft.kind === SemanticTypeKind.Character && valueRight.kind === SemanticTypeKind.Character
+                || !ordered && valueLeft.kind === SemanticTypeKind.Bit && valueRight.kind === SemanticTypeKind.Bit) {
+                return { kind: SemanticTypeKind.Bit, length: 1 };
+            }
+            this.context.reportInvalidExpressionOperands(node.operator);
+            return undefined;
+        }
+        // The other operators do not yet have full contextual REF rules.
+        if (this.reference(left) || this.reference(right)) return undefined;
+
+        if (op === 'FIT') {
+            // FIT changes the precision to that of the right operand. Both
+            // operands must belong to the same numeric type (Table 6.5).
+            // Preserve an unspecified precision for later LENGTH resolution.
+            if (left.kind === SemanticTypeKind.Fixed && right.kind === SemanticTypeKind.Fixed) {
+                return { kind: SemanticTypeKind.Fixed, precision: right.precision };
+            }
+            if (left.kind === SemanticTypeKind.Float && right.kind === SemanticTypeKind.Float) {
+                return { kind: SemanticTypeKind.Float, precision: right.precision };
+            }
+            this.context.reportInvalidExpressionOperands(node.operator);
+            return undefined;
+        }
         if (op === 'LWB' || op === 'UPB') {
             if (left.kind !== SemanticTypeKind.Fixed || !this.arrayType(right)) {
                 this.context.reportInvalidExpressionOperands(node.operator);
@@ -526,20 +610,59 @@ export class ExpressionTypeResolver {
             this.context.reportInvalidExpressionOperands(node.operator);
             return undefined;
         }
-        if (['<', '>', '<=', '>=', 'LT', 'GT', 'LE', 'GE', '==', '/=', 'EQ', 'NE'].includes(op)) {
-            const ordered = !['==', '/=', 'EQ', 'NE'].includes(op);
-            if (this.numeric(left) && this.numeric(right)
-                || left.kind === SemanticTypeKind.Clock && right.kind === SemanticTypeKind.Clock
-                || left.kind === SemanticTypeKind.Duration && right.kind === SemanticTypeKind.Duration
-                || left.kind === SemanticTypeKind.Character && right.kind === SemanticTypeKind.Character
-                || !ordered && left.kind === SemanticTypeKind.Bit && right.kind === SemanticTypeKind.Bit) {
-                return { kind: SemanticTypeKind.Bit, length: 1 };
+        if (op === 'SHIFT' || op === 'CSHIFT' || op === '<>') {
+            // RTOS-UH: both logical and cyclic shifts require BIT shifted
+            // by FIXED. The number of positions does not change BIT length.
+            if (left.kind === SemanticTypeKind.Bit && right.kind === SemanticTypeKind.Fixed) {
+                return { kind: SemanticTypeKind.Bit, length: left.length };
+            }
+            this.context.reportInvalidExpressionOperands(node.operator);
+            return undefined;
+        }
+        if (op === 'CAT' || op === '><') {
+            // In the language report BIT strings can also be concatenated.
+            // RTOS-UH expressly does not implement BIT concatenation (5.1.2).
+            if (left.kind === SemanticTypeKind.Character
+                && right.kind === SemanticTypeKind.Character) {
+                // Preserve unspecified lengths until the effective LENGTH
+                // settings are available in the semantic environment.
+                return { kind: SemanticTypeKind.Character,
+                    length: left.length === undefined || right.length === undefined
+                        ? undefined : left.length + right.length };
+            }
+            if (left.kind === SemanticTypeKind.Bit && right.kind === SemanticTypeKind.Bit) {
+                this.context.reportUnsupportedBitConcatenation(node.operator);
+                return undefined;
             }
             this.context.reportInvalidExpressionOperands(node.operator);
             return undefined;
         }
         // Operator forms not covered by the first slice remain untyped.
         return undefined;
+    }
+
+    /** A typed REF is automatically dereferenced in a value comparison.
+     * Do not guess the value type of VOID REF, a nested REF, or a procedure
+     * reference until their contextual semantics are implemented.
+     */
+    private comparisonValueOperand(type: SemanticType): SemanticType | undefined {
+        if (type.kind === SemanticTypeKind.VoidReference) return undefined;
+        if (type.kind !== SemanticTypeKind.Reference) return type;
+        const target = this.context.resolveUnderlyingType(type.target);
+        if (!target || this.reference(target) || target.kind === SemanticTypeKind.Procedure) {
+            return undefined;
+        }
+        return target;
+    }
+
+    /** Parentheses do not change the context-dependent NIL literal. */
+    private isNilLiteral(expression: ExpressionNode): boolean {
+        let current: ExpressionNode | undefined = expression;
+        while (current?.kind === AstKind.ParenthesizedExpression) {
+            current = (current as ParenthesizedExpressionNode).expression;
+        }
+        return current?.kind === AstKind.LiteralExpression
+            && (current as LiteralExpressionNode).literal.value === 'NIL';
     }
 
     private arrayType(type: SemanticType): type is ArrayType | VirtualArrayType {

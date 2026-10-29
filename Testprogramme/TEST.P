@@ -489,13 +489,13 @@ DCL B16 BIT(16);
 END;
 
 R6: PROC(I FIXED);
-    DCL RA(10) FIXED;
+    DCL RA6(10) FIXED;
 
-    IF RA(I) > 0 THEN
+    IF RA6(I) > 0 THEN
         RETURN;
     FIN;
 
-    IF RA(11) > 0 THEN
+    IF RA6(11) > 0 THEN
         RETURN;
     FIN;
 
@@ -514,8 +514,8 @@ END;
 
 
 R7: PROC(I FIXED);
-DCL RA(10) FIXED;
-    CASE RA(I) + 1
+DCL RA7(10) FIXED;
+    CASE RA7(I) + 1
         ALT (1:5) RETURN;
         ALT (7, 9) RETURN;
         ALT ('Huhu') RETURN;
@@ -539,9 +539,9 @@ R8: PROC(I FIXED);
       X = I2;
    END;
    BEGIN
-      DCL RA(10) FIXED;
+      DCL RA8(10) FIXED;
 
-      FOR J FROM I + 1 BY I * 2 TO RA(5)
+      FOR J FROM I + 1 BY I * 2 TO RA8(5)
          WHILE J < I + 100
       REPEAT
          RETURN;
@@ -550,15 +550,15 @@ R8: PROC(I FIXED);
       REPEAT
          RETURN;
       END;
-      FOR J FROM RA(11) TO RA(0)
+      FOR J FROM RA8(11) TO RA8(0)
       REPEAT
          RETURN;
       END;            
-      FOR J FROM 1 LWB RA TO 1 UPB RA
+      FOR J FROM 1 LWB RA8 TO 1 UPB RA8
       REPEAT
          RETURN;
       END;            
-      FOR J FROM 2 LWB RA TO 1 UPB RA
+      FOR J FROM 2 LWB RA8 TO 1 UPB RA8
       REPEAT
          RETURN;
       END;            
@@ -570,9 +570,31 @@ TYPE HS STRUCT [
 ];
 
 HP: PROC( Param HS );
+DCL PL REF HS;
    IF Param.E == 42
    THEN
       RETURN;
+   FIN;
+   IF Param == NIL THEN
+      ;
+   FIN;
+   IF Param ISNT NIL THEN
+      ;
+   FIN;
+   IF Param.E IS 42 THEN
+      ;
+   FIN;
+   IF PL == 42 THEN
+      ;
+   FIN;
+   IF PL IS 42 THEN
+      ;
+   FIN;
+   IF PL IS NIL THEN
+      ;
+   FIN;
+   IF PL IS Param THEN
+      ;
    FIN;
 END;
 
@@ -588,5 +610,126 @@ END;
 Einbau: PROC( String CHAR(10) ) RETURNS( FIXED );
    RETURN( LEN( MID( String, 2,4 ) ) );
 END;
-   
+
+Test: PROC(B BIT(16), C CHAR(10))
+      RETURNS(CHAR(20));
+
+    IF (B SHIFT 2) == B THEN
+        RETURN(C CAT 'X');
+    FIN;
+
+    RETURN('ABC' >< 'DEF');
+END;
+
+BT: PROC RETURNS(BIT(16));
+DCL B16 BIT(16);
+RETURN( B16 SHIFT -2);
+END;
+
+DCP: PROC RETURNS( CLOCK );
+   RETURN( 12:00:00.001 + 2.7 * 4 HRS 3.8 SEC );
+END;
+
+TimeTest: PROC RETURNS(DURATION);
+    DCL T1C CLOCK, T2C CLOCK;
+    RETURN(T1C - T2C + 250.5 SEC);
+    BEGIN
+      DCL FX FIXED;
+      CASE FX
+      ALT (12:34:56)
+      ;
+      FIN;
+   END;
+END;
+
+PI: PROC(X FIXED IDENT);
+END;
+
+QI: PROC(X INV FIXED IDENT);
+END;
+
+RI: PROC;
+    DCL AI FIXED;
+    DCL BI INV FIXED INIT(42);
+
+    PI(AI);    ! gültig
+    PI(BI);    ! Fehler
+
+    QI(AI);    ! gültig
+    QI(BI);    ! gültig
+END;
+
+Accept: PROC(X FIXED);
+END;
+
+RA: PROC;
+DCL VA FIXED;
+DCL PA REF FIXED INIT(VA);
+
+    Accept(VA);
+    Accept(PA);
+END;
+
+PF: PROC(A() FIXED IDENT);
+END;
+
+RF: PROC;
+    DCL One(-4:7) FIXED;
+    DCL Two(2:4, 5:9) FIXED;
+    DCL Floats(10) FLOAT;
+
+    PF(One);     ! gültig
+    PF(Two);     ! falsche Dimensionszahl
+    PF(Floats);  ! falscher Elementtyp
+END;
+
+TYPE HS2 STRUCT[E FIXED];
+TYPE Other2 STRUCT[E FLOAT];
+
+POther2: PROC(X HS2 IDENT);
+END;
+
+ROther2: PROC;
+    DCL LGood HS2;
+    DCL LBad Other2;
+    DCL LRefGood REF HS2;
+    DCL LRefBad REF Other2;
+
+    POther2(LGood);   ! gültig
+    POther2(LBad);    ! Typfehler
+    POther2(LRefGood);   ! gültig
+    POther2(LRefBad);    ! Typfehler
+END;
+
+DCL VHS HS;
+DCL P REF HS INIT(VHS);
+
+GetAddress: PROC RETURNS(REF HS);
+    RETURN(VHS);
+END;
+
+GetPointer: PROC RETURNS(REF HS);
+    RETURN(P);
+END;
+
+GetNil: PROC RETURNS(REF HS);
+    RETURN(NIL);
+END;
+
+Bad: PROC RETURNS(REF HS);
+    RETURN(42);
+END;
+
+Good: PROC RETURNS( REF STRUCT[]);
+    RETURN(NIL);
+    RETURN(P);
+    RETURN(VHS);
+END;
+
+Good2: PROC RETURNS( REF INV STRUCT[]);
+    RETURN(NIL);
+    RETURN(P);
+    RETURN(VHS);
+END;
+
 MODEND DEBUG;

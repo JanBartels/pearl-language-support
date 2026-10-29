@@ -53,7 +53,7 @@ export function formatSemanticType(type: SemanticType): string {
         case SemanticTypeKind.Procedure:
             const procedureKeyword = type.callingConvention === 'C' ? 'PROC_C' : 'PROC';
             return `${procedureKeyword}${type.parameters.length ? `(${type.parameters.map(p =>
-                `${p.type ? formatSemanticType(p.type) : '?'}${p.byIdentification ? ' IDENT' : ''}`
+                `${p.assignmentProtected ? 'INV ' : ''}${p.type ? formatSemanticType(p.type) : '?'}${p.byIdentification ? ' IDENT' : ''}`
             ).join(', ')})` : ''}${type.hasResult
                 ? ` RETURNS(${type.resultType ? formatSemanticType(type.resultType) : '?'})` : ''}`;
 

@@ -268,3 +268,25 @@ test('CASE accepts explicit FIXED(15) and rejects FIXED(31) even in positional f
     assert.deepEqual(r.syntax, []);
     assert.deepEqual(r.codes, [SemanticDiagnosticCode.InvalidCaseSelector]);
 });
+
+test('CLOCK-like ALT 12:34:56 does not silently pass as a FIXED range', () => {
+    const r = analyze(`BEGIN DCL FX FIXED; CASE FX ALT (12:34:56) ; FIN; END;`);
+    assert.deepEqual(r.syntax, []);
+    assert.deepEqual(r.codes, [SemanticDiagnosticCode.InvalidCaseAlternativeType]);
+    const diagnostic = r.semantic.diagnostics.find(d => d.code === SemanticDiagnosticCode.InvalidCaseAlternativeType)!;
+    assert.equal(diagnostic.location.span.start, r.source.text.indexOf('12:34:56'));
+});
+
+test('other temporal ALT expression forms also keep their diagnostic locations', () => {
+    const r = analyze(`DCL FX FIXED;
+        CASE FX ALT ((12:34:56)) RETURN; FIN;
+        CASE FX ALT (5 SEC) RETURN; FIN;`);
+    assert.deepEqual(r.syntax, []);
+    assert.deepEqual(r.codes, [
+        SemanticDiagnosticCode.InvalidCaseAlternativeType,
+        SemanticDiagnosticCode.InvalidCaseAlternativeType
+    ]);
+    const errors = r.semantic.diagnostics.filter(d => d.code === SemanticDiagnosticCode.InvalidCaseAlternativeType);
+    assert.equal(errors[0].location.span.start, r.source.text.indexOf('12:34:56'));
+    assert.equal(errors[1].location.span.start, r.source.text.indexOf('5 SEC'));
+});

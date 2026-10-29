@@ -128,9 +128,9 @@ test('WHILE equality operators remain accepted', () => {
     assert.ok(r.repetitions.every(n => n.whileClause?.expression instanceof DyadicExpressionNode));
 });
 
-test('incomplete WHILE expression retains tokens without speculative errors', () => {
+test('incomplete WHILE expression emits syntax error without losing REPEAT', () => {
     const r = analyze('WHILE I + REPEAT RETURN; END; RETURN;');
-    assert.deepEqual(r.syntax, []);
+    assert.deepEqual(r.syntax, ["Expected expression after '+'."]);
     assert.deepEqual(r.codes, []);
     assert.equal(r.repetitions[0].whileClause?.expression, undefined);
     assert.deepEqual(r.repetitions[0].whileClause?.expressionTokens.map(t => t.value), ['I','+']);

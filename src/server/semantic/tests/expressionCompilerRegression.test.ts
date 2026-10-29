@@ -77,8 +77,9 @@ test('RETURN(NIL) is rejected for a scalar result at the NIL literal', () => {
 });
 
 test('LEN and MID are typed through builtin catalog and documented in hover', () => {
-    const r = analyze(`DCL Text CHAR(20); R: PROC RETURNS(FIXED); RETURN(LEN(Text)); END;
-        R2: PROC RETURNS(CHAR(255)); RETURN(MID(Text, 1, 3)); END;`);
+    const r = analyze(`DCL Text CHAR(20); DCL (Start, EndIndex) FIXED;
+        R: PROC RETURNS(FIXED); RETURN(LEN(Text)); END;
+        R2: PROC RETURNS(CHAR(255)); RETURN(MID(Text, Start, EndIndex)); END;`);
     assert.deepEqual(r.syntax, []);
     assert.deepEqual(r.errors, []);
     assert.deepEqual(r.semantic.expressionTypes.get(r.returns[0].expression!),
@@ -88,7 +89,7 @@ test('LEN and MID are typed through builtin catalog and documented in hover', ()
     assert.match(r.hover('LEN(Text)')!, /RTOS-UH-Einbaufunktion/);
     assert.match(r.hover('LEN(Text)')!, /Text CHAR\(\*\) IDENT/);
     assert.match(r.hover('LEN(Text)')!, /Expression type/);
-    assert.match(r.hover('MID(Text, 1, 3)')!, /String.*Teilstring|Teilstring extrahieren/);
+    assert.match(r.hover('MID(Text, Start, EndIndex)')!, /String.*Teilstring|Teilstring extrahieren/);
     const name = r.returns[0].expression as NameExpressionNode;
     assert.ok(r.semantic.builtinBindings.get(name.segments[0].identifier));
     assert.equal(r.semantic.bindings.has(name.segments[0].identifier), false);

@@ -20,6 +20,7 @@ export function formatCallSignature(info: CallSignatureInformation): FormattedCa
     if (info.kind === 'procedure') {
         parameters = info.parameters.map(parameter =>
             `${parameter.name ? `${parameter.name.value} ` : ''}` +
+            `${parameter.assignmentProtected ? 'INV ' : ''}` +
             `${parameter.type ? formatSemanticType(parameter.type) : '?'}` +
             `${parameter.byIdentification ? ' IDENT' : ''}`);
         if (info.procedureType.hasResult) {

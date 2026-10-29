@@ -4,8 +4,7 @@
 import { IfStatementNode } from "../../../ast/problem/statements/ifStatementNode";
 import { ParserBase } from "../../parserBase";
 import { BodyParser } from "./bodyParser";
-import { StatementHeaderParser } from "./statementHeaderParser";
-import { parseBufferedExpression } from "../expressions/parseBufferedExpression";
+import { StatementExpressionParser } from "../expressions/statementExpressionParser";
 
 export class IfStatementParser extends ParserBase {
 
@@ -16,10 +15,10 @@ export class IfStatementParser extends ParserBase {
             return undefined;
         }
 
-        const condition = new StatementHeaderParser(this.context).readUntilWithTokens(
+        const condition = new StatementExpressionParser(this.context).parseUntil(
             ["THEN"], "IF condition"
         );
-        const expression = parseBufferedExpression(condition.tokens, this.context);
+        const expression = condition.expression;
         this.skipTrivia();
         const thenToken = this.acceptKeyword("THEN");
         if (!thenToken) {

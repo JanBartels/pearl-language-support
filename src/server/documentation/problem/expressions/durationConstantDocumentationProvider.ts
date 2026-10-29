@@ -6,6 +6,7 @@ import { DurationConstantNode } from '../../../ast/problem/expressions/durationC
 import type { SemanticContext } from '../../../semantic/semanticContext';
 import { DocumentationProvider } from '../../documentationProvider';
 import { appendSemanticConstantValue } from '../../semanticConstantValueDocumentation';
+import { appendExpressionTypeDocumentation } from './expressionTypeDocumentation';
 
 export class DurationConstantDocumentationProvider
     extends DocumentationProvider<DurationConstantNode> {
@@ -34,9 +35,10 @@ Duration constant \`${source}\`.
 The units occur in the order \`HRS\`, \`MIN\`, \`SEC\`; omitted units are permitted.
 `;
 
-        return appendSemanticConstantValue(
-            documentation,
-            semanticContext?.timeConstantValues.get(node)
+        return appendExpressionTypeDocumentation(
+            appendSemanticConstantValue(documentation, semanticContext?.timeConstantValues.get(node)),
+            node,
+            semanticContext
         );
     }
 }

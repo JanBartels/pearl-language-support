@@ -6,6 +6,7 @@ import { ClockConstantNode } from '../../../ast/problem/expressions/clockConstan
 import type { SemanticContext } from '../../../semantic/semanticContext';
 import { DocumentationProvider } from '../../documentationProvider';
 import { appendSemanticConstantValue } from '../../semanticConstantValueDocumentation';
+import { appendExpressionTypeDocumentation } from './expressionTypeDocumentation';
 
 export class ClockConstantDocumentationProvider
     extends DocumentationProvider<ClockConstantNode> {
@@ -30,9 +31,10 @@ Time-of-day constant \`${node.hours.value}:${node.minutes.value}:${node.seconds.
 Hours are interpreted modulo 24. Minutes and seconds must be in the range 0 to less than 60.
 `;
 
-        return appendSemanticConstantValue(
-            documentation,
-            semanticContext?.timeConstantValues.get(node)
+        return appendExpressionTypeDocumentation(
+            appendSemanticConstantValue(documentation, semanticContext?.timeConstantValues.get(node)),
+            node,
+            semanticContext
         );
     }
 }

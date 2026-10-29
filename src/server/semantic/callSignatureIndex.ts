@@ -72,6 +72,7 @@ export class CallSignatureIndex {
                 parameters: procedureType.parameters.map((parameter, index) => ({
                     type: parameter.type,
                     byIdentification: parameter.byIdentification,
+                    assignmentProtected: parameter.assignmentProtected,
                     name: names?.[index]?.name,
                     ...(names?.[index]?.origin !== undefined ? { nameOrigin: names[index].origin } : {})
                 }))

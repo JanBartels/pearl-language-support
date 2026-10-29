@@ -143,3 +143,27 @@ test('incomplete expressions preserve operators and delimiters', () => {
     assert.equal(parens.expression.closeParenthesis, undefined);
     assert.equal(parens.problems.length, 2);
 });
+
+
+test('RTOS-UH requires parentheses for negative SHIFT distances', () => {
+    const invalid = parse('B SHIFT -2');
+    assert.deepEqual(invalid.problems, [
+        'Negativer SHIFT-Abstand muss geklammert werden: SHIFT (-2).'
+    ]);
+    const operator = binary(invalid.expression, 'SHIFT');
+    assert.ok(operator.right instanceof MonadicExpressionNode);
+    assert.equal(invalid.rest, '');
+
+    const valid = parse('B SHIFT (-2)');
+    assert.deepEqual(valid.problems, []);
+    const parenthesized = binary(valid.expression, 'SHIFT');
+    assert.ok(parenthesized.right instanceof ParenthesizedExpressionNode);
+    assert.ok(parenthesized.right.expression instanceof MonadicExpressionNode);
+});
+
+test('RTOS-UH SHIFT parentheses rule also applies to negative names, not to subtraction', () => {
+    assert.equal(parse('B SHIFT -I').problems.length, 1);
+    assert.deepEqual(parse('B SHIFT (-I)').problems, []);
+    assert.deepEqual(parse('B SHIFT I - 2').problems, []);
+    assert.deepEqual(parse('B CSHIFT -2').problems, []);
+});

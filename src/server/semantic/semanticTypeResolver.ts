@@ -142,7 +142,11 @@ export class SemanticTypeResolver {
                     type = { kind: SemanticTypeKind.VirtualArray,
                         elementType: type, rank: parameter.dimensions.rank };
                 }
-                return { type, byIdentification: parameter.ident !== undefined };
+                return {
+                    type,
+                    byIdentification: parameter.ident !== undefined,
+                    assignmentProtected: parameter.invKeyword !== undefined
+                };
             }),
             hasResult: node.returnsKeyword !== undefined,
             resultType: node.resultType ? this.resolve(node.resultType, environment) : undefined,

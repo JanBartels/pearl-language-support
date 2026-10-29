@@ -7,6 +7,7 @@ import { ProblemCollection } from '../core/problemCollection';
 import { AstNode } from '../ast/astNode';
 import { ParserContext } from './parserContext';
 import { TranslationUnitParser } from './module/translationUnitParser';
+import { LookaheadTokenStream } from './lookaheadTokenStream';
 
 import { Logger } from '../utility/logging/logger';
 
@@ -21,7 +22,7 @@ export class Parser {
     parse(): AstNode {
 
         const context = new ParserContext(
-            this.stream,
+            new LookaheadTokenStream(this.stream),
             this.problems,
             this.logger
         );

@@ -15,7 +15,8 @@ export class ProcedureSpecificationParameterNode extends AstNode {
         public readonly name: SourceValue<string> | undefined,
         public readonly dimensions: VirtualDimensionListNode | undefined,
         public readonly type: FormalParameterTypeNode,
-        public readonly ident: SourceValue<string> | undefined
+        public readonly ident: SourceValue<string> | undefined,
+        public readonly invKeyword: SourceValue<string> | undefined
     ) {
         super(AstKind.ProcedureSpecificationParameter);
         if (dimensions) this.adopt(dimensions);
@@ -27,12 +28,13 @@ export class ProcedureSpecificationParameterNode extends AstNode {
         return this.lookupOwnSourceValue(position, this.name)
             ?? this.dimensions?.lookupSourceValue(position)
             ?? this.type.lookupSourceValue(position)
+            ?? this.lookupOwnSourceValue(position, this.invKeyword)
             ?? this.lookupOwnSourceValue(position, this.ident);
     }
     override getChildren(): readonly AstNode[] {
         return [...(this.dimensions ? [this.dimensions] : []), this.type];
     }
     override dumpLabel(): string {
-        return `ProcedureSpecificationParameter(${this.name?.value ?? '-'}${this.ident ? ', IDENT' : ''})`;
+        return `ProcedureSpecificationParameter(${this.name?.value ?? '-'}${this.ident ? ', IDENT' : ''}${this.invKeyword ? ', INV' : ''})`;
     }
 }

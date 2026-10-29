@@ -5,13 +5,14 @@ import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from '../../astKind';
 import { AstLookupResult } from '../../astLookupResult';
 import { AstNode } from '../../astNode';
+import { ExpressionNode } from './expressionNode';
 
 import { SourceValue } from '../../../core/sourceValue';
 
 import { DocumentationProvider } from '../../../documentation/documentationProvider';
 import { ClockConstantDocumentationProvider } from '../../../documentation/problem/expressions/clockConstantDocumentationProvider';
 
-export class ClockConstantNode extends AstNode {
+export class ClockConstantNode extends ExpressionNode {
     private static readonly provider =
         new ClockConstantDocumentationProvider();
 

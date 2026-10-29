@@ -138,9 +138,9 @@ test('unambiguous assignment operators are diagnosed in FROM and BY', () => {
     assert.ok(r.repetitions[0].toClause?.expression);
 });
 
-test('unrecognized incomplete BY expression is preserved as source tokens', () => {
+test('incomplete BY expression is diagnosed, preserved as tokens and recovers to TO', () => {
     const r = analyze('FOR J FROM 1 BY I + TO 10 REPEAT RETURN; END;');
-    assert.deepEqual(r.syntax, []);
+    assert.deepEqual(r.syntax, ["Expected expression after '+'."]);
     assert.deepEqual(r.codes, []);
     assert.deepEqual(r.repetitions[0].byClause?.expressionTokens.map(t => t.value), ['I', '+']);
     assert.equal(r.repetitions[0].byClause?.expression, undefined);

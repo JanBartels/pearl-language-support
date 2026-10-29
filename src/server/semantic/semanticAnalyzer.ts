@@ -24,9 +24,11 @@ import { CaseIndexRangeNode } from '../ast/problem/statements/caseIndexRangeNode
 import { LiteralExpressionNode } from '../ast/problem/expressions/literalExpressionNode';
 import { NameExpressionNode } from '../ast/problem/expressions/nameExpressionNode';
 import { ParenthesizedExpressionNode } from '../ast/problem/expressions/parenthesizedExpressionNode';
-import { MonadicExpressionNode } from '../ast/problem/expressions/monadicExpressionNode';
 import type { ExpressionNode } from '../ast/problem/expressions/expressionNode';
 import { ExpressionTypeResolver, ExpressionTypeResolverContext } from './expressionTypeResolver';
+import { classifyObjectExpressionInfo, expressionSource } from './expressionObject';
+import { validateProcedureActualParameters, validateBuiltinIdentificationParameters } from './procedureActualParameterValidator';
+import { matchBuiltinSignature } from './builtins/builtinSignature';
 import { ProcedureParameterNameIndex } from './procedureParameterNameIndex';
 import { CallStatementNode } from '../ast/problem/statements/callStatementNode';
 import { RepetitionNode } from '../ast/problem/statements/repetitionNode';
@@ -95,7 +97,8 @@ import { resolveSymbol } from './symbolResolver';
 import { lookupBuiltin } from './builtins/builtinCatalog';
 import {
     semanticTypeEquals, procedureSignaturesEqual, isProcedureSignatureResolved,
-    isScalarValueAssignable, isNilAssignableTo
+    isValueTransferCompatible, isNilAssignableTo, isReferenceTransferCompatible,
+    resolveReferenceTransferType
 } from './semanticTypeComparison';
 import type { BuiltinDefinition } from './builtins/builtinSignature';
 import { acceptsBuiltinArity, builtinExpectedArity } from './builtins/builtinSignature';
@@ -253,6 +256,16 @@ class SemanticAnalysisState implements
         });
     }
 
+    reportUnsupportedBitConcatenation(source: SourceValue<string>): void {
+        if (!source.location) return;
+        this.addDiagnostic({
+            code: SemanticDiagnosticCode.UnsupportedBitConcatenation,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: source.location,
+            message: `BIT-Verkettung mit '${source.value}' ist in RTOS-UH nicht implementiert.`
+        });
+    }
+
     reportInvalidFunctionArgumentType(
         source: SourceValue<string>, functionName: SourceValue<string>, position: number,
         expected: SemanticType, actual: SemanticType
@@ -269,12 +282,32 @@ class SemanticAnalysisState implements
             severity: SemanticDiagnosticSeverity.Error,
             location: source.location,
             message: `${label} von '${functionName.value}': `
-                + `erwartet ${this.scalarDiagnosticTypeName(expected)}, `
-                + `erhalten ${this.scalarDiagnosticTypeName(actual)}.`
+                + `erwartet ${this.diagnosticTypeName(expected)}, `
+                + `erhalten ${this.diagnosticTypeName(actual)}.`
         });
     }
 
-    private scalarDiagnosticTypeName(type: SemanticType): string {
+    reportInvalidIdentificationArgument(
+        source: SourceValue<string>, target: SourceValue<string>,
+        position: number, formalName?: string, reason?: 'protected'
+    ): void {
+        if (!source.location) return;
+        const symbol = this.bindings.get(target);
+        const name = formalName ?? (symbol
+            ? this.parameterNames.nameForSymbol(symbol, position - 1, this)?.name.value
+            : undefined);
+        const label = `Aktualparameter ${position}` + (name ? ` ('${name}')` : '');
+        this.addDiagnostic({
+            code: SemanticDiagnosticCode.InvalidIdentificationArgument,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: source.location,
+            message: reason === 'protected'
+                ? `${label} von '${target.value}' ist INV-geschützt und darf nicht an einen veränderbaren IDENT-Formalparameter übergeben werden.`
+                : `${label} von '${target.value}' muss ein identifizierbares Objekt (IDENT) sein.`
+        });
+    }
+
+    private diagnosticTypeName(type: SemanticType): string {
         switch (type.kind) {
             case SemanticTypeKind.Fixed:
             case SemanticTypeKind.Float:
@@ -284,6 +317,40 @@ class SemanticAnalysisState implements
             case SemanticTypeKind.Character:
                 return `${type.kind === SemanticTypeKind.Bit ? 'BIT' : 'CHAR'}`
                     + (type.length === undefined ? '' : `(${type.length})`);
+            case SemanticTypeKind.Reference:
+                return `REF ${type.targetInvariant ? 'INV ' : ''}`
+                    + this.diagnosticTypeName(type.target);
+            case SemanticTypeKind.VoidReference:
+                return `REF ${type.targetInvariant ? 'INV ' : ''}STRUCT[]`;
+            case SemanticTypeKind.Struct:
+                // An anonymous STRUCT has no TYPE name. Show its components
+                // instead of displaying two indistinguishable STRUCT[...] labels.
+                return `STRUCT[${type.components.map(component =>
+                    `${component.name.value} ${this.diagnosticTypeName(component.type)}`
+                ).join(', ')}]`;
+            case SemanticTypeKind.Array:
+                return `ARRAY(${type.dimensions.map(dimension =>
+                    `${dimension.lowerBound}:${dimension.upperBound}`).join(', ')}) OF `
+                    + this.diagnosticTypeName(type.elementType);
+            case SemanticTypeKind.VirtualArray:
+                return `VIRTUAL ARRAY(rank ${type.rank}) OF `
+                    + this.diagnosticTypeName(type.elementType);
+            case SemanticTypeKind.Dation:
+                return `DATION${type.direction ? ` ${type.direction}` : ''} ${type.dationClass}`;
+            case SemanticTypeKind.Named: {
+                // Keep the declared name of composite types (notably STRUCT).
+                // For aliases of scalar types retain the previous diagnostic
+                // spelling, e.g. TYPE MyInt FIXED is reported as FIXED.
+                const resolved = this.resolveUnderlyingType(type);
+                if (!resolved || resolved.kind === SemanticTypeKind.Struct
+                    || resolved.kind === SemanticTypeKind.Array
+                    || resolved.kind === SemanticTypeKind.VirtualArray
+                    || resolved.kind === SemanticTypeKind.Reference
+                    || resolved.kind === SemanticTypeKind.VoidReference) {
+                    return type.symbol.name.value;
+                }
+                return this.diagnosticTypeName(resolved);
+            }
             default:
                 return SemanticTypeKind[type.kind].toUpperCase();
         }
@@ -1900,24 +1967,16 @@ export class SemanticAnalyzer {
     }
 
     private caseBoundSource(expression: ExpressionNode): SourceValue<string> {
-        // The expression AST already preserves source locations; select the
-        // outermost token at the beginning, rather than a synthetic location.
-        let first: SourceValue<string> | undefined;
-        const find = (node: AstNode): void => {
-            if (node.kind === AstKind.LiteralExpression) {
-                first ??= (node as LiteralExpressionNode).literal;
-            } else if (node.kind === AstKind.NameExpression) {
-                first ??= (node as NameExpressionNode).segments[0]?.identifier;
-            } else if (node.kind === AstKind.MonadicExpression) {
-                // Prefix signs are the start of the expression.
-                const unary = node as MonadicExpressionNode;
-                first ??= unary.operator;
-            } else {
-                for (const child of node.getChildren()) find(child);
-            }
-        };
-        find(expression);
-        return first ?? SourceValue.synthetic('ALT');
+        // All expression forms, including CLOCK/DURATION constants, must
+        // provide a real diagnostic location. A synthetic SourceValue is
+        // deliberately ignored by the diagnostic reporter.
+        // Keep the location on the inner operand for redundant parentheses,
+        // as for the previous CASE-bound source lookup.
+        if (expression.kind === AstKind.ParenthesizedExpression) {
+            const inner = (expression as ParenthesizedExpressionNode).expression;
+            if (inner) return this.caseBoundSource(inner);
+        }
+        return expressionSource(expression) ?? SourceValue.synthetic('ALT');
     }
 
     private analyzeTaskDeclaration(
@@ -2015,7 +2074,8 @@ export class SemanticAnalyzer {
             parameters: node.parameters.flatMap(parameter =>
                 Array.from({ length: parameter.identifiers?.identifiers.length ?? 1 }, () => ({
                     type: parameterTypes.get(parameter),
-                    byIdentification: parameter.identKeyword !== undefined
+                    byIdentification: parameter.identKeyword !== undefined,
+                    assignmentProtected: parameter.invKeyword !== undefined
                 }))
             ),
             hasResult: node.returnsKeyword !== undefined,
@@ -2117,23 +2177,28 @@ export class SemanticAnalyzer {
         const expressionType = state.expressionTypeResolver.resolve(node.expression, environment);
         // Errors already reported in an operand must not cause a second return error.
         if (!resultType || !expressionType) return;
-        const target = state.resolveUnderlyingType(resultType);
-        const source = state.resolveUnderlyingType(expressionType);
+        // Resolve aliases only at the REF boundary; preserve named component
+        // types and do not flatten recursive structures in the semantic model.
+        const target = resolveReferenceTransferType(resultType,
+            type => state.resolveUnderlyingType(type));
+        const source = resolveReferenceTransferType(expressionType,
+            type => state.resolveUnderlyingType(type));
         if (!target || !source) return;
-        // REF context-dependent implicit dereferencing is not implemented yet.
-        // Suppress a potentially false type mismatch until it is.
-        if (target.kind === SemanticTypeKind.Reference || target.kind === SemanticTypeKind.VoidReference
-            || source.kind === SemanticTypeKind.Reference || source.kind === SemanticTypeKind.VoidReference) {
+        if (target.kind === SemanticTypeKind.Reference
+            || target.kind === SemanticTypeKind.VoidReference) {
+            // A REF return transfers a reference value or the address of a
+            // suitable object. There is NO implicit dereference here.
+            // The same rule is used by REF value parameters.
+            const object = classifyObjectExpressionInfo(node.expression, environment,
+                type => state.resolveUnderlyingType(type));
+            if (isReferenceTransferCompatible(target, source, object) === false) {
+                state.reportInvalidReturnType(expressionSource(node.expression) ?? node.keyword);
+            }
             return;
         }
-        if (!this.returnTypeAccepts(target, source)) {
+        if (isValueTransferCompatible(target, source) === false) {
             state.reportInvalidReturnType(node.keyword);
         }
-    }
-
-    /** RETURN and scalar call-by-value both use the same assignment rules. */
-    private returnTypeAccepts(target: SemanticType, source: SemanticType): boolean {
-        return isScalarValueAssignable(target, source);
     }
 
     private analyzeCallStatement(
@@ -2144,9 +2209,10 @@ export class SemanticAnalyzer {
         // CALL actuals are syntactic expressions, even while IDENT/value
         // compatibility is still deferred to the shared parameter checker.
         // This also supplies identifier bindings and types for hover/navigation.
-        for (const parameter of node.actualParameters?.parameters ?? []) {
-            const expression = parameter.expression;
-            if (!expression) continue;
+        const actualParameters = node.actualParameters?.parameters ?? [];
+        const actualExpressions = actualParameters.map(parameter => parameter.expression);
+        const actualTypes = actualExpressions.map(expression => {
+            if (!expression) return undefined;
             // Full CALL argument checks, especially IDENT, are still pending.
             // In particular, do not newly reject unresolved external device
             // designators (e.g. A1 in ASSIGN(A1, ...)) while migrating the AST.
@@ -2154,11 +2220,11 @@ export class SemanticAnalyzer {
             if (expression instanceof NameExpressionNode) {
                 const first = expression.segments[0]?.identifier;
                 if (first && !resolveSymbol(environment, first.value) && !lookupBuiltin(first.value)) {
-                    continue;
+                    return undefined;
                 }
             }
-            state.expressionTypeResolver.resolve(expression, environment);
-        }
+            return state.expressionTypeResolver.resolve(expression, environment);
+        });
         if (!node.target) return environment;
         const symbol = resolveSymbol(environment, node.target.value);
         if (!symbol) {
@@ -2172,6 +2238,14 @@ export class SemanticAnalyzer {
                     state.reportInvalidBuiltinCallArity(
                         node.target, builtinExpectedArity(builtin), node.argumentsList?.length ?? 0
                     );
+                } else if (actualTypes.every(type => type !== undefined)) {
+                    const match = matchBuiltinSignature(builtin, actualTypes as SemanticType[]);
+                    if (!match) {
+                        state.reportInvalidBuiltinArgumentType(node.target, builtin.name);
+                    } else {
+                        validateBuiltinIdentificationParameters(node.target,
+                            match.signature, actualExpressions, environment, state);
+                    }
                 }
                 return environment;
             }
@@ -2207,6 +2281,9 @@ export class SemanticAnalyzer {
         const actualCount = node.argumentsList?.length ?? 0;
         if (signature && signature.parameters.length !== actualCount) {
             state.reportInvalidCallArity(node.target, signature.parameters.length, actualCount);
+        } else if (signature) {
+            validateProcedureActualParameters(node.target, signature,
+                actualExpressions, actualTypes, environment, state);
         }
         return environment;
     }

@@ -6,9 +6,8 @@ import { CaseAlternativeNode } from "../../../ast/problem/statements/caseAlterna
 import { CaseOutNode } from "../../../ast/problem/statements/caseOutNode";
 import { ParserBase } from "../../parserBase";
 import { BodyParser } from "./bodyParser";
-import { StatementHeaderParser } from "./statementHeaderParser";
 import { CaseAlternativeParser } from "./caseAlternativeParser";
-import { parseBufferedExpression } from "../expressions/parseBufferedExpression";
+import { StatementExpressionParser } from "../expressions/statementExpressionParser";
 
 export class CaseStatementParser extends ParserBase {
 
@@ -19,10 +18,10 @@ export class CaseStatementParser extends ParserBase {
             return undefined;
         }
 
-        const selector = new StatementHeaderParser(this.context).readUntilWithTokens(
+        const selector = new StatementExpressionParser(this.context).parseUntil(
             ["ALT", "OUT", "FIN"], "CASE selector"
         );
-        const expression = parseBufferedExpression(selector.tokens, this.context);
+        const expression = selector.expression;
         const alternatives: CaseAlternativeNode[] = [];
         let outClause: CaseOutNode | undefined;
         let indexed: boolean | undefined;

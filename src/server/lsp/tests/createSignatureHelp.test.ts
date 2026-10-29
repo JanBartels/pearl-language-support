@@ -15,11 +15,11 @@ const procedure: CallSignatureInformation = {
     procedureType: {
         kind: SemanticTypeKind.Procedure,
         callingConvention: 'PEARL', hasResult: true, resultType: { kind: SemanticTypeKind.Bit, length: 1 },
-        parameters: [{ type: fixed, byIdentification: false }, { type: fixed, byIdentification: true }]
+        parameters: [{ type: fixed, byIdentification: false, assignmentProtected: false }, { type: fixed, byIdentification: true, assignmentProtected: false }]
     },
     parameters: [
-        { name: new SourceValue('A'), type: fixed, byIdentification: false },
-        { name: undefined, type: fixed, byIdentification: true }
+        { name: new SourceValue('A'), type: fixed, byIdentification: false, assignmentProtected: false },
+        { name: undefined, type: fixed, byIdentification: true, assignmentProtected: false }
     ]
 };
 

@@ -24,7 +24,7 @@ export class ProcedureSpecificationParameterParser extends ParserBase {
             const value = this.tokenValue(first);
             this.skipTrivia();
             if (this.isIdentifier() || this.isKeyword([
-                'FIXED', 'FLOAT', 'BIT', 'CHAR', 'CHARACTER', 'CLOCK', 'DUR', 'DURATION',
+                'INV', 'FIXED', 'FLOAT', 'BIT', 'CHAR', 'CHARACTER', 'CLOCK', 'DUR', 'DURATION',
                 'REF', 'STRUCT', 'DATION', 'SEMA', 'BOLT', 'IRPT', 'INTERRUPT', 'SIGNAL'
             ]) || this.isOperator('(')) {
                 name = value;
@@ -39,6 +39,8 @@ export class ProcedureSpecificationParameterParser extends ParserBase {
         // ENTRY( () FIXED ) or ENTRY( (,) FIXED ).
         // When a name was present, its dimensions have already been parsed.
         dimensions ??= new VirtualDimensionListParser(this.context).parse();
+        this.skipTrivia();
+        const inv = this.acceptKeyword('INV');
 
         type ??= new ProcedureParameterTypeParser(this.context).parse()
             ?? new ProblemDataTypeParser(this.context).parse();
@@ -49,7 +51,8 @@ export class ProcedureSpecificationParameterParser extends ParserBase {
         this.skipTrivia();
         const ident = this.acceptKeyword(['IDENT', 'IDENTICAL']);
         return new ProcedureSpecificationParameterNode(
-            name, dimensions, type, ident ? this.tokenValue(ident) : undefined
+            name, dimensions, type, ident ? this.tokenValue(ident) : undefined,
+            inv ? this.tokenValue(inv) : undefined
         );
     }
 }

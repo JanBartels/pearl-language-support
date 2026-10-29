@@ -159,6 +159,8 @@ export interface TaskType {
 export interface ProcedureParameterType {
     readonly type: SemanticType | undefined;
     readonly byIdentification: boolean;
+    /** INV on the formal parameter itself; independent of REF INV on its target. */
+    readonly assignmentProtected: boolean;
 }
 
 export interface ProcedureType {

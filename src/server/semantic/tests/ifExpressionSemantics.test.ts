@@ -90,8 +90,9 @@ test('unknown symbols are diagnosed in IF conditions', () => {
     assert.deepEqual(result.codes, [SemanticDiagnosticCode.UnknownIdentifier]);
 });
 
-test('unsupported header syntax is retained without speculative diagnostics', () => {
+test('incomplete IF header reports expression syntax without consuming THEN', () => {
     const result = analyze(`IF I + THEN RETURN; FIN; RETURN;`);
+    assert.deepEqual(result.syntax, ["Expected expression after '+'."]);
     assert.equal(result.statements.length, 1);
     assert.equal(result.statements[0].condition, undefined);
     assert.deepEqual(result.codes, []);

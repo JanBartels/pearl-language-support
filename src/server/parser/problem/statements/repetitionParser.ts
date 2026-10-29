@@ -7,11 +7,8 @@ import { RepetitionForClauseNode } from "../../../ast/problem/statements/repetit
 import { RepetitionExpressionClauseNode } from
     "../../../ast/problem/statements/repetitionExpressionClauseNode";
 import { ParserBase } from "../../parserBase";
-import type { Token } from "../../../lexer/token";
-import { parseBufferedExpression } from "../expressions/parseBufferedExpression";
+import { StatementExpressionParser } from "../expressions/statementExpressionParser";
 import { BodyParser } from "./bodyParser";
-
-type ExpressionKeyword = "FROM" | "BY" | "TO" | "WHILE";
 
 const CLAUSE_ORDER: Readonly<Record<string, number>> = {
     FOR: 0,
@@ -97,8 +94,11 @@ export class RepetitionParser extends ParserBase {
                 continue;
             }
 
-            const buffered = this.parseClauseExpression(keyword as ExpressionKeyword, header);
-            const expression = parseBufferedExpression(buffered.tokens, this.context);
+            const buffered = new StatementExpressionParser(this.context).parseUntil(
+                [...HEADER_KEYWORDS, "REPEAT"], `${keyword} expression`
+            );
+            header.push(...buffered.values);
+            const expression = buffered.expression;
             const clause = new RepetitionExpressionClauseNode(
                 keywordValue, buffered.values, expression
             );
@@ -153,64 +153,6 @@ export class RepetitionParser extends ParserBase {
         );
     }
 
-    private parseClauseExpression(
-        keyword: ExpressionKeyword,
-        header: SourceValue<string>[]
-    ): { values: SourceValue<string>[]; tokens: Token[] } {
-        const expression: SourceValue<string>[] = [];
-        const originalTokens: Token[] = [];
-        const delimiters: string[] = [];
-
-        while (!this.eof()) {
-            this.skipTrivia();
-            if (this.eof()) {
-                break;
-            }
-
-            // A missing closing parenthesis must not consume REPEAT or the body.
-            if (this.isKeyword("REPEAT") || this.isHeaderBoundary()) {
-                break;
-            }
-
-            if (delimiters.length === 0 && this.isKeyword(HEADER_KEYWORDS)) {
-                break;
-            }
-
-            const token = this.current();
-            const text = this.tokenText(token);
-
-            if (this.isOperator(["(", "["])) {
-                delimiters.push(text);
-            } else if (this.isOperator([")", "]"])) {
-                const opening = delimiters[delimiters.length - 1];
-                if (!opening || (text === ")" && opening !== "(")
-                    || (text === "]" && opening !== "[")) {
-                    this.problems.error(this.location(),
-                        `Unmatched '${text}' in '${keyword}' expression.`);
-                    break;
-                }
-                delimiters.pop();
-            }
-
-            const value = this.tokenValue(token);
-            expression.push(value);
-            originalTokens.push(token);
-            header.push(value);
-            this.next();
-        }
-
-        if (delimiters.length > 0) {
-            this.problems.error(this.location(),
-                `Unclosed '${delimiters[delimiters.length - 1]}' in '${keyword}' expression.`);
-        }
-        if (expression.length === 0) {
-            this.problems.error(this.location(), `Expected expression after '${keyword}'.`);
-        }
-
-        return { values: expression, tokens: originalTokens };
-    }
-
-    /** Recovery boundaries not belonging to a repetition header. */
     private isHeaderBoundary(): boolean {
         return this.isKeyword([
             "END", "MODEND", "BEGIN", "FIN", "DCL", "DECLARE", "TYPE", "SPC", "SPECIFY"

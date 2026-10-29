@@ -5,6 +5,7 @@ import { SourceOffset } from '../../../core/sourceOffset';
 import { AstKind } from '../../astKind';
 import { AstLookupResult } from '../../astLookupResult';
 import { AstNode } from '../../astNode';
+import { ExpressionNode } from './expressionNode';
 
 import { SourceValue } from '../../../core/sourceValue';
 
@@ -18,7 +19,7 @@ export interface DurationConstantComponent {
     readonly unit: SourceValue<DurationUnit>;
 }
 
-export class DurationConstantNode extends AstNode {
+export class DurationConstantNode extends ExpressionNode {
     private static readonly provider =
         new DurationConstantDocumentationProvider();
 

@@ -135,12 +135,13 @@ test('REF PROC call checks its scalar value parameter', () => {
         [SemanticDiagnosticCode.InvalidCallArgumentType]);
 });
 
-test('IDENT and context-dependent REF arguments remain deferred', () => {
+test('IDENT rejects values while context-dependent REF arguments remain deferred', () => {
     const result = analyze(`F: PROC(X FIXED IDENT) RETURNS(FIXED); RETURN(X); END;
         R: PROC RETURNS(FIXED); DCL P REF FIXED;
             RETURN(F(1.0) + F(P)); END;`);
     assert.deepEqual(result.syntax, []);
-    assert.deepEqual(result.errors, []);
+    assert.deepEqual(result.errors.map(d => d.code),
+        [SemanticDiagnosticCode.InvalidIdentificationArgument]);
 });
 
 test('formal names from grouped PROC parameters follow the argument positions', () => {

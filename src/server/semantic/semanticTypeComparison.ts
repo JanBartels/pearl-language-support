@@ -136,6 +136,7 @@ function identical(left: SemanticType, right: SemanticType): boolean {
                     const other = right.parameters[index];
                     // Missing types mean unresolved semantics, not a wildcard.
                     return parameter.byIdentification === other.byIdentification
+                        && parameter.assignmentProtected === other.assignmentProtected
                         && parameter.type !== undefined
                         && other.type !== undefined
                         && identical(parameter.type, other.type);
@@ -146,6 +147,37 @@ function identical(left: SemanticType, right: SemanticType): boolean {
         case SemanticTypeKind.Named:
             return right.kind === SemanticTypeKind.Named && left.symbol === right.symbol;
     }
+}
+
+/**
+ * IDENT binds an actual object to a formal object. An ordinary formal needs
+ * the same type (no widening). A virtual array formal describes the rank and
+ * element type, but deliberately imposes no concrete index bounds.
+ *
+ * DATION without a direction qualifier is a documented RTOS-UH wildcard for
+ * IN/OUT/INOUT, not an unresolved or unknown type (section 5.7.10).
+ *
+ * The caller resolves top-level TYPE aliases. Nested Named types retain their
+ * identity as in semanticTypeEquals; no broad structural coercion is added.
+ */
+export function isIdentificationTypeCompatible(
+    formal: SemanticType,
+    actual: SemanticType,
+    lengths: SimpleTypeLengths = RTOS_UH_DEFAULT_TYPE_LENGTHS
+): boolean {
+    if (formal.kind === SemanticTypeKind.VirtualArray) {
+        if (actual.kind !== SemanticTypeKind.Array
+            && actual.kind !== SemanticTypeKind.VirtualArray) return false;
+        const actualRank = actual.kind === SemanticTypeKind.Array
+            ? actual.dimensions.length : actual.rank;
+        return formal.rank === actualRank
+            && semanticTypeEquals(formal.elementType, actual.elementType, lengths);
+    }
+    if (formal.kind === SemanticTypeKind.Dation && actual.kind === SemanticTypeKind.Dation) {
+        return formal.dationClass === actual.dationClass
+            && (formal.direction === undefined || formal.direction === actual.direction);
+    }
+    return semanticTypeEquals(formal, actual, lengths);
 }
 
 /**
@@ -178,6 +210,52 @@ export function isTypeAssignable(
     return false;
 }
 
+
+/**
+ * A reference-valued result or value parameter can receive either a reference
+ * value or the address of an object. Unlike a value transfer, it must never
+ * implicitly dereference a reference actual.
+ *
+ * An unknown object category/protection is not a license to report an error:
+ * the caller may still be processing a syntactically valid but unresolved name.
+ * Identical rules are used for REF value parameters and RETURNS(REF ...).
+ */
+export function isReferenceTransferCompatible(
+    target: SemanticType,
+    source: SemanticType,
+    object: { readonly category: 'object' | 'value' | 'unknown';
+        readonly assignmentProtected: boolean | undefined },
+    lengths: SimpleTypeLengths = RTOS_UH_DEFAULT_TYPE_LENGTHS
+): boolean | undefined {
+    if (target.kind !== SemanticTypeKind.Reference
+        && target.kind !== SemanticTypeKind.VoidReference) return false;
+    if (source.kind === SemanticTypeKind.Reference
+        || source.kind === SemanticTypeKind.VoidReference) {
+        return isTypeAssignable(target, source, lengths);
+    }
+    if (object.category === 'unknown'
+        || (object.category === 'object' && object.assignmentProtected === undefined)) {
+        return undefined;
+    }
+    if (object.category !== 'object' || object.assignmentProtected === undefined) return false;
+    return isTypeAssignable(target, {
+        kind: SemanticTypeKind.Reference,
+        target: source,
+        targetInvariant: object.assignmentProtected
+    }, lengths);
+}
+
+/** Resolve aliases at a REF boundary, without recursively flattening STRUCTs. */
+export function resolveReferenceTransferType(
+    type: SemanticType,
+    resolveType: (type: SemanticType) => SemanticType | undefined
+): SemanticType | undefined {
+    const resolved = resolveType(type);
+    if (!resolved || resolved.kind !== SemanticTypeKind.Reference) return resolved;
+    const target = resolveType(resolved.target);
+    return target ? { ...resolved, target } : undefined;
+}
+
 /**
  * Value transfer uses the same scalar widening rules as an assignment.
  * This is deliberately distinct from exact type identity and from REF
@@ -206,6 +284,54 @@ export function isScalarValueAssignable(
         return to.length! >= from.length!;
     }
     return semanticTypeEquals(target, source, lengths);
+}
+
+/**
+ * Compatibility of a value transfer (as opposed to IDENT or REF assignment).
+ * A non-REF formal parameter receives a copy of the actual value. A typed
+ * REF actual is implicitly dereferenced in this context (RTOS-UH 5.6.2.3).
+ *
+ * Undefined deliberately means that this combination cannot yet be checked:
+ * notably a VOID reference with an unknown target, or a virtual array whose
+ * by-value rules are not implemented. The caller must not turn those cases
+ * into speculative diagnostics. Top-level TYPE aliases must be resolved by
+ * the caller; no AST type information is rewritten here.
+ */
+export function isValueTransferCompatible(
+    target: SemanticType,
+    source: SemanticType,
+    lengths: SimpleTypeLengths = RTOS_UH_DEFAULT_TYPE_LENGTHS
+): boolean | undefined {
+    // REF destinations require address/reference compatibility, not a copy
+    // of the referenced value. Preserve this even if the source is a REF.
+    if (target.kind === SemanticTypeKind.Reference || target.kind === SemanticTypeKind.VoidReference)
+        return undefined;
+    if (source.kind === SemanticTypeKind.VoidReference) return undefined;
+    // One automatic dereference is justified by the value context. Further
+    // REF levels must not be silently peeled off without their own rules.
+    if (source.kind === SemanticTypeKind.Reference) {
+        if (source.target.kind === SemanticTypeKind.Reference
+            || source.target.kind === SemanticTypeKind.VoidReference) return undefined;
+        return isValueTransferCompatible(target, source.target, lengths);
+    }
+    if (isSimpleValueType(target) || isSimpleValueType(source)) {
+        if (!isSimpleValueType(target) || !isSimpleValueType(source)) return false;
+        return isScalarValueAssignable(target, source, lengths);
+    }
+    // Structures can be passed by value, but without scalar widening inside
+    // their components (PEARL 90 sections 6.3.2 and 8.2).
+    if (target.kind === SemanticTypeKind.Struct || source.kind === SemanticTypeKind.Struct) {
+        if (target.kind !== SemanticTypeKind.Struct || source.kind !== SemanticTypeKind.Struct)
+            return false;
+        return semanticTypeEquals(target, source, lengths);
+    }
+    return undefined;
+}
+
+function isSimpleValueType(type: SemanticType): boolean {
+    return type.kind === SemanticTypeKind.Fixed || type.kind === SemanticTypeKind.Float
+        || type.kind === SemanticTypeKind.Bit || type.kind === SemanticTypeKind.Character
+        || type.kind === SemanticTypeKind.Clock || type.kind === SemanticTypeKind.Duration;
 }
 
 /** NIL is compatible with reference destinations, but not with scalar types. */
