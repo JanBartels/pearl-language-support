@@ -30,6 +30,27 @@ npm install
 Sobald du eine Datei mit der Endung `.p` oder `.P` öffnest, aktiviert sich die Extension automatisch.
 Der Language Server wird automatisch gestartet und unterstützt grundlegende Sprachfunktionen.
 
+### PEARL-Include-Dateien in VS Code
+
+RTOS-UH verwendet für PEARL-Include-Dateien häufig die Dateiendungen `.h` und `.H`. VS Code erkennt diese standardmäßig als C/C++-Headerdateien.
+
+Dadurch können C/C++-Language-Server wie clangd versuchen, PEARL-Quelltext zu analysieren. Dies führt zu zusätzlichen, unzutreffenden Fehlermeldungen und kann die Entwicklungsumgebung beeinträchtigen.
+
+Für PEARL-Projekte empfiehlt sich deshalb folgende Einstellung in `.vscode/settings.json`:
+
+```json
+{
+    "files.associations": {
+        "*.h": "pearl",
+        "*.H": "pearl"
+    }
+}
+```
+
+Die Datei `.vscode/settings.json` sollte in die Versionsverwaltung des Projekts aufgenommen werden, damit alle Entwickler dieselbe Sprachzuordnung verwenden.
+
+Bei gemischten PEARL- und C/C++-Projekten muss die Zuordnung gegebenenfalls auf einzelne Dateien oder Verzeichnisse beschränkt werden.
+
 ## Entwicklung
 
 ### Build
