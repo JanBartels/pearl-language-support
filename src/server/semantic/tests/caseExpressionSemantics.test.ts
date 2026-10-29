@@ -156,10 +156,10 @@ test('ALT selector assignment operator generates parser diagnostic', () => {
     assert.match(r.syntax[0], /Operator '='.*nicht zulässig/);
 });
 
-test('CASE supports FIXED(31) selector and alternative without imposing FIXED(15)', () => {
+test('RTOS-UH rejects FIXED(31) CASE selectors', () => {
     const r = analyze(`DCL Wide FIXED(31); CASE Wide ALT (65536(31)) RETURN; FIN;`);
     assert.deepEqual(r.syntax, []);
-    assert.deepEqual(r.codes, []);
+    assert.deepEqual(r.codes, [SemanticDiagnosticCode.InvalidCaseSelector]);
 });
 
 test('indexed CASE reports repeated values and values covered by earlier ranges', () => {
@@ -249,12 +249,22 @@ test('independent and nested CASEs do not share the interval index', () => {
     assert.deepEqual(r.codes, []);
 });
 
-test('large FIXED(31) intervals are checked without expanding their values', () => {
+test('invalid FIXED(31) CASE still checks overlap without expanding intervals', () => {
     const r = analyze(`DCL Wide FIXED(31);
       CASE Wide
         ALT (0(31):2147483647(31)) RETURN;
         ALT (65536(31)) RETURN;
       FIN;`);
     assert.deepEqual(r.syntax, []);
-    assert.deepEqual(r.codes, [SemanticDiagnosticCode.OverlappingCaseAlternative]);
+    assert.deepEqual(r.codes, [SemanticDiagnosticCode.InvalidCaseSelector,
+        SemanticDiagnosticCode.OverlappingCaseAlternative]);
+});
+
+
+test('CASE accepts explicit FIXED(15) and rejects FIXED(31) even in positional form', () => {
+    const r = analyze(`DCL Small FIXED(15), Wide FIXED(31);
+      CASE Small ALT (1) RETURN; FIN;
+      CASE Wide ALT RETURN; FIN;`);
+    assert.deepEqual(r.syntax, []);
+    assert.deepEqual(r.codes, [SemanticDiagnosticCode.InvalidCaseSelector]);
 });

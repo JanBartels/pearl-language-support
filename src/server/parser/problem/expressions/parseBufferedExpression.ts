@@ -54,6 +54,12 @@ export function parseBufferedExpression(
     // before falling back, rather than silently accepting "IF X = 0 THEN".
     let invalidAssignment = false;
     for (const token of tokens) {
+        if (token.kind === TokenKind.Identifier
+            && token.location.source.getText(token.location.span) === 'IF') {
+            context.problems.error(token.location.source.mapLocation(token.location),
+                'Bedingte IF-Ausdrücke werden von RTOS-UH nicht unterstützt.');
+            invalidAssignment = true;
+        }
         if (token.kind !== TokenKind.Operator) continue;
         const operator = token.location.source.getText(token.location.span);
         if (operator !== '=' && operator !== ':=') continue;

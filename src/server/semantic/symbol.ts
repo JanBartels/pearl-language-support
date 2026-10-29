@@ -60,6 +60,10 @@ export interface StructComponentSymbol extends SymbolBase {
     readonly kind: SymbolKind.StructComponent;
 
     readonly type: SemanticType;
+
+    /** Type through which this component is selected at this occurrence.
+     * Preserve a named TYPE alias rather than flattening it to STRUCT. */
+    readonly containingType?: SemanticType;
 }
 
 export interface ParameterSymbol extends SymbolBase {

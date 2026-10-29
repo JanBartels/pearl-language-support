@@ -90,11 +90,9 @@ export class CallSignatureIndex {
             }
         }
         for (const [element, builtin] of semantic.builtinBindings) {
-            if (builtin.category === 'procedure') {
-                byElement.set(element, builtin.signatures.map(signature => ({
-                    kind: 'builtin' as const, name: element.value, builtin, signature
-                })));
-            }
+            byElement.set(element, builtin.signatures.map(signature => ({
+                kind: 'builtin' as const, name: element.value, builtin, signature
+            })));
         }
         const entries = new Map<CallStatementNode, readonly CallSignatureInformation[]>();
         for (const call of calls) {

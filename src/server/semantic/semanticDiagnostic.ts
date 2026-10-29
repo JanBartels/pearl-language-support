@@ -34,6 +34,7 @@ export enum SemanticDiagnosticCode {
     UnknownStructureComponent = 'semantic.unknown-structure-component',
     InvalidFunctionExpression = 'semantic.invalid-function-expression',
     InvalidReturnType = 'semantic.invalid-return-type',
+    InvalidBuiltinArgumentType = 'semantic.invalid-builtin-argument-type',
     InvalidIfCondition = 'semantic.invalid-if-condition',
     InvalidWhileCondition = 'semantic.invalid-while-condition',
     InvalidRepetitionFixedExpression = 'semantic.invalid-repetition-fixed-expression',

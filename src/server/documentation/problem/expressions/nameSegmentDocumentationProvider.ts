@@ -11,6 +11,7 @@ import { DocumentationProvider } from '../../documentationProvider';
 import { md } from '../../markdownUtils';
 import { appendSemanticSymbolDocumentation } from '../../semanticSymbolDocumentation';
 import { formatCallSignatures } from '../../callSignatureFormatting';
+import { formatBuiltinSignature } from '../../../semantic/builtins/builtinSignature';
 import { appendExpressionTypeDocumentation } from './expressionTypeDocumentation';
 
 export class NameSegmentDocumentationProvider extends DocumentationProvider<NameSegmentNode> {
@@ -36,6 +37,14 @@ Name \`${node.identifier.value}\` in an expression.`;
                 documentation, symbol, semanticContext,
                 formatCallSignatures(callSignatures?.getForElement(node.identifier))
             );
+        } else {
+            const builtin = semanticContext?.builtinBindings.get(node.identifier);
+            if (builtin) {
+                documentation += `\n\n**RTOS-UH-Einbaufunktion:** ${builtin.description}`
+                    + `\n\n**Signatur:** \`${builtin.signatures.map(signature =>
+                        formatBuiltinSignature(builtin, signature)).join(' | ')}\``
+                    + `\n\n**Quelle:** ${builtin.source}`;
+            }
         }
         // A segment is a syntactic component; only the enclosing expression
         // has a result type. Do not invent a type for unimplemented selections.

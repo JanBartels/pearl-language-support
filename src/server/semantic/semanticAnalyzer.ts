@@ -94,7 +94,7 @@ import { resolveSymbol } from './symbolResolver';
 import { lookupBuiltin } from './builtins/builtinCatalog';
 import {
     semanticTypeEquals, procedureSignaturesEqual, isProcedureSignatureResolved,
-    isScalarValueAssignable
+    isScalarValueAssignable, isNilAssignableTo
 } from './semanticTypeComparison';
 import type { BuiltinDefinition } from './builtins/builtinSignature';
 import { acceptsBuiltinArity, builtinExpectedArity } from './builtins/builtinSignature';
@@ -444,6 +444,16 @@ class SemanticAnalysisState implements
         });
     }
 
+    reportInvalidBuiltinArgumentType(source: SourceValue<string>, builtinName: string): void {
+        if (!source.location) return;
+        this.diagnostics.push({
+            code: SemanticDiagnosticCode.InvalidBuiltinArgumentType,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: source.location,
+            message: `Die Aktualparameter von '${builtinName}' entsprechen keiner zulässigen Einbaufunktionssignatur.`
+        });
+    }
+
     reportInvalidReturnType(source: SourceValue<string>): void {
         if (!source.location) return;
         this.diagnostics.push({
@@ -456,6 +466,10 @@ class SemanticAnalysisState implements
 
     bind(source: SourceValue<string>, symbol: SemanticSymbol): void {
         this.bindings.set(source, symbol);
+    }
+
+    bindBuiltin(source: SourceValue<string>, builtin: BuiltinDefinition): void {
+        this.builtinBindings.set(source, builtin);
     }
 
     linkLocalSpecification(
@@ -1767,15 +1781,19 @@ export class SemanticAnalyzer {
         const type = state.expressionTypeResolver.resolve(statement.selector, environment);
         const effective = type && state.resolveUnderlyingType(type);
         const indexed = statement.alternatives.some(alt => alt.caseListTokens !== undefined);
+        // RTOS-UH restricts CASE to FIXED(15) (not FIXED(31)) or,
+        // for indexed CASE, CHAR(1). Resolve the effective precision here
+        // without changing the type representation of a declaration.
         const valid = effective?.kind === SemanticTypeKind.Fixed
+                && (effective.precision ?? 15) === 15
             || (indexed && effective?.kind === SemanticTypeKind.Character
                 && (effective.length === 1 || effective.length === undefined));
         if (effective && effective.kind !== SemanticTypeKind.Reference
             && effective.kind !== SemanticTypeKind.VoidReference && !valid) {
             state.reportCaseProblem(SemanticDiagnosticCode.InvalidCaseSelector,
                 statement.selectorTokens[0] ?? statement.caseKeyword,
-                indexed ? 'CASE-Selektor muss FIXED oder CHAR(1) sein.'
-                    : 'Positionaler CASE-Selektor muss vom Typ FIXED sein.');
+                indexed ? 'CASE-Selektor muss FIXED(15) oder CHAR(1) sein.'
+                    : 'Positionaler CASE-Selektor muss vom Typ FIXED(15) sein.');
         }
 
         // One index interval per valid ALT range. Do not enumerate FIXED values:
@@ -2042,6 +2060,22 @@ export class SemanticAnalyzer {
         state: SemanticAnalysisState
     ): void {
         if (!node.expression) return;
+        // NIL has no standalone SemanticType: its validity depends on the
+        // destination type. Keep it as a literal in the syntax tree and check
+        // compatibility with the declared RETURNS type, as for REF INIT(NIL).
+        // Extra parentheses must not affect this contextual rule.
+        let returnValue: ExpressionNode | undefined = node.expression;
+        while (returnValue?.kind === AstKind.ParenthesizedExpression) {
+            returnValue = (returnValue as ParenthesizedExpressionNode).expression;
+        }
+        if (returnValue?.kind === AstKind.LiteralExpression
+            && (returnValue as LiteralExpressionNode).literal.value === 'NIL') {
+            const target = resultType && state.resolveUnderlyingType(resultType);
+            if (target && !isNilAssignableTo(target)) {
+                state.reportInvalidReturnType((returnValue as LiteralExpressionNode).literal);
+            }
+            return;
+        }
         const expressionType = state.expressionTypeResolver.resolve(node.expression, environment);
         // Errors already reported in an operand must not cause a second return error.
         if (!resultType || !expressionType) return;
@@ -2069,6 +2103,24 @@ export class SemanticAnalyzer {
         environment: Environment,
         state: SemanticAnalysisState
     ): Environment {
+        // CALL actuals are syntactic expressions, even while IDENT/value
+        // compatibility is still deferred to the shared parameter checker.
+        // This also supplies identifier bindings and types for hover/navigation.
+        for (const parameter of node.actualParameters?.parameters ?? []) {
+            const expression = parameter.expression;
+            if (!expression) continue;
+            // Full CALL argument checks, especially IDENT, are still pending.
+            // In particular, do not newly reject unresolved external device
+            // designators (e.g. A1 in ASSIGN(A1, ...)) while migrating the AST.
+            // Bind and document all names that are already known to semantics.
+            if (expression instanceof NameExpressionNode) {
+                const first = expression.segments[0]?.identifier;
+                if (first && !resolveSymbol(environment, first.value) && !lookupBuiltin(first.value)) {
+                    continue;
+                }
+            }
+            state.expressionTypeResolver.resolve(expression, environment);
+        }
         if (!node.target) return environment;
         const symbol = resolveSymbol(environment, node.target.value);
         if (!symbol) {

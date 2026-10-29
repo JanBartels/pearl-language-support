@@ -565,5 +565,28 @@ R8: PROC(I FIXED);
    END;   
 END;   
 
+TYPE HS STRUCT [
+   E FIXED
+];
 
+HP: PROC( Param HS );
+   IF Param.E == 42
+   THEN
+      RETURN;
+   FIN;
+END;
+
+NP: PROC RETURNS( REF HS);
+   RETURN(NIL);
+END;
+
+HPC: PROC;
+DCL V HS;
+   HP(V);
+END;   
+
+Einbau: PROC( String CHAR(10) ) RETURNS( FIXED );
+   RETURN( LEN( MID( String, 2,4 ) ) );
+END;
+   
 MODEND DEBUG;

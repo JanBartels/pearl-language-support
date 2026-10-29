@@ -84,6 +84,15 @@ export class ExpressionParser extends ParserBase {
         }
 
         const token = this.current();
+        if (this.isKeyword('NIL')) {
+            this.next();
+            return new LiteralExpressionNode(this.tokenValue(token));
+        }
+        if (this.isKeyword('IF')) {
+            this.problems.error(this.location(),
+                'Bedingte IF-Ausdrücke werden von RTOS-UH nicht unterstützt.');
+            return undefined;
+        }
         if (this.isNumberLiteral() || this.isStringLiteral() || this.isBitLiteral()) {
             this.next();
             return this.parseLiteral(this.tokenValue(token),

@@ -25,7 +25,10 @@ export function appendSemanticSymbolDocumentation(
 
         case SymbolKind.StructComponent:
             return `${documentation}\n\n**Symbol:** structure component`
-                + `\n\n**Type:** \`${formatSemanticType(symbol.type)}\``;
+                + `\n\n**Type:** \`${formatSemanticType(symbol.type)}\``
+                + (symbol.containingType
+                    ? `\n\n**Containing structure type:** \`${formatSemanticType(symbol.containingType)}\``
+                    : '');
 
         case SymbolKind.Module:
             return `${documentation}\n\n**Symbol:** module`;

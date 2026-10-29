@@ -5,6 +5,10 @@ import { CallStatementNode } from '../../../ast/problem/statements/callStatement
 import type { Token } from '../../../lexer/token';
 import { ParserBase } from '../../parserBase';
 import { ActualParameterListParser } from './actualParameterListParser';
+import { ActualParameterListNode } from '../../../ast/problem/statements/actualParameterListNode';
+import { ActualParameterNode } from '../../../ast/problem/statements/actualParameterNode';
+import { parseBufferedExpression } from '../expressions/parseBufferedExpression';
+import type { SourceValue } from '../../../core/sourceValue';
 
 /** Parses both CALL Name(...) and Name(...) with the same call AST. */
 export class CallStatementParser extends ParserBase {
@@ -43,6 +47,34 @@ export class CallStatementParser extends ParserBase {
             this.problems.error(problem.location, problem.message);
         }
 
+        // The implicit-call dispatcher can speculatively parse an argument
+        // list before it knows whether this is a CALL or an assignment.
+        // Parse expressions only after the CALL interpretation is committed.
+        const actualParameters = parsed && new ActualParameterListNode(
+            parsed.node.openParenthesis,
+            parsed.node.parameters.map((parameter, index) => {
+                const expression = parseBufferedExpression(parsed.parameterTokens[index], this.context);
+                // The buffered parser creates SourceValues for its syntax.
+                // Reuse those instances in the compatibility token view so
+                // existing source-lookup identity remains intact.
+                const tokens = parameter.tokens.map(token => {
+                    const location = token.location;
+                    if (!expression || !location) return token;
+                    const lookup = expression.lookupSourceValue({
+                        uri: location.source.uri, offset: location.span.start
+                    });
+                    const resolved = lookup?.element;
+                    return resolved?.location?.span.start === location.span.start
+                        && resolved.location.span.end === location.span.end
+                        && resolved.location.source === location.source
+                        && typeof resolved.value === 'string'
+                        ? resolved as SourceValue<string> : token;
+                });
+                return new ActualParameterNode(tokens, expression);
+            }),
+            parsed.node.commas, parsed.node.closeParenthesis, parsed.node.recoveryBoundary
+        );
+
         if (!this.expectSemicolon(keyword
             ? "Expected ';' after CALL."
             : "Expected ';' after procedure call.")) {
@@ -54,7 +86,7 @@ export class CallStatementParser extends ParserBase {
         return new CallStatementNode(
             keyword ? this.tokenValue(keyword) : undefined,
             identifier ? this.tokenValue(identifier) : undefined,
-            parsed?.node
+            actualParameters
         );
     }
 

@@ -17,10 +17,16 @@ import type { SemanticSymbol } from './symbol';
 import { SemanticTypeKind } from './semanticType';
 import type { SemanticType, ProcedureType, ArrayType, VirtualArrayType } from './semanticType';
 import { isScalarValueAssignable } from './semanticTypeComparison';
+import { lookupBuiltin } from './builtins/builtinCatalog';
+import type { BuiltinDefinition } from './builtins/builtinSignature';
+import { matchBuiltinSignature, builtinExpectedArity, acceptsBuiltinArity } from './builtins/builtinSignature';
 
 /** The expression resolver is a semantic phase, never a dependency of the parser/AST. */
 export interface ExpressionTypeResolverContext {
     bind(source: SourceValue<string>, symbol: SemanticSymbol): void;
+    bindBuiltin(source: SourceValue<string>, builtin: BuiltinDefinition): void;
+    reportInvalidBuiltinCallArity(source: SourceValue<string>, expected: string, actual: number): void;
+    reportInvalidBuiltinArgumentType(source: SourceValue<string>, builtinName: string): void;
     reportUnknownIdentifier(source: SourceValue<string>): void;
     reportInvalidExpressionOperands(source: SourceValue<string>): void;
     reportInvalidCallArity(source: SourceValue<string>, expected: number, actual: number): void;
@@ -118,7 +124,9 @@ export class ExpressionTypeResolver {
         const first = node.segments[0];
         if (!first) return undefined;
         const symbol = resolveSymbol(environment, first.identifier.value);
+        const builtin = symbol ? undefined : lookupBuiltin(first.identifier.value);
         if (symbol) this.context.bind(first.identifier, symbol);
+        else if (builtin) this.context.bindBuiltin(first.identifier, builtin);
         else this.context.reportUnknownIdentifier(first.identifier);
 
         // Every parenthesized slot remains a syntactic expression, regardless
@@ -126,7 +134,9 @@ export class ExpressionTypeResolver {
         // Check nested identifiers even when a prefix of the chain is invalid.
         const argumentTypes = node.segments.map(segment =>
             (segment.suffix?.expressions ?? []).map(argument => this.resolve(argument, environment)));
-        if (!symbol) return undefined;
+        if (!symbol) {
+            return builtin ? this.builtinResult(node, builtin, argumentTypes) : undefined;
+        }
 
         let type: SemanticType | undefined;
         switch (symbol.kind) {
@@ -201,6 +211,37 @@ export class ExpressionTypeResolver {
         return type;
     }
 
+    /** Intrinsics are not lexical symbols; their signatures already live in
+     * the compiler builtin catalog and are shared with CALL and Hover. */
+    private builtinResult(
+        node: NameExpressionNode, builtin: BuiltinDefinition,
+        argumentTypes: readonly (readonly (SemanticType | undefined)[])[]
+    ): SemanticType | undefined {
+        const first = node.segments[0];
+        if (!first || node.segments.length !== 1) return undefined;
+        const args = first.suffix?.expressions ?? [];
+        if (first.suffix && (!first.suffix.closeParenthesis || args.some(arg => !arg))) return undefined;
+        const types = argumentTypes[0] ?? [];
+        if (builtin.category === 'procedure') {
+            this.context.reportInvalidFunctionExpression(first.identifier);
+            return undefined;
+        }
+        if (!builtin.signatures.some(signature => acceptsBuiltinArity(signature, args.length))) {
+            this.context.reportInvalidBuiltinCallArity(first.identifier,
+                builtinExpectedArity(builtin), args.length);
+            return undefined;
+        }
+        // An argument with an earlier diagnostic has no known type. Do not
+        // manufacture an additional builtin error in that case.
+        if (types.some(type => !type)) return undefined;
+        const match = matchBuiltinSignature(builtin, types as readonly SemanticType[]);
+        if (!match) {
+            this.context.reportInvalidBuiltinArgumentType(first.identifier, builtin.name);
+            return undefined;
+        }
+        return match.resultType;
+    }
+
     /** Resolve one lexical component against the preceding STRUCT value. */
     private structureComponent(segment: NameSegmentNode, preceding: SemanticType): SemanticType | undefined {
         let type = this.context.resolveUnderlyingType(preceding);
@@ -234,7 +275,9 @@ export class ExpressionTypeResolver {
         this.context.bind(segment.identifier, {
             kind: SymbolKind.StructComponent,
             name: component.name,
-            type: component.type
+            type: component.type,
+            containingType: preceding.kind === SemanticTypeKind.Reference
+                ? preceding.target : preceding
         });
         return component.type;
     }

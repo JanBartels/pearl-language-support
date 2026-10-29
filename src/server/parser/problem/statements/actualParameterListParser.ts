@@ -16,6 +16,8 @@ export interface ActualParameterListProblem {
 export interface ParsedActualParameterList {
     readonly node: ActualParameterListNode;
     readonly problems: readonly ActualParameterListProblem[];
+    /** Original tokens for each slot; only the committed CALL parses them. */
+    readonly parameterTokens: readonly (readonly Token[])[];
 }
 
 /** Parses the suffix beginning immediately after the consumed '('.
@@ -23,7 +25,8 @@ export interface ParsedActualParameterList {
  * The caller decides whether these tokens belong to a CALL or to an
  * unsupported identifier-led construction (e.g. array assignment). Therefore
  * diagnostics are returned and only committed by the caller after that choice.
- * No symbol lookup or expression parsing is performed here.
+ * No symbol lookup or expression parsing is performed here; the CALL parser
+ * attaches expression nodes only after committing to the CALL grammar.
  */
 export class ActualParameterListParser extends ParserBase {
     override parse(): ActualParameterListNode | undefined {
@@ -36,6 +39,12 @@ export class ActualParameterListParser extends ParserBase {
         const problems: ActualParameterListProblem[] = [];
         const brackets: string[] = [];
         let current: SourceValue<string>[] = [];
+        let currentTokens: Token[] = [];
+        const parameterTokens: Token[][] = [];
+        const appendParameter = (): void => {
+            parameters.push(new ActualParameterNode(current));
+            parameterTokens.push(currentTokens);
+        };
         let closeParenthesis: SourceValue<string> | undefined;
 
         while (!this.eof()) {
@@ -52,8 +61,9 @@ export class ActualParameterListParser extends ParserBase {
                 if (!current.length) {
                     problems.push({ location: this.location(), message: 'Expected CALL argument.' });
                 }
-                parameters.push(new ActualParameterNode(current));
+                appendParameter();
                 current = [];
+                currentTokens = [];
                 commas.push(this.tokenValue(this.current()));
                 this.next();
                 continue;
@@ -72,13 +82,14 @@ export class ActualParameterListParser extends ParserBase {
                 brackets.pop();
             }
             current.push(this.tokenValue(token));
+            currentTokens.push(token);
             this.next();
         }
 
         // Retain the last slot even if it is empty after a comma or an opening
         // parenthesis. P() is the only form without any slots.
         if (current.length || commas.length || !closeParenthesis) {
-            parameters.push(new ActualParameterNode(current));
+            appendParameter();
         }
         if (!current.length && commas.length) {
             problems.push({ location: this.location(), message: 'Expected CALL argument after comma.' });
@@ -92,7 +103,8 @@ export class ActualParameterListParser extends ParserBase {
                 this.tokenValue(openParenthesis), parameters, commas, closeParenthesis,
                 closeParenthesis ? undefined : this.tokenValue(this.current())
             ),
-            problems
+            problems,
+            parameterTokens
         };
     }
 
