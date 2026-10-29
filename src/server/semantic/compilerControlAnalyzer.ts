@@ -164,7 +164,7 @@ export class CompilerControlAnalyzer {
         if (root.kind === AstKind.Module) {
             const module = root as ModuleNode;
 
-            if (module.keyword.location.source !== location.source) {
+            if (!module.keyword.location || module.keyword.location.source !== location.source) {
                 return undefined;
             }
 
@@ -187,7 +187,8 @@ export class CompilerControlAnalyzer {
 
         const modules = root.getChildren()
             .filter((child): child is ModuleNode => child.kind === AstKind.Module)
-            .filter(module => module.keyword.location.source === location.source);
+            .filter((module): module is ModuleNode & { keyword: { location: Location } } =>
+                module.keyword.location?.source === location.source);
 
         for (let index = 0; index < modules.length; index++) {
             const module = modules[index];

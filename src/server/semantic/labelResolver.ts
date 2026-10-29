@@ -62,9 +62,9 @@ export function resolveLabels(
             severity: SemanticDiagnosticSeverity.Error,
             location: name.location,
             message: `Sprungmarke '${name.value}' ist in diesem Gültigkeitsbereich bereits vergeben.`,
-            relatedLocations: previous.location
-                ? [{ location: previous.location, message: 'Bereits vorhandene Deklaration.' }]
-                : undefined
+            ...(previous.location ? { relatedLocations: [{
+                location: previous.location, message: 'Bereits vorhandene Deklaration.'
+            }] } : {})
         });
     };
 
@@ -138,9 +138,10 @@ export function resolveLabels(
             message: inaccessible
                 ? `GOTO '${target.value}' darf nicht in einen inneren oder fremden Block bzw. eine Schleife springen.`
                 : `Unbekannte Sprungmarke '${target.value}' in dieser Task oder Prozedur.`,
-            relatedLocations: inaccessible?.name.location
-                ? [{ location: inaccessible.name.location, message: 'Hier ist die nicht erreichbare Sprungmarke definiert.' }]
-                : undefined
+            ...(inaccessible?.name.location ? { relatedLocations: [{
+                location: inaccessible.name.location,
+                message: 'Hier ist die nicht erreichbare Sprungmarke definiert.'
+            }] } : {})
         });
     }
 

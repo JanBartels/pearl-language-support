@@ -24,7 +24,7 @@ const function1 = (name: string, description: string, source: string,
 const procedure = (name: string, description: string, source: string,
     parameters: readonly BuiltinParameter[], repeatedParameter?: BuiltinParameter): BuiltinDefinition => ({
     name, description, source, category: 'procedure', availability: 'standard',
-    signatures: [{ parameters, repeatedParameter }]
+    signatures: [{ parameters, ...(repeatedParameter !== undefined ? { repeatedParameter } : {}) }]
 });
 const stringFunction = (name: string, description: string,
     parameters: readonly BuiltinParameter[], result: BuiltinTypePattern): BuiltinDefinition => ({

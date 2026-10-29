@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { ProcedureParameterTypeNode } from '../../../ast/problem/declarations/procedureParameterTypeNode';
+import type { SourceValue } from '../../../core/sourceValue';
 import { ParserBase } from '../../parserBase';
 
 /** Special formal parameter types not represented by ProblemDataTypeNode. */
@@ -13,7 +14,7 @@ export class ProcedureParameterTypeParser extends ParserBase {
         ]);
         if (!keyword) return undefined;
 
-        const qualifiers = [];
+        const qualifiers: SourceValue<string>[] = [];
         if (this.tokenText(keyword) === 'DATION') {
             this.skipTrivia();
             // RTOS-UH also uses DATION ALPHIC without an explicit direction.

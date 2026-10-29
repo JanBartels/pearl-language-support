@@ -2,9 +2,9 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { DocumentationProvider } from '../../documentationProvider';
-import { AstLookupResult } from '../ast/astLookupResult';
+import { AstLookupResult } from '../../../ast/astLookupResult';
 import { md } from '../../../documentation/markdownUtils';
-import { BasicDationSystemDeclarationNode } from '../ast/system/declarations/basicDationSystemDeclarationNode';
+import { BasicDationSystemDeclarationNode } from '../../../ast/system/declarations/basicDationSystemDeclarationNode';
                                                          
 
 export class BasicDationDocumentationProvider

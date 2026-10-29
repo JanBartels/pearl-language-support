@@ -94,7 +94,7 @@ export function resolveModuleControls(root: AstNode): ResolvedModuleControls {
                 `P=${name} unterstützt keine Registerzahl.`);
             return undefined;
         }
-        if (!hasRegisters) return { name, explicitFpu: false, fpuRegisters: name === '68881' ? 1 : undefined };
+        if (!hasRegisters) return { name, explicitFpu: false, ...(name === '68881' ? { fpuRegisters: 1 } : {}) };
 
         const count = decimal(node.registerCount!, 'FPU-Registerzahl');
         if (count === undefined) return undefined;
@@ -217,7 +217,12 @@ export function resolveModuleControls(root: AstNode): ResolvedModuleControls {
                 + 'und keine veralteten 17er-Scheiben sichtbar werden.', Severity.Warning);
         }
 
-        const configuration = createModuleConfiguration(modes, { processor, moduleSize, setLine, maxErrors });
+        const configuration = createModuleConfiguration(modes, {
+            ...(processor !== undefined ? { processor } : {}),
+            ...(moduleSize !== undefined ? { moduleSize } : {}),
+            ...(setLine !== undefined ? { setLine } : {}),
+            ...(maxErrors !== undefined ? { maxErrors } : {})
+        });
         configurations.set(module, configuration);
         if (configuration.debugInformation && !module.debugKeyword) {
             report(module.modendKeyword, Code.MissingModendDebug,

@@ -15,7 +15,9 @@ export class DimensionAttributeDocumentationProvider
         lookup: AstLookupResult
     ): string | undefined {
 
-        if (lookup.element !== node.keyword) {
+        // DimensionAttributeNode has no keyword SourceValue of its own.
+        // Its children own the source ranges used for documentation lookup.
+        if (lookup.node !== node) {
             return undefined;
         }
 

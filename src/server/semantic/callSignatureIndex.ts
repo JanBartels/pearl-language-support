@@ -73,7 +73,7 @@ export class CallSignatureIndex {
                     type: parameter.type,
                     byIdentification: parameter.byIdentification,
                     name: names?.[index]?.name,
-                    nameOrigin: names?.[index]?.origin
+                    ...(names?.[index]?.origin !== undefined ? { nameOrigin: names[index].origin } : {})
                 }))
             }];
         };

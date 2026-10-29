@@ -126,9 +126,9 @@ export function createModuleConfiguration(
         noLineStop,
         padding,
         debugInformation,
-        processor: settings.processor,
-        moduleSize: settings.moduleSize,
-        setLine: settings.setLine,
-        maxErrors: settings.maxErrors
+        ...(settings.processor !== undefined ? { processor: settings.processor } : {}),
+        ...(settings.moduleSize !== undefined ? { moduleSize: settings.moduleSize } : {}),
+        ...(settings.setLine !== undefined ? { setLine: settings.setLine } : {}),
+        ...(settings.maxErrors !== undefined ? { maxErrors: settings.maxErrors } : {})
     };
 }

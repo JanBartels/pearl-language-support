@@ -96,10 +96,16 @@ export class SemanticContext {
                     noLineStop: configuration.noLineStop,
                     padding: configuration.padding,
                     debugInformation: configuration.debugInformation,
-                    processor: configuration.processor && { ...configuration.processor },
-                    moduleSize: configuration.moduleSize && { ...configuration.moduleSize },
-                    setLine: configuration.setLine && { ...configuration.setLine },
-                    maxErrors: configuration.maxErrors
+                    ...(configuration.processor !== undefined ? {
+                        processor: { ...configuration.processor }
+                    } : {}),
+                    ...(configuration.moduleSize !== undefined ? {
+                        moduleSize: { ...configuration.moduleSize }
+                    } : {}),
+                    ...(configuration.setLine !== undefined ? {
+                        setLine: { ...configuration.setLine }
+                    } : {}),
+                    ...(configuration.maxErrors !== undefined ? { maxErrors: configuration.maxErrors } : {})
                 }
             ])
         );

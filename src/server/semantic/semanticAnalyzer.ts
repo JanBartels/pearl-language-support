@@ -4,6 +4,7 @@
 import { AstKind } from '../ast/astKind';
 import type { AstNode } from '../ast/astNode';
 import { SourceValue } from '../core/sourceValue';
+import type { Location } from '../core/location';
 import type { CommentToken } from '../lexer/token';
 import type { ModuleNode } from '../ast/module/moduleNode';
 import type { ShellCommandNode } from '../ast/module/shellCommandNode';
@@ -147,6 +148,34 @@ class SemanticAnalysisState implements
     readonly bindings = new Map<SourceValue<string>, SemanticSymbol>();
     readonly builtinBindings = new Map<SourceValue<string>, BuiltinDefinition>();
     readonly diagnostics: SemanticDiagnostic[] = [];
+
+    /** SourceValue may be synthetic (not backed by source text). Such values
+     * cannot produce an LSP diagnostic. Keep SemanticDiagnostic.location
+     * required and include secondary locations only when they exist. */
+    private addDiagnostic(diagnostic: {
+        readonly code: SemanticDiagnosticCode;
+        readonly severity: SemanticDiagnosticSeverity;
+        readonly location: Location | undefined;
+        readonly message: string;
+        readonly relatedLocations?: readonly {
+            readonly location: Location | undefined;
+            readonly message: string;
+        }[] | undefined;
+    }): void {
+        if (!diagnostic.location) return;
+        const relatedLocations = diagnostic.relatedLocations?.filter(
+            (entry): entry is { readonly location: Location; readonly message: string } =>
+                entry.location !== undefined
+        );
+        this.diagnostics.push({
+            code: diagnostic.code,
+            severity: diagnostic.severity,
+            location: diagnostic.location,
+            message: diagnostic.message,
+            ...(relatedLocations?.length ? { relatedLocations } : {})
+        });
+    }
+
     readonly constantFixedExpressionValues = new Map<ConstantFixedExpressionNode, FixedConstantValue>();
     readonly constantFixedValues = new Map<AstNode, FixedConstantValue>();
     readonly namedConstantValues = new Map<DataObjectSymbol, SemanticConstantValue>();
@@ -216,7 +245,7 @@ class SemanticAnalysisState implements
 
     reportInvalidExpressionOperands(source: SourceValue<string>): void {
         if (!source.location) return;
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.InvalidExpressionOperands,
             severity: SemanticDiagnosticSeverity.Error,
             location: source.location,
@@ -235,7 +264,7 @@ class SemanticAnalysisState implements
             : undefined;
         const label = `Aktualparameter ${position}`
             + (formalName ? ` ('${formalName}')` : '');
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.InvalidCallArgumentType,
             severity: SemanticDiagnosticSeverity.Error,
             location: source.location,
@@ -262,7 +291,7 @@ class SemanticAnalysisState implements
 
     reportInvalidArrayIndexCount(source: SourceValue<string>, expected: number, actual: number): void {
         if (!source.location) return;
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.InvalidArrayIndexCount,
             severity: SemanticDiagnosticSeverity.Error,
             location: source.location,
@@ -277,7 +306,7 @@ class SemanticAnalysisState implements
         if (!source.location) return;
         const description = dimension === undefined
             ? `Selektor '.${owner.value}'` : `Feld '${owner.value}', Dimension ${dimension}`;
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.ConstantIndexOutOfBounds,
             severity: SemanticDiagnosticSeverity.Error,
             location: source.location,
@@ -288,7 +317,7 @@ class SemanticAnalysisState implements
 
     reportInvalidStringSelectorIndexType(source: SourceValue<string>): void {
         if (!source.location) return;
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.InvalidStringSelectorIndexType,
             severity: SemanticDiagnosticSeverity.Error,
             location: source.location,
@@ -298,7 +327,7 @@ class SemanticAnalysisState implements
 
     reportInvalidStringSelectorIndexCount(source: SourceValue<string>, actual: number): void {
         if (!source.location) return;
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.InvalidStringSelectorIndexCount,
             severity: SemanticDiagnosticSeverity.Error,
             location: source.location,
@@ -310,7 +339,7 @@ class SemanticAnalysisState implements
         source: SourceValue<string>, operator: SourceValue<string>, dimension: bigint, rank: number
     ): void {
         if (!source.location) return;
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.InvalidArrayBoundDimension,
             severity: SemanticDiagnosticSeverity.Error,
             location: source.location,
@@ -320,7 +349,7 @@ class SemanticAnalysisState implements
 
     reportInvalidArrayIndexType(source: SourceValue<string>): void {
         if (!source.location) return;
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.InvalidArrayIndexType,
             severity: SemanticDiagnosticSeverity.Error,
             location: source.location,
@@ -330,7 +359,7 @@ class SemanticAnalysisState implements
 
     reportInvalidNameSuffix(source: SourceValue<string>): void {
         if (!source.location) return;
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.InvalidNameSuffix,
             severity: SemanticDiagnosticSeverity.Error,
             location: source.location,
@@ -340,7 +369,7 @@ class SemanticAnalysisState implements
 
     reportInvalidStructureSelection(source: SourceValue<string>): void {
         if (!source.location) return;
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.InvalidStructureSelection,
             severity: SemanticDiagnosticSeverity.Error,
             location: source.location,
@@ -350,7 +379,7 @@ class SemanticAnalysisState implements
 
     reportUnknownStructureComponent(source: SourceValue<string>): void {
         if (!source.location) return;
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.UnknownStructureComponent,
             severity: SemanticDiagnosticSeverity.Error,
             location: source.location,
@@ -360,7 +389,7 @@ class SemanticAnalysisState implements
 
     reportInvalidFunctionExpression(source: SourceValue<string>): void {
         if (!source.location) return;
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.InvalidFunctionExpression,
             severity: SemanticDiagnosticSeverity.Error,
             location: source.location,
@@ -372,7 +401,7 @@ class SemanticAnalysisState implements
         code: SemanticDiagnosticCode, source: SourceValue<string>, message: string
     ): void {
         if (!source.location) return;
-        this.diagnostics.push({ code, severity: SemanticDiagnosticSeverity.Error,
+        this.addDiagnostic({ code, severity: SemanticDiagnosticSeverity.Error,
             location: source.location, message });
     }
 
@@ -380,7 +409,7 @@ class SemanticAnalysisState implements
         source: SourceValue<string>, previous: SourceValue<string>, message: string
     ): void {
         if (!source.location) return;
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.OverlappingCaseAlternative,
             severity: SemanticDiagnosticSeverity.Error,
             location: source.location,
@@ -416,7 +445,7 @@ class SemanticAnalysisState implements
 
     reportInvalidIfCondition(source: SourceValue<string>): void {
         if (!source.location) return;
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.InvalidIfCondition,
             severity: SemanticDiagnosticSeverity.Error,
             location: source.location,
@@ -426,7 +455,7 @@ class SemanticAnalysisState implements
 
     reportInvalidWhileCondition(source: SourceValue<string>): void {
         if (!source.location) return;
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.InvalidWhileCondition,
             severity: SemanticDiagnosticSeverity.Error,
             location: source.location,
@@ -436,7 +465,7 @@ class SemanticAnalysisState implements
 
     reportInvalidRepetitionFixedExpression(source: SourceValue<string>, clause: 'FROM' | 'BY' | 'TO'): void {
         if (!source.location) return;
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.InvalidRepetitionFixedExpression,
             severity: SemanticDiagnosticSeverity.Error,
             location: source.location,
@@ -446,7 +475,7 @@ class SemanticAnalysisState implements
 
     reportInvalidBuiltinArgumentType(source: SourceValue<string>, builtinName: string): void {
         if (!source.location) return;
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.InvalidBuiltinArgumentType,
             severity: SemanticDiagnosticSeverity.Error,
             location: source.location,
@@ -456,7 +485,7 @@ class SemanticAnalysisState implements
 
     reportInvalidReturnType(source: SourceValue<string>): void {
         if (!source.location) return;
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.InvalidReturnType,
             severity: SemanticDiagnosticSeverity.Error,
             location: source.location,
@@ -799,7 +828,7 @@ class SemanticAnalysisState implements
     }
 
     reportUnknownType(name: SourceValue<string>): void {
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.UnknownType,
             severity: SemanticDiagnosticSeverity.Error,
             location: name.location,
@@ -808,7 +837,7 @@ class SemanticAnalysisState implements
     }
 
     reportExpectedType(name: SourceValue<string>, symbol: SemanticSymbol): void {
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.ExpectedType,
             severity: SemanticDiagnosticSeverity.Error,
             location: name.location,
@@ -819,7 +848,7 @@ class SemanticAnalysisState implements
     }
 
     reportDuplicateType(name: SourceValue<string>, existing: IndexedDeclaration): void {
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.DuplicateType,
             severity: SemanticDiagnosticSeverity.Error,
             location: name.location,
@@ -832,7 +861,7 @@ class SemanticAnalysisState implements
     }
 
     reportSecondModuleInTranslationUnit(keyword: SourceValue<string>): void {
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.MultipleModulesInTranslationUnit,
             severity: SemanticDiagnosticSeverity.Error,
             location: keyword.location,
@@ -841,7 +870,7 @@ class SemanticAnalysisState implements
     }
 
     reportDeclarationAfterProcedureOrTask(keyword: SourceValue<string>): void {
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.DeclarationAfterProcedureOrTask,
             severity: SemanticDiagnosticSeverity.Error,
             location: keyword.location,
@@ -850,7 +879,7 @@ class SemanticAnalysisState implements
     }
 
     reportDuplicateDeclaration(name: SourceValue<string>, existing: IndexedDeclaration): void {
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.DuplicateDeclaration,
             severity: SemanticDiagnosticSeverity.Error,
             location: name.location,
@@ -863,7 +892,7 @@ class SemanticAnalysisState implements
     }
 
     reportMissingLocalDefinition(name: SourceValue<string>, kind: 'PROC' | 'TASK'): void {
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: kind === 'PROC'
                 ? SemanticDiagnosticCode.MissingLocalProcedureDefinition
                 : SemanticDiagnosticCode.MissingLocalTaskDefinition,
@@ -878,7 +907,7 @@ class SemanticAnalysisState implements
         definition: SourceValue<string>,
         specification: SourceValue<string>
     ): void {
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.LocalProcedureSpecificationMismatch,
             severity: SemanticDiagnosticSeverity.Error,
             location: definition.location,
@@ -900,7 +929,7 @@ class SemanticAnalysisState implements
     }
 
     reportInvalidCallTarget(name: SourceValue<string>): void {
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.InvalidCallTarget,
             severity: SemanticDiagnosticSeverity.Error,
             location: name.location,
@@ -909,7 +938,7 @@ class SemanticAnalysisState implements
     }
 
     reportInvalidBuiltinCallArity(name: SourceValue<string>, expected: string, actual: number): void {
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.InvalidCallArity,
             severity: SemanticDiagnosticSeverity.Error,
             location: name.location,
@@ -918,7 +947,7 @@ class SemanticAnalysisState implements
     }
 
     reportInvalidCallArity(name: SourceValue<string>, expected: number, actual: number): void {
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.InvalidCallArity,
             severity: SemanticDiagnosticSeverity.Error,
             location: name.location,
@@ -927,7 +956,7 @@ class SemanticAnalysisState implements
     }
 
     reportDataSpecificationRequiresGlobal(name: SourceValue<string>): void {
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.DataSpecificationRequiresGlobal,
             severity: SemanticDiagnosticSeverity.Error,
             location: name.location,
@@ -936,7 +965,7 @@ class SemanticAnalysisState implements
     }
 
     reportMissingDeclarationForSpecification(name: SourceValue<string>): void {
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.MissingDeclarationForSpecification,
             severity: SemanticDiagnosticSeverity.Error,
             location: name.location,
@@ -949,7 +978,7 @@ class SemanticAnalysisState implements
         name: SourceValue<string>,
         systemDeclaration: SystemObjectDeclaration
     ): void {
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.SystemSpecificationMismatch,
             severity: SemanticDiagnosticSeverity.Error,
             location: name.location,
@@ -962,7 +991,7 @@ class SemanticAnalysisState implements
     }
 
     reportMissingSystemDeclarationForSpecification(name: SourceValue<string>, typeName: string): void {
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.MissingSystemDeclarationForSpecification,
             severity: SemanticDiagnosticSeverity.Error,
             location: name.location,
@@ -971,7 +1000,7 @@ class SemanticAnalysisState implements
     }
 
     reportInvalidDeclarationScope(keyword: SourceValue<string>, typeName: string): void {
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.InvalidDeclarationScope,
             severity: SemanticDiagnosticSeverity.Error,
             location: keyword.location,
@@ -980,7 +1009,7 @@ class SemanticAnalysisState implements
     }
 
     reportGlobalDeclarationOutsideModule(keyword: SourceValue<string>): void {
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.GlobalDeclarationOutsideModule,
             severity: SemanticDiagnosticSeverity.Error,
             location: keyword.location,
@@ -992,7 +1021,7 @@ class SemanticAnalysisState implements
         source: SourceValue<string>,
         value: bigint
     ): void {
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.InvalidTaskPriority,
             severity: SemanticDiagnosticSeverity.Error,
             location: source.location,
@@ -1001,7 +1030,7 @@ class SemanticAnalysisState implements
     }
 
     reportConstantExpressionNotEvaluable(keyword: SourceValue<string>, contextName: string): void {
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.ConstantExpressionNotEvaluable,
             severity: SemanticDiagnosticSeverity.Error,
             location: keyword.location,
@@ -1010,7 +1039,7 @@ class SemanticAnalysisState implements
     }
 
     reportInvalidDationCreationSource(name: SourceValue<string>): void {
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.InvalidDationCreationSource,
             severity: SemanticDiagnosticSeverity.Error,
             location: name.location,
@@ -1019,7 +1048,7 @@ class SemanticAnalysisState implements
     }
 
     reportUnknownIdentifier(identifier: SourceValue<string>): void {
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.UnknownIdentifier,
             severity: SemanticDiagnosticSeverity.Error,
             location: identifier.location,
@@ -1028,7 +1057,7 @@ class SemanticAnalysisState implements
     }
 
     reportExpectedNamedFixedConstant(identifier: SourceValue<string>): void {
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.ExpectedNamedFixedConstant,
             severity: SemanticDiagnosticSeverity.Error,
             location: identifier.location,
@@ -1037,7 +1066,7 @@ class SemanticAnalysisState implements
     }
 
     reportInvariantWithoutInitialization(identifier: SourceValue<string>): void {
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.InvariantWithoutInitialization,
             severity: SemanticDiagnosticSeverity.Error,
             location: identifier.location,
@@ -1047,7 +1076,7 @@ class SemanticAnalysisState implements
     }
 
     reportInvalidSemaPresetValue(keyword: SourceValue<string>, value: bigint): void {
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.InvalidSemaPresetValue,
             severity: SemanticDiagnosticSeverity.Error,
             location: keyword.location,
@@ -1056,7 +1085,7 @@ class SemanticAnalysisState implements
     }
 
     reportSemaPresetElementCount(keyword: SourceValue<string>, expected: bigint, actual: number): void {
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.SemaPresetElementCount,
             severity: SemanticDiagnosticSeverity.Error,
             location: keyword.location,
@@ -1066,7 +1095,7 @@ class SemanticAnalysisState implements
     }
 
     reportExpectedNamedConstant(identifier: SourceValue<string>, expectedTypeName: string): void {
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.ExpectedNamedConstant,
             severity: SemanticDiagnosticSeverity.Error,
             location: identifier.location,
@@ -1080,7 +1109,7 @@ class SemanticAnalysisState implements
         expected: number,
         actual: number
     ): void {
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.InitializationElementCount,
             severity: SemanticDiagnosticSeverity.Error,
             location: keyword.location,
@@ -1095,7 +1124,7 @@ class SemanticAnalysisState implements
         available: bigint,
         actual: number
     ): void {
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.InitializationElementCount,
             severity: SemanticDiagnosticSeverity.Error,
             location: keyword.location,
@@ -1109,7 +1138,7 @@ class SemanticAnalysisState implements
             ? 'FIXED-Objekte müssen mit konstanten FIXED-Ausdrücken initialisiert werden.'
             : `${typeName}-Objekte enthalten einen nicht kompatiblen INIT-Wert.`;
 
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: typeName === 'FIXED'
                 ? SemanticDiagnosticCode.InvalidFixedInitialization
                 : SemanticDiagnosticCode.InvalidInitialization,
@@ -1125,7 +1154,7 @@ class SemanticAnalysisState implements
         maximumLength: number,
         actualLength: number
     ): void {
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.InitializationValueTooLong,
             severity: SemanticDiagnosticSeverity.Error,
             location: source.location,
@@ -1138,7 +1167,7 @@ class SemanticAnalysisState implements
         source: SourceValue<string>,
         message: string
     ): void {
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.InvalidClockConstant,
             severity: SemanticDiagnosticSeverity.Error,
             location: source.location,
@@ -1151,7 +1180,7 @@ class SemanticAnalysisState implements
         typeName: 'CLOCK' | 'DURATION',
         resolution: TimeResolution
     ): void {
-        this.diagnostics.push({
+        this.addDiagnostic({
             code: SemanticDiagnosticCode.TimeResolutionLoss,
             severity: SemanticDiagnosticSeverity.Warning,
             location: source.location,
@@ -1993,7 +2022,12 @@ export class SemanticAnalyzer {
             resultType,
             callingConvention: 'PEARL'
         };
-        const resolved: ProcedureSymbol = { ...symbol, resultType, signature };
+        const { resultType: _oldResultType, ...procedureWithoutResult } = symbol;
+        const resolved: ProcedureSymbol = {
+            ...procedureWithoutResult,
+            ...(resultType !== undefined ? { resultType } : {}),
+            signature
+        };
         state.replaceSymbolBindings(symbol, resolved);
         this.replaceScopeSymbol(environment.scope, symbol, resolved);
         symbol = resolved;
@@ -2034,7 +2068,11 @@ export class SemanticAnalyzer {
                 if (indexed?.name !== name) continue;
                 const original = state.parameterSymbols.get(name);
                 if (!original) continue;
-                const resolved: ParameterSymbol = { ...original, type };
+                const { type: _oldType, ...parameterWithoutType } = original;
+                const resolved: ParameterSymbol = {
+                    ...parameterWithoutType,
+                    ...(type !== undefined ? { type } : {})
+                };
                 state.parameterSymbols.set(name, resolved);
                 this.replaceScopeSymbol(scope, original, resolved);
                 state.bind(name, resolved);
@@ -2606,7 +2644,7 @@ export class SemanticAnalyzer {
                 name: identifier,
                 definition: forwardDefinition ?? identifier,
                 global: this.globalSymbolAttribute(attribute.global),
-                resultType: signature.resultType,
+                ...(signature.resultType !== undefined ? { resultType: signature.resultType } : {}),
                 signature
             };
             state.bind(identifier, symbol);

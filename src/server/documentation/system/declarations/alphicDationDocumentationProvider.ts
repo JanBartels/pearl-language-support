@@ -4,7 +4,7 @@
 import { DocumentationProvider } from '../../documentationProvider';
 import { AstLookupResult } from '../../../ast/astLookupResult';
 import { md } from '../../markdownUtils';
-import { AlphicDationSystemDeclarationNode } from '../ast/alphicDationSystemDeclationNode';
+import { AlphicDationSystemDeclarationNode } from '../../../ast/system/declarations/alphicDationSystemDeclationNode';
 
 export class AlphicDationDocumentationProvider
     extends DocumentationProvider<AlphicDationSystemDeclarationNode> {

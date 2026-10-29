@@ -4,7 +4,7 @@
 import { DocumentationProvider } from '../../documentationProvider';
 import { AstLookupResult } from '../../../ast/astLookupResult';
 import { md } from '../../markdownUtils';
-import { InterruptSystemDeclarationNode } from '../ast/interruptSystemDeclarationNode';
+import { InterruptSystemDeclarationNode } from '../../../ast/system/declarations/interruptSystemDeclarationNode';
 
 export class InterruptDocumentationProvider
     extends DocumentationProvider<InterruptSystemDeclarationNode> {
