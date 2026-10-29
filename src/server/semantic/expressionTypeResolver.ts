@@ -33,6 +33,7 @@ export interface ExpressionTypeResolverContext {
     reportInvalidBuiltinArgumentType(source: SourceValue<string>, builtinName: string): void;
     reportUnknownIdentifier(source: SourceValue<string>): void;
     reportInvalidExpressionOperands(source: SourceValue<string>): void;
+    reportUnsupportedContExpression(source: SourceValue<string>): void;
     reportUnsupportedBitConcatenation(source: SourceValue<string>): void;
     reportInvalidCallArity(source: SourceValue<string>, expected: number, actual: number): void;
     reportInvalidIdentificationArgument(source: SourceValue<string>, target: SourceValue<string>,
@@ -416,6 +417,13 @@ export class ExpressionTypeResolver {
     }
 
     private monadic(node: MonadicExpressionNode, environment: Environment): SemanticType | undefined {
+        // RTOS-UH implements CONT only as an assignment destination operator.
+        // The operand must still be resolved for name bindings and hover.
+        if (node.operator.value === 'CONT') {
+            this.resolve(node.operand, environment);
+            this.context.reportUnsupportedContExpression(node.operator);
+            return undefined;
+        }
         const original = this.resolve(node.operand, environment);
         const operand = original && this.context.resolveUnderlyingType(original);
         if (!operand || !node.operand) return undefined;

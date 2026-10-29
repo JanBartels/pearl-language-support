@@ -1,0 +1,32 @@
+MODULE Assignment83fValid;
+PROBLEM;
+
+TYPE Cell STRUCT[
+    E FIXED,
+    C CHAR(4),
+    B BIT(8)
+];
+
+Verify: PROC(I FIXED);
+    DCL V Cell, W Cell;
+    DCL Records(10) Cell;
+    DCL P REF Cell INIT(V);
+    DCL Q REF Cell INIT(W);
+    DCL ReadPtr REF INV Cell;
+    DCL FrozenPtr INV REF Cell INIT(V);
+
+    V := W;
+    Records(I).E := V.E + 1;
+    Records(I).C.CHAR(2) := 'X';
+    Records(I).B.BIT(4) := '1'B;
+
+    P := V;
+    CONT P := W;
+    P.E := 7;
+    P := Q;
+    FrozenPtr.E := 42;
+    ReadPtr := V;
+    P := NIL;
+END;
+
+MODEND;

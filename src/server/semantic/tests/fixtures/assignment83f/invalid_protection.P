@@ -1,0 +1,21 @@
+MODULE Assignment83fInvalidProtection;
+PROBLEM;
+
+TYPE Cell STRUCT[E FIXED];
+
+Verify: PROC;
+    DCL V Cell;
+    DCL Constant INV FIXED INIT(7);
+    DCL P INV REF Cell INIT(V);
+    DCL ReadPtr REF INV Cell;
+    DCL ReadText INV CHAR(4) INIT('ABCD');
+
+    ReadPtr := V;
+    Constant := 1;            ! INV scalar object
+    P := V;                   ! INV REF protects pointer
+    ReadPtr.E := 1;           ! REF INV protects referenced object
+    CONT ReadPtr := V;        ! CONT respects REF INV protection
+    ReadText.CHAR(1) := 'Z';  ! INV also protects selected character
+END;
+
+MODEND;

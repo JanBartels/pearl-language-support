@@ -12,6 +12,7 @@ import { ReturnStatementParser } from "./returnStatementParser";
 import { GotoStatementParser } from "./gotoStatementParser";
 import { IdentifierStatementTailParser } from "./identifierStatementTailParser";
 import { EmptyStatementNode } from "../../../ast/problem/statements/emptyStatementNode";
+import { AssignmentParser } from "./assignmentParser";
 
 /** All nested statement constructs are dispatched through this common entry point. */
 export class StatementParser extends ParserBase {
@@ -39,6 +40,11 @@ export class StatementParser extends ParserBase {
             return new CallStatementParser(this.context).parse();
         }
 
+        // CONT is a destination operator in RTOS-UH, not a value expression.
+        if (this.isKeyword("CONT")) {
+            return new AssignmentParser(this.context).parseContAssignment();
+        }
+
         if (this.isKeyword("RETURN")) {
             return new ReturnStatementParser(this.context).parse();
         }
@@ -47,7 +53,7 @@ export class StatementParser extends ParserBase {
             return new GotoStatementParser(this.context).parse();
         }
 
-        // Labels, implicit calls and future assignments share an identifier prefix.
+        // Labels, implicit calls and assignments share an identifier prefix.
         // The tail parser only commits to the forms established by the grammar.
         if (this.isIdentifier()) {
             const identifier = this.acceptIdentifier()!;

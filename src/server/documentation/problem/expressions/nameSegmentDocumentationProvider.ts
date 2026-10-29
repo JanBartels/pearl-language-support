@@ -26,10 +26,17 @@ export class NameSegmentDocumentationProvider extends DocumentationProvider<Name
         }
         if (lookup.element !== node.identifier) return undefined;
 
-        let documentation = md`# Identifier
+        const symbol = semanticContext && lookupBoundSymbol(semanticContext.bindings, node.identifier);
+        const selector = !symbol && node.dot && node.suffix
+            && (node.identifier.value === 'BIT' || node.identifier.value === 'CHAR'
+                || node.identifier.value === 'CHARACTER');
+        let documentation = selector
+            ? md`# String selector
+
+\`.${node.identifier.value}(i)\` selects a single ${node.identifier.value === 'BIT' ? 'bit' : 'character'} of the named object. Its index must be FIXED.`
+            : md`# Identifier
 
 Name \`${node.identifier.value}\` in an expression.`;
-        const symbol = semanticContext && lookupBoundSymbol(semanticContext.bindings, node.identifier);
         if (symbol && semanticContext) {
             // Shared display signature for CALL and function expressions.
             // Array indices have no signature in the compiler-side index.

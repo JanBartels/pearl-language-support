@@ -732,4 +732,61 @@ Good2: PROC RETURNS( REF INV STRUCT[]);
     RETURN(VHS);
 END;
 
+
+R83: PROC(I FIXED);
+    DCL V FIXED;
+    DCL A83(10) HS;
+    DCL Constant INV FIXED INIT(7);
+
+    V := I + 1;
+    A83(I).E := 42;
+    Constant := 5;
+END;
+
+R83b: PROC;
+    DCL V83b HS;
+    DCL P83b INV REF HS INIT(V83b);
+    DCL Q83b REF INV HS;
+
+    P83b := V83b;      ! Fehler: Zeiger ist INV
+    P83b.E := 5;    ! Gültig
+
+    Q83b := V83b;      ! Gültig
+    Q83b.E := 5;    ! Fehler: Zielobjekt ist INV
+END;
+
+TYPE HS83c STRUCT[E FIXED];
+TYPE Other83c STRUCT[E FLOAT];
+
+R83c: PROC;
+    DCL AS83c HS83c, BS83c HS83c, CS83c Other83c;
+    DCL AIS83c INV HS83c;
+
+    AS83c := BS83c;  ! Gültig
+    AS83c := CS83c;  ! Typfehler
+    AIS83c := BS83c;  ! Gültig
+END;
+
+R83d: PROC;
+    DCL V83d HS, W83d HS;
+    DCL P83d REF HS, Q83d REF HS;
+    DCL PI83d REF INV HS, IP83d INV REF HS INIT(NIL);
+
+    P83d := V83d;      ! gültig: Adresse von V
+    P83d := Q83d;      ! gültig: Referenzwert von Q
+    P83d := NIL;    ! gültig
+    P83d := 42;     ! Fehler
+
+    PI83d := V83d;      ! gültig: Adresse von V
+    PI83d := Q83d;      ! gültig: Referenzwert von Q
+    PI83d := NIL;    ! gültig
+    PI83d := 42;     ! Fehler
+
+    IP83d := V83d;      ! gültig: Adresse von V
+    IP83d := Q83d;      ! gültig: Referenzwert von Q
+    IP83d := NIL;    ! gültig
+    IP83d := 42;     ! Fehler
+
+END;
+
 MODEND DEBUG;

@@ -1,0 +1,25 @@
+MODULE Assignment83fInvalidTypes;
+PROBLEM;
+
+TYPE Cell STRUCT[E FIXED];
+TYPE Other STRUCT[E FLOAT];
+
+Verify: PROC;
+    DCL V Cell, Wrong Other;
+    DCL A(4) FIXED, B(4) FIXED;
+    DCL P REF Cell;
+    DCL Bits BIT(8), Text CHAR(4);
+    DCL X FIXED;
+
+    V := Wrong;                ! mismatched STRUCT value types
+    A := B;                   ! assignment of whole array
+    A(5) := 42;               ! constant index out of bounds
+    Bits.BIT(2) := '11'B;     ! selected BIT(1) cannot hold BIT(2)
+    Text.CHAR(2) := 'AB';     ! selected CHAR(1) cannot hold CHAR(2)
+    P := 42;                  ! literal cannot supply REF Cell
+    CONT P := X;              ! FIXED cannot replace Cell value
+    X := NIL;                 ! NIL requires reference destination
+    CONT X := 1;              ! CONT requires REF destination
+END;
+
+MODEND;

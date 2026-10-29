@@ -18,6 +18,7 @@ import { TaskDeclarationNode } from '../ast/problem/declarations/taskDeclaration
 import { ProcedureDeclarationNode } from '../ast/problem/declarations/procedureDeclarationNode';
 import { SpcProcedureAttributeNode } from '../ast/problem/specifications/spcProcedureAttributeNode';
 import { ReturnStatementNode } from '../ast/problem/statements/returnStatementNode';
+import { AssignmentNode } from '../ast/problem/statements/assignmentNode';
 import { IfStatementNode } from '../ast/problem/statements/ifStatementNode';
 import { CaseStatementNode } from '../ast/problem/statements/caseStatementNode';
 import { CaseIndexRangeNode } from '../ast/problem/statements/caseIndexRangeNode';
@@ -256,6 +257,15 @@ class SemanticAnalysisState implements
         });
     }
 
+    reportUnsupportedContExpression(source: SourceValue<string>): void {
+        this.addDiagnostic({
+            code: SemanticDiagnosticCode.UnsupportedContExpression,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: source.location,
+            message: 'CONT ist in RTOS-UH nur links in einer Zuweisung zulässig.'
+        });
+    }
+
     reportUnsupportedBitConcatenation(source: SourceValue<string>): void {
         if (!source.location) return;
         this.addDiagnostic({
@@ -354,6 +364,63 @@ class SemanticAnalysisState implements
             default:
                 return SemanticTypeKind[type.kind].toUpperCase();
         }
+    }
+
+    reportInvalidAssignmentTarget(source: SourceValue<string>): void {
+        this.addDiagnostic({
+            code: SemanticDiagnosticCode.InvalidAssignmentTarget,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: source.location,
+            message: `Zuweisungsziel '${source.value}' bezeichnet kein beschreibbares Objekt.`
+        });
+    }
+
+    reportAssignmentToInvariant(source: SourceValue<string>): void {
+        this.addDiagnostic({
+            code: SemanticDiagnosticCode.AssignmentToInvariant,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: source.location,
+            message: `Zuweisungsziel '${source.value}' ist INV-geschützt.`
+        });
+    }
+
+    reportInvalidAssignmentValueType(
+        source: SourceValue<string>, target: SemanticType, actual: SemanticType
+    ): void {
+        this.addDiagnostic({
+            code: SemanticDiagnosticCode.InvalidAssignmentValueType,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: source.location,
+            message: `Zuweisung: erwartet ${this.diagnosticTypeName(target)}, `
+                + `erhalten ${this.diagnosticTypeName(actual)}.`
+        });
+    }
+
+    reportInvalidNilAssignment(source: SourceValue<string>): void {
+        this.addDiagnostic({
+            code: SemanticDiagnosticCode.InvalidAssignmentValueType,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: source.location,
+            message: 'NIL darf nur einem REF-Zuweisungsziel zugewiesen werden.'
+        });
+    }
+
+    reportInvalidContAssignmentTarget(source: SourceValue<string>): void {
+        this.addDiagnostic({
+            code: SemanticDiagnosticCode.InvalidContAssignmentTarget,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: source.location,
+            message: 'CONT erwartet links ein Zuweisungsziel vom Typ REF.'
+        });
+    }
+
+    reportInvalidArrayAssignment(source: SourceValue<string>): void {
+        this.addDiagnostic({
+            code: SemanticDiagnosticCode.InvalidArrayAssignment,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: source.location,
+            message: 'Die Zuweisung eines gesamten Feldes ist in RTOS-UH nicht zulässig.'
+        });
     }
 
     reportInvalidArrayIndexCount(source: SourceValue<string>, expected: number, actual: number): void {
@@ -1763,6 +1830,12 @@ export class SemanticAnalyzer {
             return this.analyzeChildren(node, environment, state);
         }
 
+        if (node.kind === AstKind.Assignment) {
+            if (!environment) throw new Error('Assignment without semantic environment.');
+            this.analyzeAssignment(node as AssignmentNode, environment, state);
+            return environment;
+        }
+
         if (node.kind === AstKind.ReturnStatement) {
             if (!environment) return environment;
             const expected = state.procedureReturnTypeStack[state.procedureReturnTypeStack.length - 1];
@@ -2149,6 +2222,107 @@ export class SemanticAnalyzer {
             state.procedureReturnTypeStack.pop();
         }
         return outerEnvironment;
+    }
+
+    /**
+     * RTOS-UH assignment context: without CONT a REF destination receives an
+     * address/reference; with CONT the referenced value is assigned. Both
+     * cases share the transfer checks used by parameter and RETURN semantics.
+     */
+    private analyzeAssignment(
+        node: AssignmentNode,
+        environment: Environment,
+        state: SemanticAnalysisState
+    ): void {
+        const targetType = state.expressionTypeResolver.resolve(node.target, environment);
+        const expressionType = node.expression
+            ? state.expressionTypeResolver.resolve(node.expression, environment)
+            : undefined;
+
+        // Always resolve the entire RHS even after a target error, for hover,
+        // bindings and independent operand diagnostics.
+        if (!targetType) return;
+        const object = classifyObjectExpressionInfo(node.target, environment,
+            type => state.resolveUnderlyingType(type));
+        const source = node.target.segments[node.target.segments.length - 1]?.identifier;
+        if (!source) return;
+        if (object.category === 'value') {
+            state.reportInvalidAssignmentTarget(source);
+            return;
+        }
+        if (object.category !== 'object') return;
+
+        const declaredTarget = resolveReferenceTransferType(targetType,
+            type => state.resolveUnderlyingType(type));
+        if (!declaredTarget) return;
+
+        let target: SemanticType = declaredTarget;
+        if (node.contOperator) {
+            if (declaredTarget.kind !== SemanticTypeKind.Reference
+                && declaredTarget.kind !== SemanticTypeKind.VoidReference) {
+                state.reportInvalidContAssignmentTarget(node.contOperator);
+                return;
+            }
+            // CONT changes the assignment destination: the pointer's own
+            // INV flag is irrelevant, but REF INV protects the target.
+            if (declaredTarget.targetInvariant) {
+                state.reportAssignmentToInvariant(source);
+                return;
+            }
+            if (declaredTarget.kind === SemanticTypeKind.VoidReference) {
+                // An untyped referenced object has no known value-transfer type.
+                return;
+            }
+            const referenced = state.resolveUnderlyingType(declaredTarget.target);
+            if (!referenced) return;
+            target = referenced;
+        } else if (object.assignmentProtected === true) {
+            state.reportAssignmentToInvariant(source);
+            return;
+        }
+        if (!node.contOperator && object.assignmentProtected === undefined) return;
+
+        // Whole arrays cannot be copied with the scalar/STRUCT assignment.
+        if (target.kind === SemanticTypeKind.Array
+            || target.kind === SemanticTypeKind.VirtualArray) {
+            state.reportInvalidArrayAssignment(source);
+            return;
+        }
+
+        // NIL is typeless and can only be assigned in a reference context.
+        // Parentheses around NIL don't change that contextual rule.
+        let right: ExpressionNode | undefined = node.expression;
+        while (right?.kind === AstKind.ParenthesizedExpression) {
+            right = (right as ParenthesizedExpressionNode).expression;
+        }
+        if (right?.kind === AstKind.LiteralExpression
+            && (right as LiteralExpressionNode).literal.value === 'NIL') {
+            if (!isNilAssignableTo(target)) {
+                state.reportInvalidNilAssignment((right as LiteralExpressionNode).literal);
+            }
+            return;
+        }
+
+        if (!expressionType || !node.expression) return;
+        const actual = resolveReferenceTransferType(expressionType,
+            type => state.resolveUnderlyingType(type));
+        if (!actual) return;
+        const rightSource = expressionSource(node.expression) ?? node.operator;
+        if (target.kind === SemanticTypeKind.Reference
+            || target.kind === SemanticTypeKind.VoidReference) {
+            const actualObject = classifyObjectExpressionInfo(node.expression, environment,
+                type => state.resolveUnderlyingType(type));
+            if (isReferenceTransferCompatible(target, actual, actualObject) === false) {
+                state.reportInvalidAssignmentValueType(rightSource, targetType, expressionType);
+            }
+            return;
+        }
+        if (isValueTransferCompatible(target, actual) === false) {
+            // CONT changes the effective target from REF T to T.
+            state.reportInvalidAssignmentValueType(
+                rightSource, node.contOperator ? target : targetType, expressionType
+            );
+        }
     }
 
     private analyzeReturnStatement(

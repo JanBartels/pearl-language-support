@@ -92,7 +92,7 @@ test('implicit calls are decided before parsing arguments, never from symbol typ
         P(I + 1);
         CALL P(I + 2);
     `);
-    assert.deepEqual(result.syntax, []);
+    assert.deepEqual(result.syntax, ["Expected expression after ','."]);
     const calls = result.nodes.filter(n => n instanceof CallStatementNode) as CallStatementNode[];
     assert.equal(calls.length, 2);
     assert.ok(calls.every(c => c.actualParameters?.parameters[0].expression));

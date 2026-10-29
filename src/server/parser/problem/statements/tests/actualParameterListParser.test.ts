@@ -133,8 +133,8 @@ test('selector and array assignments are not converted to calls or parameter AST
     assert.equal(parameterList(calls[0]).parameters.length, 2);
 });
 
-test('incomplete array assignment does not produce a speculative CALL node or diagnostic', () => {
+test('incomplete array assignment is parsed as an assignment, never a speculative CALL', () => {
     const { calls, problems } = parse('Array(1,) = 5; After;');
-    assert.deepEqual(problems, []);
+    assert.deepEqual(problems, ["Expected expression after ','."]);
     assert.deepEqual(calls.map(c => c.target?.value), ['After']);
 });

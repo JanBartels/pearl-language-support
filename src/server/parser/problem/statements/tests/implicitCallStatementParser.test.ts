@@ -74,9 +74,9 @@ test('assignment targets, indexed variables and BIT/CHAR selectors are never cal
     assert.deepEqual(result.calls.map(c => c.target?.value), ['RealCall']);
 });
 
-test('assignment subscripts with incomplete content do not emit speculative CALL diagnostics', () => {
+test('assignment subscripts with incomplete content emit assignment, not CALL diagnostics', () => {
     const result = parse('MyArray(1,) = 2; MyChar.CHAR(7) = \'2\'; After;');
-    assert.deepEqual(result.problems, []);
+    assert.deepEqual(result.problems, ["Expected expression after ','."]);
     assert.deepEqual(result.calls.map(c => c.target?.value), ['After']);
 });
 
@@ -142,7 +142,7 @@ test('GLOBAL SPC, REF PROC and RTOS-UH builtins use the existing resolution path
         .map(r => r.kind), ['bound', 'bound', 'builtin']);
 });
 
-test('simple scalar assignments remain unsupported instead of becoming implicit calls', () => {
+test('simple scalar assignments are not implicit calls', () => {
     const result = parse('Value = 1; Other := 2; Proc;');
     assert.deepEqual(result.problems, []);
     assert.deepEqual(result.calls.map(c => c.target?.value), ['Proc']);

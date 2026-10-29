@@ -85,9 +85,25 @@ export function classifyObjectExpressionInfo(
                 owner = resolveType(owner.target);
             }
             if (!owner) return unknown;
-            // BIT/CHAR selector assignability is still a separate language rule.
+            // RTOS-UH permits assigning a single BIT/CHAR element. The
+            // selector is part of the same object, not a computed value.
+            // Keep the protection inherited from the selected object (or
+            // from REF INV after implicit dereferencing above).
             if (owner.kind === SemanticTypeKind.Bit || owner.kind === SemanticTypeKind.Character) {
-                return unknown;
+                const selector = segment.identifier.value;
+                const matches = owner.kind === SemanticTypeKind.Bit
+                    ? selector === 'BIT'
+                    : selector === 'CHAR' || selector === 'CHARACTER';
+                if (!matches || !segment.suffix
+                    || !segment.suffix.closeParenthesis
+                    || segment.suffix.expressions.length !== 1
+                    || !segment.suffix.expressions[0]) return unknown;
+                type = owner.kind === SemanticTypeKind.Bit
+                    ? { kind: SemanticTypeKind.Bit, length: 1 }
+                    : { kind: SemanticTypeKind.Character, length: 1 };
+                // The suffix belongs to the string selector, not an array
+                // subscripting operation (which is handled below).
+                continue;
             }
             if (owner.kind !== SemanticTypeKind.Struct) return value;
             type = owner.components.find(component => component.name.value === segment.identifier.value)?.type;

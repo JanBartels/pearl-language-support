@@ -6,13 +6,14 @@ import type { Token } from '../../../lexer/token';
 import { ParserBase } from '../../parserBase';
 import { CallStatementParser } from './callStatementParser';
 import { LabeledStatementParser } from './labeledStatementParser';
+import { AssignmentParser } from './assignmentParser';
 
 /**
  * Identifier-led statement tail:
  *
  *   Identifier ':' Statement                 (label)
  *   Identifier [ '(' Arguments ')' ] ';'     (procedure call)
- *   Identifier OtherTail                     (not yet supported, e.g. assignment)
+ *   Name (':=' | '=') Expression ';'          (assignment)
  *
  * The parenthesis alone does not identify a call. Array subscripts and
  * BIT/CHAR/CHARACTER selectors may precede an assignment; they must not
@@ -29,6 +30,9 @@ export class IdentifierStatementTailParser extends ParserBase {
         if (this.isOperator(':')) {
             return new LabeledStatementParser(this.context).parseAfterIdentifier(identifier);
         }
+
+        const assignment = new AssignmentParser(this.context).parseAfterIdentifier(identifier);
+        if (assignment) return assignment;
 
         return new CallStatementParser(this.context).parseAfterIdentifier(identifier);
     }
