@@ -6,6 +6,8 @@ export type WorkingDirMode = 'file' | 'workspace';
 
 export interface PearlSettings {
   maxNumberOfProblems: number;
+  /** Warn when a CHAR value may be truncated during value transfer. */
+  warnOnCharTruncation: boolean;
   traceServer: TraceServerMode;
   workingDirMode: WorkingDirMode;
   /**
@@ -21,6 +23,7 @@ export interface PearlSettings {
 // Default settings (fallback if client does not support workspace/configuration)
 export const defaultSettings: PearlSettings = {
   maxNumberOfProblems: 100,
+  warnOnCharTruncation: true,
   traceServer: 'off',
   workingDirMode: 'file',
   macros: {}

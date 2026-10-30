@@ -18,9 +18,11 @@ import { resolveSymbol } from './symbolResolver';
 import { SymbolKind } from './symbolKind';
 import type { SemanticSymbol } from './symbol';
 import { SemanticTypeKind } from './semanticType';
+import { RTOS_UH_DEFAULT_TYPE_LENGTHS } from './semanticTypeComparison';
 import type { SemanticType, ProcedureType, ArrayType, VirtualArrayType } from './semanticType';
 import { classifyObjectExpression, expressionSource } from './expressionObject';
 import { validateProcedureActualParameters, validateBuiltinIdentificationParameters } from './procedureActualParameterValidator';
+import type { CharacterTransferDiagnosticContext } from './procedureActualParameterValidator';
 import { lookupBuiltin } from './builtins/builtinCatalog';
 import type { BuiltinDefinition } from './builtins/builtinSignature';
 import { matchBuiltinSignature, builtinExpectedArity, acceptsBuiltinArity } from './builtins/builtinSignature';
@@ -42,6 +44,8 @@ export interface ExpressionTypeResolverContext {
         source: SourceValue<string>, functionName: SourceValue<string>, position: number,
         expected: SemanticType, actual: SemanticType
     ): void;
+    reportCharacterTruncation(source: SourceValue<string>, targetLength: number,
+        sourceLength: number, context: CharacterTransferDiagnosticContext): void;
     reportInvalidArrayIndexCount(source: SourceValue<string>, expected: number, actual: number): void;
     reportInvalidArrayIndexType(source: SourceValue<string>): void;
     reportInvalidArrayBoundDimension(
@@ -110,12 +114,12 @@ export class ExpressionTypeResolver {
         const value = node.literal.value;
         if (/^\d+$/.test(value)) {
             return { kind: SemanticTypeKind.Fixed,
-                precision: this.precision(node, 15) };
+                precision: this.precision(node, RTOS_UH_DEFAULT_TYPE_LENGTHS.fixed) };
         }
         if (/^(?:\d+\.\d*|\.\d+)(?:[Ee][+-]?\d+)?$/.test(value)
             || /^\d+[Ee][+-]?\d+$/.test(value)) {
             return { kind: SemanticTypeKind.Float,
-                precision: this.precision(node, 23) };
+                precision: this.precision(node, RTOS_UH_DEFAULT_TYPE_LENGTHS.float) };
         }
         // Lexer has already identified these as string/bit literals.
         // Only straightforward literal content is sized in this first slice.
@@ -255,7 +259,13 @@ export class ExpressionTypeResolver {
         // An argument with an earlier diagnostic has no known type. Do not
         // manufacture an additional builtin error in that case.
         if (types.some(type => !type)) return undefined;
-        const match = matchBuiltinSignature(builtin, types as readonly SemanticType[]);
+        // Builtin signatures describe effective types, not the TYPE aliases used
+        // to declare the actual arguments. Preserve the original argument nodes
+        // for the separate IDENT-object validation below.
+        const effectiveTypes = (types as readonly SemanticType[])
+            .map(type => this.context.resolveUnderlyingType(type));
+        if (effectiveTypes.some(type => !type)) return undefined;
+        const match = matchBuiltinSignature(builtin, effectiveTypes as readonly SemanticType[]);
         if (!match) {
             this.context.reportInvalidBuiltinArgumentType(first.identifier, builtin.name);
             return undefined;
@@ -692,8 +702,17 @@ export class ExpressionTypeResolver {
                 if (left.kind !== SemanticTypeKind.Fixed || right.kind !== SemanticTypeKind.Fixed) return undefined;
             }
             if (op === '**' && right.kind !== SemanticTypeKind.Fixed) return undefined;
-            const precision = Math.max(left.precision ?? (left.kind === SemanticTypeKind.Fixed ? 15 : 23),
-                right.precision ?? (right.kind === SemanticTypeKind.Fixed ? 15 : 23));
+            // FLOAT/FIXED mixed arithmetic is evaluated in FLOAT precision.
+            // A FIXED(31) operand must not promote a default FLOAT(23) result
+            // to FLOAT(31); the numeric bit-widths are not comparable.
+            const floatPrecisions = [left, right]
+                .filter((operand): operand is Extract<SemanticType, { kind: SemanticTypeKind.Float }> =>
+                    operand.kind === SemanticTypeKind.Float)
+                .map(operand => operand.precision ?? RTOS_UH_DEFAULT_TYPE_LENGTHS.float);
+            const precision = floatPrecisions.length > 0
+                ? Math.max(...floatPrecisions)
+                : Math.max(left.precision ?? RTOS_UH_DEFAULT_TYPE_LENGTHS.fixed,
+                    right.precision ?? RTOS_UH_DEFAULT_TYPE_LENGTHS.fixed);
             if (op === '**') return left.kind === SemanticTypeKind.Fixed
                 ? { kind: SemanticTypeKind.Fixed, precision: left.precision }
                 : { kind: SemanticTypeKind.Float, precision: left.precision };

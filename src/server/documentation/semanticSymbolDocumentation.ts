@@ -4,6 +4,7 @@
 import type { SemanticContext } from '../semantic/semanticContext';
 import type { SemanticSymbol } from '../semantic/symbol';
 import { SymbolKind } from '../semantic/symbolKind';
+import { ScopeKind } from '../semantic/scope';
 import { formatSemanticType } from './semanticTypeDocumentation';
 
 export function appendSemanticSymbolDocumentation(
@@ -64,7 +65,14 @@ function appendDataObjectDocumentation(
     symbol: Extract<SemanticSymbol, { kind: SymbolKind.DataObject }>,
     displaySignature?: string
 ): string {
-    let result = `${documentation}\n\n**Type:** \`${formatSemanticType(symbol.type)}\``;
+    const scopeLabel = symbol.declarationScope === undefined ? undefined
+        : symbol.global ? 'global variable'
+        : symbol.declarationScope === ScopeKind.Module ? 'module variable'
+        : 'local variable';
+
+    let result = `${documentation}`
+        + (scopeLabel ? `\n\n**Symbol:** ${scopeLabel}` : '')
+        + `\n\n**Type:** \`${formatSemanticType(symbol.type)}\``;
 
     if (displaySignature) {
         result += `\n\n**Signature:** \`${displaySignature}\``;

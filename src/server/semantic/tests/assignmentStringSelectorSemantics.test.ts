@@ -64,7 +64,7 @@ test('BIT and CHAR single-element selectors are writable assignment objects', ()
     assert.equal(r.semantic.expressionTypes.get(r.assignments[1].target)?.kind, SemanticTypeKind.Character);
 });
 
-test('string element destination rejects incompatible and too-long RHS values', () => {
+test('string element destinations truncate CHAR values but reject incompatible types', () => {
     const r = analyze(`R: PROC;
         DCL B BIT(8), C CHAR(4);
         B.BIT(2) := '11'B;
@@ -73,9 +73,9 @@ test('string element destination rejects incompatible and too-long RHS values', 
         C.CHAR(3) := '1'B;
     END;`);
     assert.deepEqual(r.syntax, []);
-    assert.deepEqual(r.errors.map(d => d.code), [mismatch, mismatch, mismatch, mismatch]);
+    assert.deepEqual(r.errors.map(d => d.code), [mismatch, mismatch, mismatch]);
     assert.match(r.errors[0].message, /BIT\(1\).*BIT\(2\)/);
-    assert.match(r.errors[1].message, /CHAR\(1\).*CHAR\(2\)/);
+    assert.match(r.errors[1].message, /BIT\(1\).*CHAR\(1\)/);
 });
 
 test('INV BIT/CHAR strings protect their selected elements', () => {

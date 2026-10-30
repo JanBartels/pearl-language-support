@@ -10,6 +10,8 @@ TYPE TestStruct STRUCT [
     Element2 FLOAT
 ];
 
+DCL ExtVar FIXED;
+
 /* hier kommt ein Blockkommentar,
 der ganz lang ist,
 um den Collector der Hauptdatei

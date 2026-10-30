@@ -17,7 +17,9 @@ export function findReferences(
     uri: string,
     position: Position,
     includeDeclaration: boolean,
-    registry: DocumentRegistry
+    registry: DocumentRegistry,
+    // TEMP-NAV-DEBUG: optional trace callback; remove together with the added comma
+    trace?: (message: string) => void
 ): LspLocation[] {
     const index = analysis.symbolOccurrences;
     const candidates: SymbolOccurrences[] = [];
@@ -31,9 +33,19 @@ export function findReferences(
         }
     }
 
+    // BEGIN TEMP-NAV-DEBUG: index lookup diagnostics
+    trace?.(`occurrenceGroups=${index.all.length} cursorCandidates=${candidates.length}`);
+    if (candidates.length === 1) {
+        trace?.(`matchedGroup declarations=${candidates[0].declarations.length} references=${candidates[0].references.length}`);
+    }
+    // END TEMP-NAV-DEBUG
     // Distinct macro expansions can map to the same invocation range.
     // Never guess a target if that physical position is ambiguous.
-    if (candidates.length !== 1) return [];
+    if (candidates.length !== 1) {
+        // TEMP-NAV-DEBUG: reason for missing reference result
+        trace?.(`reason=${candidates.length === 0 ? 'no-cursor-occurrence' : 'ambiguous-cursor-occurrence'}`);
+        return [];
+    }
 
     const group = candidates[0];
     const results: LspLocation[] = [];
@@ -52,6 +64,8 @@ export function findReferences(
         results.push(location);
     }
 
+    // TEMP-NAV-DEBUG: mapped reference result count
+    trace?.(`mappedResults=${results.length} rawOccurrences=${values.length}`);
     return results.sort(compareLocations);
 }
 

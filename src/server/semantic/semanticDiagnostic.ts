@@ -39,6 +39,7 @@ export enum SemanticDiagnosticCode {
     InvalidAssignmentTarget = 'semantic.invalid-assignment-target',
     AssignmentToInvariant = 'semantic.assignment-to-invariant',
     InvalidAssignmentValueType = 'semantic.invalid-assignment-value-type',
+    PossibleCharacterTruncation = 'semantic.possible-character-truncation',
     InvalidArrayAssignment = 'semantic.invalid-array-assignment',
     InvalidContAssignmentTarget = 'semantic.invalid-cont-assignment-target',
     UnsupportedContExpression = 'semantic.unsupported-cont-expression',

@@ -31,9 +31,9 @@ const stringFunction = (name: string, description: string,
     name, description, category: 'function', availability: 'optional', source: 'RTOS-UH 5.7.17',
     signatures: [{ parameters, result: returns(result) }]
 });
-const sliceParams = [p('String1', charAny, true), p('Anfang1', fixed15, true),
-    p('Ende1', fixed15, true), p('String2', charAny, true),
-    p('Anfang2', fixed15, true), p('Ende2', fixed15, true)];
+const sliceParams = [p('String1', charAny, true), p('Anfang1', fixed15),
+    p('Ende1', fixed15), p('String2', charAny, true),
+    p('Anfang2', fixed15), p('Ende2', fixed15)];
 
 /**
  * Only routines known *implicitly* to the RTOS-UH PEARL90 compiler belong here.
@@ -76,7 +76,7 @@ export const RTOS_UH_BUILTINS: readonly BuiltinDefinition[] = [
     stringFunction('LEN', 'Letzte Nicht-Leerstelle im String.', [p('Text', charAny, true)], fixed15),
     stringFunction('INSTR', 'Teilstringsuche.', sliceParams, fixed15),
     stringFunction('MID', 'Teilstring extrahieren.',
-        [p('Text', charAny, true), p('Anfang', fixed15, true), p('Ende', fixed15, true)],
+        [p('Text', charAny, true), p('Anfang', fixed15), p('Ende', fixed15)],
         { kind: 'character', length: 255 }),
     stringFunction('KON', 'Teilstrings verbinden.', sliceParams, { kind: 'character', length: 255 }),
     stringFunction('INSER', 'Teilstring einfügen.', sliceParams, { kind: 'character', length: 255 }),

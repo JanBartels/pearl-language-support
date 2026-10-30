@@ -233,6 +233,28 @@ export class DocumentRegistry {
   }
 
 
+  // BEGIN TEMP-NAV-DEBUG: read-only analysis version snapshot
+  /** Read-only diagnostic snapshot. Does not change analysis selection. */
+  describeAnalysisForSource(uri: string, version: number): string {
+    const own = this.analysisResults.get(uri);
+    const visited = new Set<string>([uri]);
+    const pending = [uri];
+    const roots: string[] = [];
+    while (pending.length > 0) {
+      const current = pending.pop()!;
+      for (const parent of this.includedBy.get(current) ?? []) {
+        if (visited.has(parent)) continue;
+        visited.add(parent);
+        pending.push(parent);
+        const entry = this.analysisResults.get(parent);
+        if (entry) roots.push(`${parent}@${entry.version}`);
+      }
+    }
+    return `analysisRequested=${version} ownAnalysis=${own ? own.version : 'none'} parentAnalyses=[${roots.join(', ')}]`;
+  }
+
+  // END TEMP-NAV-DEBUG
+
   /** Kept for existing Find References clients. All navigation uses the same policy. */
   getAnalysisResultForReferences(uri: string, version: number): AnalysisResult | undefined {
     return this.getAnalysisResultForSource(uri, version);

@@ -54,7 +54,7 @@ test('FIXED widths, FLOAT widening and FLOAT-to-FIXED narrowing', () => {
     assert.match(r.errors[1].message, /erwartet FIXED\(15\), erhalten FLOAT\(31\)/);
 });
 
-test('BIT and CHAR assignments may extend but not truncate', () => {
+test('BIT narrowing remains invalid while CHAR assignments pad or truncate', () => {
     const r = analyze(`R: PROC;
         DCL B4 BIT(4), B8 BIT(8), C3 CHAR(3), C5 CHAR(5);
         B8 := B4;
@@ -63,9 +63,8 @@ test('BIT and CHAR assignments may extend but not truncate', () => {
         C3 := C5;
     END;`);
     assert.deepEqual(r.syntax, []);
-    assert.deepEqual(r.errors.map(e => e.code), [mismatch, mismatch]);
+    assert.deepEqual(r.errors.map(e => e.code), [mismatch]);
     assert.match(r.errors[0].message, /BIT\(4\).*BIT\(8\)/);
-    assert.match(r.errors[1].message, /CHAR\(3\).*CHAR\(5\)/);
 });
 
 test('STRUCT assignment preserves exact component types and named diagnostics', () => {

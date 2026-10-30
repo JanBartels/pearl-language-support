@@ -74,6 +74,18 @@ const connection = createConnection(ProposedFeatures.all);
 
 const logger = new ConnectionLogger(connection);
 
+// BEGIN TEMP-NAV-DEBUG: central diagnostic switch and request IDs
+// Navigation tracing is enabled for this diagnostic build. Set PEARL_NAV_DEBUG=0 to disable.
+// All diagnostics go to the existing LSP output channel.
+const navigationDebugEnabled = process.env.PEARL_NAV_DEBUG !== '0';
+let navigationRequestId = 0;
+function navigationTrace(id: number, message: string): void {
+    if (navigationDebugEnabled) logger.debug(`[Navigation #${id}] ${message}`);
+}
+
+
+// END TEMP-NAV-DEBUG
+
 const workspaceManager = new WorkspaceManager();
 const settingsManager = new SettingsManager(connection);
 
@@ -215,63 +227,55 @@ connection.onHover(params => {
 // Goto Definition
 // ------------------------------
 
+// BEGIN TEMP-NAV-DEBUG: instrumented Definition handler; restore original handler when removing
 connection.onDefinition(params => {
-
-    const document =
-        documentRegistry.get(params.textDocument.uri);
+    const id = ++navigationRequestId;
+    const uri = params.textDocument.uri;
+    navigationTrace(id, `Definition START uri=${uri} position=${params.position.line}:${params.position.character}`);
+    const document = documentRegistry.get(uri);
     if (!document) {
+        navigationTrace(id, 'END reason=document-missing');
         return undefined;
     }
-
-    const analysisResult =
-        documentRegistry.getAnalysisResultForSource(params.textDocument.uri, document.version);
+    navigationTrace(id, `documentVersion=${document.version} ${documentRegistry.describeAnalysisForSource(uri, document.version)}`);
+    const analysisResult = documentRegistry.getAnalysisResultForSource(uri, document.version);
     if (!analysisResult) {
+        navigationTrace(id, 'END reason=analysis-unavailable');
         return undefined;
     }
-
-    const position: SourceOffset = {
-        uri: params.textDocument.uri,
-        offset: document.offsetAt(params.position)
-    };
-
-    //
-    // Macro definitions
-    //
+    const position: SourceOffset = { uri, offset: document.offsetAt(params.position) };
     const macro = analysisResult.lookupMacro(position);
     if (macro?.definition.location) {
-        return mapLspLocation(
-            macro.definition.location,
-            documentRegistry
-        );      
+        const target = mapLspLocation(macro.definition.location, documentRegistry);
+        navigationTrace(id, `END reason=macro target=${JSON.stringify(target)}`);
+        return target;
     }
-
-    //
-    // AST / semantic definitions
-    //
     const lookup = analysisResult.rootAnalysis.ast.lookupSourceValue(position);
     const semanticContext = analysisResult.rootAnalysis.semanticContext;
-
+    navigationTrace(id, `lookup=${lookup ? JSON.stringify(lookup.element.value) : 'missing'} semanticContext=${!!semanticContext}`);
     if (!lookup || !semanticContext) {
-      return undefined;
+        navigationTrace(id, `END reason=${!lookup ? 'lookup-missing' : 'semantic-context-missing'}`);
+        return undefined;
     }
-
-    // A local SPC may precede its PROC or TASK definition. The relation is
-    // preserved even on semantic errors; other symbols use the usual bindings.
+    const bound = lookupBoundSymbol(semanticContext.bindings, lookup.element);
+    navigationTrace(id, `boundSymbol=${bound ? String(bound.name.value) : 'missing'}`);
     const relation = lookupLocalSpecificationRelation(
-        semanticContext.localSpecificationRelations,
-        lookup.element
+        semanticContext.localSpecificationRelations, lookup.element
     );
     const definition = relation?.definition
         ?? lookupSymbolDefinition(semanticContext.bindings, lookup.element);
-
     if (!definition?.location) {
-      return undefined;
+        navigationTrace(id, 'END reason=definition-missing');
+        return undefined;
     }
-
-    return mapLspLocation(definition.location, documentRegistry);
+    const target = mapLspLocation(definition.location, documentRegistry);
+    navigationTrace(id, `END reason=resolved target=${JSON.stringify(target)}`);
+    return target;
 });
 
 // ------------------------------
+// END TEMP-NAV-DEBUG
+
 // Goto Declaration (local SPC -> PROC/TASK relation)
 // ------------------------------
 
@@ -314,35 +318,43 @@ connection.onDeclaration(params => {
 // Find References (one translation unit; no external linker lookup)
 // ------------------------------
 
+// BEGIN TEMP-NAV-DEBUG: instrumented References handler; restore original handler when removing
 connection.onReferences(params => {
-    const document = documentRegistry.get(params.textDocument.uri);
-    if (!document) return [];
-
-    const analysisResult = documentRegistry.getAnalysisResultForSource(
-        params.textDocument.uri, document.version
-    );
-    if (!analysisResult) return [];
-
-    // Preprocessor symbols take precedence over expanded AST occurrences.
+    const id = ++navigationRequestId;
+    const uri = params.textDocument.uri;
+    navigationTrace(id, `References START uri=${uri} position=${params.position.line}:${params.position.character} includeDeclaration=${params.context.includeDeclaration}`);
+    const document = documentRegistry.get(uri);
+    if (!document) {
+        navigationTrace(id, 'END count=0 reason=document-missing');
+        return [];
+    }
+    navigationTrace(id, `documentVersion=${document.version} ${documentRegistry.describeAnalysisForSource(uri, document.version)}`);
+    const analysisResult = documentRegistry.getAnalysisResultForSource(uri, document.version);
+    if (!analysisResult) {
+        navigationTrace(id, 'END count=0 reason=analysis-unavailable');
+        return [];
+    }
     const macros = findMacroReferences(
         analysisResult.rootAnalysis.macroOccurrences,
-        params.textDocument.uri,
-        params.position,
-        params.context.includeDeclaration,
-        documentRegistry
+        uri, params.position, params.context.includeDeclaration, documentRegistry
     );
-    if (macros !== undefined) return macros;
-
-    return findReferences(
+    if (macros !== undefined) {
+        navigationTrace(id, `END count=${macros.length} reason=macro`);
+        return macros;
+    }
+    const refs = findReferences(
         analysisResult.rootAnalysis,
-        params.textDocument.uri,
-        params.position,
-        params.context.includeDeclaration,
-        documentRegistry
+        uri, params.position, params.context.includeDeclaration,
+        documentRegistry,
+        message => navigationTrace(id, message)
     );
+    navigationTrace(id, `END count=${refs.length} reason=semantic`);
+    return refs;
 });
 
 // ------------------------------
+// END TEMP-NAV-DEBUG
+
 // Signature Help (compiler-side call position index)
 // ------------------------------
 

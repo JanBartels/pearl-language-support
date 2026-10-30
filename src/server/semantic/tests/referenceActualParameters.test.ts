@@ -121,7 +121,7 @@ test('REF IDENT requires a reference object, not the address of an ordinary obje
     ]);
 });
 
-test('REF IDENT does not silently coerce REF INV or typed refs to writable VOID refs', () => {
+test('REF STRUCT[] IDENT accepts writable typed refs but preserves INV protection', () => {
     const result = analyze(`${prefix}
         P: PROC(X REF STRUCT[] IDENT); END;
         R: PROC;
@@ -131,9 +131,21 @@ test('REF IDENT does not silently coerce REF INV or typed refs to writable VOID 
         END;`);
     assert.deepEqual(result.syntax, []);
     assert.deepEqual(result.errors.map(e => e.code), [
-        SemanticDiagnosticCode.InvalidCallArgumentType,
         SemanticDiagnosticCode.InvalidCallArgumentType
     ]);
+});
+
+test('CDL accepts a TYPE alias of REF PROC through REF STRUCT[] IDENT', () => {
+    const result = analyze(`
+        SPC CDL PROC(CHAR(1) IDENT, REF STRUCT[] IDENT) GLOBAL;
+        TYPE TFunc REF PROC(FLOAT IDENT) RETURNS(BIT);
+        CDLTest: PROC;
+            DCL Func TFunc INIT(NIL);
+            DCL Name CHAR(4);
+            CDL(Name.CHAR(1), Func);
+        END;`);
+    assert.deepEqual(result.syntax, []);
+    assert.deepEqual(result.errors, []);
 });
 
 test('typed REF by value checks target types and target INV, including aliases', () => {

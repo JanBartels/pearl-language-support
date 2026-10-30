@@ -158,3 +158,29 @@ test('a call entirely inside an include uses the include URI, not the root URI',
     assert.equal(index.lookup({ uri: includeUri, offset: 4 })?.activeParameter, 1);
     assert.equal(index.lookup({ uri, offset: 4 }), undefined);
 });
+
+
+test('function expressions expose signature help and select nested calls', () => {
+    const text = `MODULE Test; PROBLEM;
+F: PROC(A FIXED, B FIXED) RETURNS(FIXED); RETURN(A + B); END;
+G: PROC(X FIXED) RETURNS(FIXED); RETURN(X); END;
+Runner: TASK;
+DCL Result FIXED;
+Result = F(1, G(2));
+END; MODEND;`;
+    const source = new FileSource(uri, text);
+    const problems = new ProblemCollection();
+    const tokens = new Lexer(source, problems, logger).tokenize();
+    const stream = Preprocessor.create(tokens, source, new PreprocessorContext(
+        {} as DocumentRegistry, new MacroTable(), new ConditionalStack(),
+        new PreprocessorConditionalBlockStack()), problems, [],
+        new PreprocessorConditionalBlockCollection(), logger);
+    const ast = new Parser(stream, problems, logger).parse();
+    const signatures = new CallSignatureIndex(ast, new SemanticAnalyzer().analyze(ast));
+    const index = new CallSignatureHelpIndex(ast, signatures);
+    const outer = text.indexOf('F(1, G(2))');
+    assert.equal(index.lookup({ uri, offset: outer + 2 })?.signatures[0]?.name, 'F');
+    assert.equal(index.lookup({ uri, offset: outer + 5 })?.activeParameter, 1);
+    assert.equal(index.lookup({ uri, offset: outer + 8 })?.signatures[0]?.name, 'G');
+    assert.equal(index.lookup({ uri, offset: outer + 9 })?.signatures[0]?.name, 'F');
+});

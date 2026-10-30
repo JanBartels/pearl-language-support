@@ -11,7 +11,11 @@ import { classifyObjectExpression, classifyObjectExpressionInfo, expressionSourc
 import type { BuiltinSignature } from './builtins/builtinSignature';
 import type { ProcedureType, SemanticType } from './semanticType';
 import { SemanticTypeKind } from './semanticType';
-import { isIdentificationTypeCompatible, isNilAssignableTo, isReferenceTransferCompatible, isTypeAssignable, isValueTransferCompatible, resolveReferenceTransferType, semanticTypeEquals } from './semanticTypeComparison';
+import { characterTruncationForValueTransfer, isIdentificationTypeCompatible, isNilAssignableTo, isReferenceTransferCompatible, isTypeAssignable, isValueTransferCompatible, resolveReferenceTransferType, semanticTypeEquals } from './semanticTypeComparison';
+
+export type CharacterTransferDiagnosticContext =
+    | { readonly kind: 'assignment' | 'return' }
+    | { readonly kind: 'argument'; readonly target: SourceValue<string>; readonly position: number };
 
 export interface ProcedureActualParameterValidationContext {
     resolveUnderlyingType(type: SemanticType): SemanticType | undefined;
@@ -23,6 +27,8 @@ export interface ProcedureActualParameterValidationContext {
     ): void;
     reportInvalidIdentificationArgument(source: SourceValue<string>, target: SourceValue<string>,
         position: number, formalName?: string, reason?: 'protected'): void;
+    reportCharacterTruncation(source: SourceValue<string>, targetLength: number,
+        sourceLength: number, context: CharacterTransferDiagnosticContext): void;
 }
 
 /** Identical argument rules for expression calls and CALL statements.
@@ -109,7 +115,12 @@ export function validateProcedureActualParameters(
                 if (object.category !== 'object' || !isReferenceType(received)) {
                     context.reportInvalidIdentificationArgument(source, target, index + 1);
                     valid = false;
-                } else if (!semanticTypeEquals(expected, received)) {
+                } else if (!(expected.kind === SemanticTypeKind.VoidReference
+                    ? isTypeAssignable(expected, received)
+                    : semanticTypeEquals(expected, received))) {
+                    // REF STRUCT[] IDENT identifies the reference variable, but
+                    // its VOID target accepts a typed reference as well. This
+                    // does not weaken exact IDENT matching for typed REF formals.
                     context.reportInvalidFunctionArgumentType(source, target, index + 1,
                         formal.type, actual);
                     valid = false;
@@ -151,6 +162,12 @@ export function validateProcedureActualParameters(
             context.reportInvalidFunctionArgumentType(source, target, index + 1,
                 formal.type, actual);
             valid = false;
+        } else if (compatibility === true) {
+            const truncation = characterTruncationForValueTransfer(expected, received);
+            if (truncation) {
+                context.reportCharacterTruncation(source, truncation.targetLength,
+                    truncation.sourceLength, { kind: 'argument', target, position: index + 1 });
+            }
         }
     }
     return valid;

@@ -123,3 +123,22 @@ test('Unresolved identifier has no guessed type in hover', () => {
     assert.match(operator!, /# Dyadic operator/);
     assert.doesNotMatch(operator!, /\*\*Expression type:\*\*/);
 });
+
+test('Hover distinguishes local, module and global data objects from parameters', () => {
+    const { source, ast, semantic } = build(`
+        DCL ModVar FIXED;
+        DCL Exported FIXED GLOBAL;
+        RetTest: PROC(A FIXED) RETURNS(FIXED);
+            DCL F8 (10) FIXED;
+            RETURN(A + F8(1) + ModVar + Exported);
+        END;`);
+    assert.deepEqual(semantic.diagnostics.filter(d => d.severity === SemanticDiagnosticSeverity.Error), []);
+    const expression = 'A + F8(1) + ModVar + Exported';
+    assert.match(hoverAt(source, ast, semantic, 'A', expression, 0)!, /\*\*Symbol:\*\* parameter/);
+    assert.match(hoverAt(source, ast, semantic, 'F8', expression, expression.indexOf('F8'))!,
+        /\*\*Symbol:\*\* local variable/);
+    assert.match(hoverAt(source, ast, semantic, 'ModVar', expression, expression.indexOf('ModVar'))!,
+        /\*\*Symbol:\*\* module variable/);
+    assert.match(hoverAt(source, ast, semantic, 'Exported', expression, expression.indexOf('Exported'))!,
+        /\*\*Symbol:\*\* global variable/);
+});

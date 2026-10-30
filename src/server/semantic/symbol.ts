@@ -4,6 +4,7 @@
 import { SourceValue } from '../core/sourceValue';
 import type { FixedType, ProcedureType, SemanticType } from './semanticType';
 import { SymbolKind } from './symbolKind';
+import type { ScopeKind } from './scope';
 
 export interface SymbolBase {
 
@@ -45,6 +46,9 @@ export interface GlobalSymbolBase extends SymbolBase {
 export interface DataObjectSymbol extends GlobalSymbolBase {
 
     readonly kind: SymbolKind.DataObject;
+
+    /** Scope in which this data object was introduced. Independent of GLOBAL visibility. */
+    readonly declarationScope?: ScopeKind;
 
     readonly type: SemanticType;
 

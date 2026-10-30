@@ -29,6 +29,7 @@ import type { ExpressionNode } from '../ast/problem/expressions/expressionNode';
 import { ExpressionTypeResolver, ExpressionTypeResolverContext } from './expressionTypeResolver';
 import { classifyObjectExpressionInfo, expressionSource } from './expressionObject';
 import { validateProcedureActualParameters, validateBuiltinIdentificationParameters } from './procedureActualParameterValidator';
+import type { CharacterTransferDiagnosticContext } from './procedureActualParameterValidator';
 import { matchBuiltinSignature } from './builtins/builtinSignature';
 import { ProcedureParameterNameIndex } from './procedureParameterNameIndex';
 import { CallStatementNode } from '../ast/problem/statements/callStatementNode';
@@ -98,7 +99,8 @@ import { resolveSymbol } from './symbolResolver';
 import { lookupBuiltin } from './builtins/builtinCatalog';
 import {
     semanticTypeEquals, procedureSignaturesEqual, isProcedureSignatureResolved,
-    isValueTransferCompatible, isNilAssignableTo, isReferenceTransferCompatible,
+    isValueTransferCompatible, isAssignmentValueCompatible, characterTruncationForValueTransfer,
+    isNilAssignableTo, isReferenceTransferCompatible,
     resolveReferenceTransferType
 } from './semanticTypeComparison';
 import type { BuiltinDefinition } from './builtins/builtinSignature';
@@ -128,6 +130,11 @@ import {
     TimeConstantEvaluatorContext
 } from './timeConstantEvaluator';
 
+export interface SemanticAnalysisOptions {
+    /** Enabled by default. Warn only when a CHAR value is copied to a shorter target. */
+    readonly warnOnCharTruncation?: boolean;
+}
+
 interface MutableScope {
     readonly kind: ScopeKind;
     readonly parent: Scope | undefined;
@@ -142,9 +149,13 @@ class SemanticAnalysisState implements
     ExpressionTypeResolverContext {
     readonly parameterNames: ProcedureParameterNameIndex;
 
-    constructor(root: AstNode, comments: readonly CommentToken[]) {
+    constructor(root: AstNode, comments: readonly CommentToken[],
+        options: SemanticAnalysisOptions) {
         this.parameterNames = new ProcedureParameterNameIndex(root, comments);
+        this.warnOnCharTruncation = options.warnOnCharTruncation !== false;
     }
+
+    readonly warnOnCharTruncation: boolean;
 
     readonly typeDefinitions = new Map<TypeSymbol, SemanticType>();
     readonly expressionTypes = new Map<ExpressionNode, SemanticType>();
@@ -314,6 +325,35 @@ class SemanticAnalysisState implements
             message: reason === 'protected'
                 ? `${label} von '${target.value}' ist INV-geschützt und darf nicht an einen veränderbaren IDENT-Formalparameter übergeben werden.`
                 : `${label} von '${target.value}' muss ein identifizierbares Objekt (IDENT) sein.`
+        });
+    }
+
+    reportCharacterTruncation(
+        source: SourceValue<string>, targetLength: number, sourceLength: number,
+        context: CharacterTransferDiagnosticContext
+    ): void {
+        if (!this.warnOnCharTruncation) return;
+        let label: string;
+        switch (context.kind) {
+            case 'assignment': label = 'Zuweisung'; break;
+            case 'return': label = 'RETURN'; break;
+            case 'argument': {
+                const symbol = this.bindings.get(context.target);
+                const formalName = symbol
+                    ? this.parameterNames.nameForSymbol(symbol, context.position - 1, this)?.name.value
+                    : undefined;
+                label = `Aktualparameter ${context.position}`
+                    + (formalName ? ` ('${formalName}')` : '')
+                    + ` von '${context.target.value}'`;
+                break;
+            }
+        }
+        this.addDiagnostic({
+            code: SemanticDiagnosticCode.PossibleCharacterTruncation,
+            severity: SemanticDiagnosticSeverity.Warning,
+            location: source.location,
+            message: `${label}: CHAR(${sourceLength}) wird auf CHAR(${targetLength}) `
+                + 'gek\u00fcrzt (m\u00f6glicher Zeichenverlust).'
         });
     }
 
@@ -1354,8 +1394,9 @@ class SemanticAnalysisState implements
 }
 
 export class SemanticAnalyzer {
-    analyze(root: AstNode, comments: readonly CommentToken[] = []): SemanticContext {
-        const state = new SemanticAnalysisState(root, comments);
+    analyze(root: AstNode, comments: readonly CommentToken[] = [],
+        options: SemanticAnalysisOptions = {}): SemanticContext {
+        const state = new SemanticAnalysisState(root, comments, options);
 
         this.indexNode(root, undefined, state);
         this.validateDataDeclarationShadowing(state);
@@ -2317,11 +2358,16 @@ export class SemanticAnalyzer {
             }
             return;
         }
-        if (isValueTransferCompatible(target, actual) === false) {
+        const compatibility = isAssignmentValueCompatible(target, actual);
+        if (compatibility === false) {
             // CONT changes the effective target from REF T to T.
             state.reportInvalidAssignmentValueType(
                 rightSource, node.contOperator ? target : targetType, expressionType
             );
+        } else if (compatibility === true) {
+            const truncation = characterTruncationForValueTransfer(target, actual);
+            if (truncation) state.reportCharacterTruncation(rightSource,
+                truncation.targetLength, truncation.sourceLength, { kind: 'assignment' });
         }
     }
 
@@ -2370,8 +2416,14 @@ export class SemanticAnalyzer {
             }
             return;
         }
-        if (isValueTransferCompatible(target, source) === false) {
+        const compatibility = isValueTransferCompatible(target, source);
+        if (compatibility === false) {
             state.reportInvalidReturnType(node.keyword);
+        } else if (compatibility === true) {
+            const truncation = characterTruncationForValueTransfer(target, source);
+            if (truncation) state.reportCharacterTruncation(
+                expressionSource(node.expression) ?? node.keyword,
+                truncation.targetLength, truncation.sourceLength, { kind: 'return' });
         }
     }
 
@@ -3168,6 +3220,7 @@ export class SemanticAnalyzer {
 
             const symbol: DataObjectSymbol = {
                 kind: SymbolKind.DataObject,
+                declarationScope: environment.scope.kind,
                 name: identifier,
                 definition: identifier,
                 type,
@@ -3212,6 +3265,7 @@ export class SemanticAnalyzer {
             if (requireGlobal) {
                 const symbol: DataObjectSymbol = {
                     kind: SymbolKind.DataObject,
+                    declarationScope: environment.scope.kind,
                     name: identifier,
                     definition: identifier,
                     type,
@@ -3239,6 +3293,7 @@ export class SemanticAnalyzer {
 
             const symbol: DataObjectSymbol = {
                 kind: SymbolKind.DataObject,
+                declarationScope: environment.scope.kind,
                 name: identifier,
                 definition: identifier,
                 type,
@@ -3289,6 +3344,7 @@ export class SemanticAnalyzer {
 
             const symbol: DataObjectSymbol = {
                 kind: SymbolKind.DataObject,
+                declarationScope: environment.scope.kind,
                 name: identifier,
                 definition: systemDeclaration?.name ?? identifier,
                 type,

@@ -9,7 +9,7 @@ nicht abschließend bestätigt.
   Feldelemente, BIT-/CHAR-Selektoren, REF-Werte, CONT und die Unterscheidung
   zwischen INV REF und REF INV. Ergebnis des LSP: 0 Syntax-, 0 Semantikfehler.
 - `invalid_types.P`: Absichtlich falsche Strukturtypen, ganze Feldzuweisung,
-  konstante Indizes, zu lange BIT-/CHAR-Werte sowie unzulässige REF-, CONT-
+  konstante Indizes, zu lange BIT-Werte, inkompatible CHAR-Werte, REF-, CONT-
   und NIL-Zuweisungen. Ergebnis des LSP: 0 Syntax-, 9 Semantikfehler.
 - `invalid_protection.P`: Absichtlich unzulässige Änderungen an INV-Objekten,
   INV-REF-Zeigern und REF-INV-Zielen. Ergebnis des LSP: 0 Syntax-,

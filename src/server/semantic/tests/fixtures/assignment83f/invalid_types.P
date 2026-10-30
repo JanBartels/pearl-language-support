@@ -15,7 +15,7 @@ Verify: PROC;
     A := B;                   ! assignment of whole array
     A(5) := 42;               ! constant index out of bounds
     Bits.BIT(2) := '11'B;     ! selected BIT(1) cannot hold BIT(2)
-    Text.CHAR(2) := 'AB';     ! selected CHAR(1) cannot hold CHAR(2)
+    Text.CHAR(2) := '11'B;  ! BIT cannot be assigned to a CHAR(1) selector
     P := 42;                  ! literal cannot supply REF Cell
     CONT P := X;              ! FIXED cannot replace Cell value
     X := NIL;                 ! NIL requires reference destination

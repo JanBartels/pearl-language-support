@@ -147,3 +147,16 @@ test('parentheses around NIL do not hide a scalar return mismatch', () => {
     assert.deepEqual(r.syntax, []);
     assert.deepEqual(r.errors.map(d => d.code), [SemanticDiagnosticCode.InvalidReturnType]);
 });
+
+
+test('RTOS-UH string builtins accept CHAR TYPE aliases and FIXED value positions', () => {
+    const r = analyze(`TYPE TLine CHAR(255);
+        TLineTest: PROC;
+            DCL Str TLine;
+            IF LEN(Str) == 0 THEN ; FIN;
+            Str = MID(Str, BEG(Str), LEN(Str));
+            Str = KON(Str, 1, 2, Str, 3, 4);
+        END;`);
+    assert.deepEqual(r.syntax, []);
+    assert.deepEqual(r.errors, []);
+});

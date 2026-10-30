@@ -275,13 +275,23 @@ export function isScalarValueAssignable(
     if (to.kind === SemanticTypeKind.Fixed && from.kind === SemanticTypeKind.Fixed) {
         return to.precision! >= from.precision!;
     }
-    if (to.kind === SemanticTypeKind.Float &&
-        (from.kind === SemanticTypeKind.Fixed || from.kind === SemanticTypeKind.Float)) {
+    if (to.kind === SemanticTypeKind.Float && from.kind === SemanticTypeKind.Fixed) {
+        // RTOS-UH accepts the implicit FIXED -> FLOAT conversion independently
+        // of the FIXED precision (e.g. FIXED(31) -> FLOAT(23)). The bit counts
+        // describe different representations and cannot be compared directly.
+        return true;
+    }
+    if (to.kind === SemanticTypeKind.Float && from.kind === SemanticTypeKind.Float) {
         return to.precision! >= from.precision!;
     }
-    if (to.kind === SemanticTypeKind.Bit && from.kind === SemanticTypeKind.Bit
-        || to.kind === SemanticTypeKind.Character && from.kind === SemanticTypeKind.Character) {
+    if (to.kind === SemanticTypeKind.Bit && from.kind === SemanticTypeKind.Bit) {
         return to.length! >= from.length!;
+    }
+    // RTOS-UH copies CHAR values by truncating or blank-padding as needed.
+    // This is a value-transfer rule for assignments and non-IDENT parameters;
+    // IDENT still requires exact lengths via isIdentificationTypeCompatible().
+    if (to.kind === SemanticTypeKind.Character && from.kind === SemanticTypeKind.Character) {
+        return true;
     }
     return semanticTypeEquals(target, source, lengths);
 }
@@ -326,6 +336,45 @@ export function isValueTransferCompatible(
         return semanticTypeEquals(target, source, lengths);
     }
     return undefined;
+}
+
+/** A known length reduction during a CHAR value copy, not a type error. */
+export interface CharacterTruncation {
+    readonly targetLength: number;
+    readonly sourceLength: number;
+}
+
+/**
+ * Determine possible CHAR truncation separately from value compatibility.
+ * The caller must resolve top-level TYPE aliases first. A single typed REF
+ * is dereferenced, exactly as for isValueTransferCompatible().
+ * Only the type lengths are compared: actual run-time content may be shorter.
+ */
+export function characterTruncationForValueTransfer(
+    target: SemanticType,
+    source: SemanticType,
+    lengths: SimpleTypeLengths = RTOS_UH_DEFAULT_TYPE_LENGTHS
+): CharacterTruncation | undefined {
+    if (target.kind !== SemanticTypeKind.Character) return undefined;
+    const value = source.kind === SemanticTypeKind.Reference ? source.target : source;
+    if (value.kind !== SemanticTypeKind.Character) return undefined;
+    const targetLength = target.length ?? lengths.character;
+    const sourceLength = value.length ?? lengths.character;
+    return sourceLength > targetLength ? { targetLength, sourceLength } : undefined;
+}
+
+/**
+ * Assignment compatibility is currently the same as transfer by value.
+ * In RTOS-UH, copying a CHAR value truncates or blank-pads in both assignments
+ * and non-IDENT parameter passing. Keep the named entry point so any future
+ * assignment-only rules can remain separate from the shared transfer rules.
+ */
+export function isAssignmentValueCompatible(
+    target: SemanticType,
+    source: SemanticType,
+    lengths: SimpleTypeLengths = RTOS_UH_DEFAULT_TYPE_LENGTHS
+): boolean | undefined {
+    return isValueTransferCompatible(target, source, lengths);
 }
 
 function isSimpleValueType(type: SemanticType): boolean {

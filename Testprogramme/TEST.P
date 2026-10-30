@@ -39,6 +39,9 @@ PROBLEM;
 #define Version "'V1.2.3'"
 DCL VersionStr CHAR(40) INIT( ''\AEB1\''Progname''\3D\''Version''\FF\'');
 
+TYPE TP STRUCT [ E FIXED ];
+DCL Param(10) TP;
+
 TYPE Counter FIXED(31);
 
 SPC MYPROC ENTRY( () FIXED ) GLOBAL;
@@ -248,6 +251,8 @@ DCL SpecialChar CHAR(20);
    defVar = 1;
    defVarName = 3;
    defVar = defVarName;
+
+   defVar = ExtVar;
 
    TT = 'Mein Typ';
 
@@ -787,6 +792,59 @@ R83d: PROC;
     IP83d := NIL;    ! gültig
     IP83d := 42;     ! Fehler
 
+END;
+
+CharTest2: PROC(Str CHAR(3));
+END;
+
+CharTest3: PROC(Str CHAR(128) IDENT);
+END;
+
+CharTest: PROC;
+DCL Short CHAR(128);
+DCL Long CHAR(255);
+
+   Short = Long;
+   Long = Short;
+
+   CharTest3( Short );
+   CharTest3( Long );
+
+   CharTest2( '12' );
+   CharTest2( '123' );
+   CharTest2( '1234' );
+END;
+
+FloatTest: PROC( F FLOAT );
+DCL XF FIXED(31);
+  F := F / XF;
+END;
+
+FloatTest2: PROC;
+DCL RX REF FIXED(31);
+   FloatTest( RX );
+END;
+
+TYPE TLine CHAR(255);
+TLineTest: PROC;
+DCL Str TLine;
+   IF LEN( Str ) == 0
+   THEN
+   ;
+   FIN;
+   Str = MID( Str, BEG( Str ), LEN( Str ) );
+
+   Str = KON( Str, 1, 2, Str, 3, 4 );
+   Str = KON( )
+
+END;
+
+SPC CDL PROC( CHAR(1) IDENT, REF STRUCT[] IDENT) GLOBAL;
+TYPE TFunc REF PROC( FLOAT IDENT ) RETURNS( BIT );
+CDLTest:PROC;
+DCL Func TFunc INIT( NIL );
+DCL Name CHAR(4);
+   CDL( Name.CHAR(1), Func );
 END;
 
 MODEND DEBUG;

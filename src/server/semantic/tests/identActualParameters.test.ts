@@ -91,20 +91,16 @@ test('ordinary CALL value arguments still use scalar widening and reject narrowi
         [SemanticDiagnosticCode.InvalidCallArgumentType]);
 });
 
-test('builtin MID IDENT parameters reject literals in expressions', () => {
+test('builtin MID FIXED positions accept value expressions and literals', () => {
     const result = analyze(`R: PROC RETURNS(FIXED);
         DCL Text CHAR(10);
         DCL Start FIXED;
         DCL Finish FIXED;
         RETURN(LEN(MID(Text, 2, 4)));
-        RETURN(LEN(MID(Text, Start, Finish)));
+        RETURN(LEN(MID(Text, Start + 1, Finish)));
     END;`);
     assert.deepEqual(result.syntax, []);
-    assert.deepEqual(result.errors.map(d => d.code),
-        [SemanticDiagnosticCode.InvalidIdentificationArgument,
-         SemanticDiagnosticCode.InvalidIdentificationArgument]);
-    assert.match(result.errors[0].message, /'Anfang'/);
-    assert.match(result.errors[1].message, /'Ende'/);
+    assert.deepEqual(result.errors, []);
 });
 
 test('reference and complex parameter passing is not mislabeled as IDENT scalar failure', () => {

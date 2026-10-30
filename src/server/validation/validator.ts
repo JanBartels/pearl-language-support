@@ -134,7 +134,9 @@ export class Validator {
 
         const semanticAnalyzer = new SemanticAnalyzer();
         // Share active documentary parameter names with Signature Help and Hover.
-        let semanticContext = semanticAnalyzer.analyze(ast, context.activeBlockComments);
+        let semanticContext = semanticAnalyzer.analyze(ast, context.activeBlockComments, {
+            warnOnCharTruncation: settings.warnOnCharTruncation !== false
+        });
 
         const blockComments = collectBlockComments(tokens);
 
