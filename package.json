@@ -109,7 +109,13 @@
           ],
           "default": "file",
           "description": "Workingdirectory im Workspace-Root oder im Verzeichnis der Datei (für #include)"
-        }
+        },
+        "pearl.warnOnCharTruncation": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Warnung ausgeben, wenn bei der Zuweisung oder Übergabe eines CHAR-Wertes Zeichen abgeschnitten werden können."
+        }        
       }
     },
     "configurationDefaults": {
