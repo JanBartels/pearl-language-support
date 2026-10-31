@@ -1,0 +1,8 @@
+MODULE Test1;
+PROBLEM;
+
+#define Anzahl "10"
+
+DCL Feld(1:Anzahl) FIXED;
+
+MODEND;

@@ -19,7 +19,9 @@ export class SourceValue<T> {
 
     constructor(
         readonly value: T,
-        readonly location?: Location
+        readonly location?: Location,
+        /** Token position before origin mapping, distinct from the public source location. */
+        readonly lexicalLocation?: Location
     ) {
     }
 

@@ -1,0 +1,13 @@
+MODULE Test11;
+PROBLEM;
+
+#define KommentarAnfang "/*"
+#define KommentarEnde "*/"
+
+DCL A FIXED;
+KommentarAnfang
+DCL B FIXED;
+KommentarEnde
+DCL C FIXED;
+
+MODEND;

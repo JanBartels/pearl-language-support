@@ -1,0 +1,8 @@
+MODULE Test13;
+PROBLEM;
+
+#include "Macrotest7.inc"
+
+DCL Feld(0:Grenze) FIXED;
+
+MODEND;

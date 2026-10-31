@@ -1,0 +1,9 @@
+MODULE Test8;
+PROBLEM;
+
+#define Links "12"
+#define Rechts "34"
+
+DCL Wert FIXED INIT(Links+Rechts);
+
+MODEND;

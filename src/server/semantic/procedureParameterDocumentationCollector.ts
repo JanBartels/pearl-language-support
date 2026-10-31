@@ -6,6 +6,7 @@ import type { ProcedureSpecificationParameterNode }
     from '../ast/problem/procedures/procedureSpecificationParameterNode';
 import { SourceValue } from '../core/sourceValue';
 import type { Source } from '../source/source';
+import type { Location } from '../core/location';
 import type { CommentToken } from '../lexer/token';
 import { CommentKind } from '../lexer/token';
 import { isValidPearlIdentifier } from '../lexer/pearlIdentifier';
@@ -47,9 +48,19 @@ export class ProcedureParameterDocumentationCollector {
         if (parameter.name) return undefined;
         const firstTypeToken = parameter.type instanceof NamedTypeNode
             ? parameter.type.name : parameter.type.keyword;
-        const location = firstTypeToken.location;
-        if (!location) return undefined;
+        // The AST's public location is mapped to the original file for LSP
+        // navigation. Compiler comments, however, are located in the expanded
+        // token stream. Prefer the lexical location for adjacency tests and
+        // fall back to the original for legacy/unexpanded parser clients.
+        const lexicalLocation = firstTypeToken.lexicalLocation;
+        const originalLocation = firstTypeToken.location;
+        return (lexicalLocation && this.findName(lexicalLocation))
+            ?? (originalLocation && lexicalLocation !== originalLocation
+                ? this.findName(originalLocation)
+                : undefined);
+    }
 
+    private findName(location: Location): DocumentaryParameterName | undefined {
         const comments = this.commentsBySource.get(location.source);
         if (!comments?.length) return undefined;
 

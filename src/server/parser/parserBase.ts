@@ -82,7 +82,8 @@ export abstract class ParserBase {
 
         return new SourceValue(
             this.tokenText(token),
-            this.location(token)
+            this.location(token),
+            token.location
         );
     }
 

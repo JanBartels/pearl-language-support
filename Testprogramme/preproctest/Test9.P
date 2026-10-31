@@ -1,0 +1,9 @@
+MODULE Test9;
+PROBLEM;
+
+#define Zehn "10"
+#define Doppel "Zehn+Zehn"
+
+DCL Wert FIXED INIT(Doppel);
+
+MODEND;

@@ -1,0 +1,10 @@
+MODULE Test10;
+PROBLEM;
+
+#define Anfang "10"
+#define Ende "Unbekannt"
+#define Ausdruck "Anfang+Ende"
+
+DCL Wert FIXED INIT(Ausdruck);
+
+MODEND;

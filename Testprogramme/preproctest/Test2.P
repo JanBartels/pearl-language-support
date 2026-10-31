@@ -1,0 +1,9 @@
+MODULE Test2;
+PROBLEM;
+
+#define Maximum "20"
+#define Grenze "Maximum"
+
+DCL Werte(0:Grenze) FIXED;
+
+MODEND;

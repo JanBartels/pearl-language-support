@@ -67,7 +67,7 @@ import { mapFoldingRegion } from './lsp/foldingMapper';
 import { CommentFoldingCollector } from './lexer/commentFoldingCollector';
 import { PreprocessorFoldingCollector } from './preproc/preprocessorFoldingCollector';
 import { AstFoldingCollector } from './ast/astFoldingCollector';
-import { SourceOffset } from './core/sourceOffset';
+import { SourceOffset, mapToOriginalLocation, containsSourceOffset } from './core/sourceOffset';
 import { createSignatureHelp } from './lsp/createSignatureHelp';
 
 const connection = createConnection(ProposedFeatures.all);
@@ -244,7 +244,37 @@ connection.onDefinition(params => {
         return undefined;
     }
     const position: SourceOffset = { uri, offset: document.offsetAt(params.position) };
+    // BEGIN TEMP-MACRO-NAV-DIAG: inspect the macro index before the AST fallback.
+    // Remove the entire marked section after investigating the Boundary regression.
+    const macroIndex = analysisResult.rootAnalysis.macroOccurrences;
+    const matchingGroups = macroIndex.all.flatMap(group => {
+        const locations = [
+            { kind: 'definition', location: group.definition.location },
+            { kind: 'directive', location: group.definition.directiveLocation },
+            ...group.references.map(ref => ({ kind: 'reference', location: ref.location }))
+        ];
+        return locations.filter(item => item.location && containsSourceOffset(item.location, position))
+            .map(item => `${group.definition.name}:${item.kind}`);
+    });
+    const nearbyBoundary = macroIndex.all
+        .filter(group => group.definition.name === 'Boundary')
+        .map(group => ({
+            definition: group.definition.location
+                ? mapToOriginalLocation(group.definition.location) : undefined,
+            references: group.references.map(ref => mapToOriginalLocation(ref.location))
+        }));
+    const formatMacroLocation = (loc: { source: { uri: string }, span: { start: number, end: number } } | undefined) =>
+        loc ? `${loc.source.uri}@${loc.span.start}:${loc.span.end}` : 'missing';
+    navigationTrace(id, `macroLookup cursor=${uri}@${position.offset} indexGroups=${macroIndex.all.length} matching=${JSON.stringify(matchingGroups)}`);
+    navigationTrace(id, `macroBoundary=${JSON.stringify(nearbyBoundary.map(group => ({
+        definition: formatMacroLocation(group.definition),
+        references: group.references.map(formatMacroLocation)
+    })) )}`);
+    // END TEMP-MACRO-NAV-DIAG
     const macro = analysisResult.lookupMacro(position);
+    // BEGIN TEMP-MACRO-NAV-DIAG: report HIT/MISS separately from AST lookup.
+    navigationTrace(id, `macroLookup=${macro ? 'HIT' : 'MISS'} macroName=${macro?.definition.name ?? 'missing'} macroDefinitionLocation=${formatMacroLocation(macro?.definition.location)}`);
+    // END TEMP-MACRO-NAV-DIAG
     if (macro?.definition.location) {
         const target = mapLspLocation(macro.definition.location, documentRegistry);
         navigationTrace(id, `END reason=macro target=${JSON.stringify(target)}`);

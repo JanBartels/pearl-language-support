@@ -1,0 +1,7 @@
+MODULE Test12;
+PROBLEM;
+
+#define Grenze "25"
+#include "Test12.inc"
+
+MODEND;

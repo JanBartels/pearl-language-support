@@ -1,7 +1,10 @@
 P=MPC603;
 SC=2000;
 MODULE Macro;
-SYSTEM;
+PROBLEM;
+
+#define DEKLARATIONEN
+
 
 #ifdef DEKLARATIONEN
     #define VAR "DCL"
@@ -17,6 +20,6 @@ SYSTEM;
 
 #define Boundary "WertIst 0:Count WertEnde"
 
-VAR Var( Boundary ) FIXED;
+VAR Var( Boundary ) FIXED GLOBAL;
 
 MODEND;

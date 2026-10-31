@@ -1,0 +1,6 @@
+MODULE Test7;
+PROBLEM;
+
+#include "Test7.inc"
+
+MODEND;

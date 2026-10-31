@@ -1,0 +1,9 @@
+MODULE Test6;
+PROBLEM;
+
+#define Untergrenze "1"
+#define Obergrenze "Unbekannt"
+
+DCL Feld(Untergrenze:Obergrenze) FIXED;
+
+MODEND;

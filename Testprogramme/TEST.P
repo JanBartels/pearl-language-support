@@ -835,8 +835,6 @@ DCL Str TLine;
    Str = MID( Str, BEG( Str ), LEN( Str ) );
 
    Str = KON( Str, 1, 2, Str, 3, 4 );
-   Str = KON( )
-
 END;
 
 SPC CDL PROC( CHAR(1) IDENT, REF STRUCT[] IDENT) GLOBAL;

@@ -1,0 +1,8 @@
+MODULE Test3;
+PROBLEM;
+
+#define Grenze "Unbekannt"
+
+DCL Werte(0:Grenze) FIXED;
+
+MODEND;

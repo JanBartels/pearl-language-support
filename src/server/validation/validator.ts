@@ -5,6 +5,7 @@ import { AnalysisResult } from './analysisResult';
 import { Analysis, collectBlockComments } from './analysis';
 import { FileSource } from '../source/fileSource';
 import { Lexer } from '../lexer/lexer';
+import { ArrayTokenStream } from '../lexer/arrayTokenStream';
 
 import { ProblemCollection } from '../core/problemCollection';
 
@@ -98,7 +99,9 @@ export class Validator {
             new PreprocessorConditionalBlockStack()
         );
 
-        const preprocessor = Preprocessor.create(
+        // External preprocessing produces text; the compiler lexer must see the
+        // complete result so that macro-generated comment delimiters can pair.
+        const expanded = Preprocessor.createExpanded(
             tokens,
             fileSource,
             context,
@@ -108,8 +111,19 @@ export class Validator {
             this.logger
         );
 
+        // The expanded result owns macro navigation metadata. The legacy array
+        // passed to createExpanded only serves the old preprocessor code path.
+        // Textual expansion emits its references directly into the result builder.
+        const effectiveMacroReferences = [...expanded.macroReferences];
+
+        const compilerTokens = new Lexer(
+            expanded.source,
+            problems,
+            this.logger
+        ).tokenize();
+
         const parser = new Parser(
-            preprocessor,
+            new ArrayTokenStream(compilerTokens, expanded.source),
             problems,
             this.logger
         );
@@ -133,16 +147,18 @@ export class Validator {
         // ----------------------------
 
         const semanticAnalyzer = new SemanticAnalyzer();
-        // Share active documentary parameter names with Signature Help and Hover.
-        let semanticContext = semanticAnalyzer.analyze(ast, context.activeBlockComments, {
+        // Compiler-side comments share ExpandedSource offsets with the AST.
+        // Original comments remain available through Analysis.tokens for editor features.
+        const compilerBlockComments = collectBlockComments(compilerTokens);
+        let semanticContext = semanticAnalyzer.analyze(ast, compilerBlockComments, {
             warnOnCharTruncation: settings.warnOnCharTruncation !== false
         });
 
-        const blockComments = collectBlockComments(tokens);
-
+        // Inactive branches are already absent from compilerTokens; macro-generated
+        // comments are present and share their Source with parsed AST locations.
         const compilerControlDiagnostics = new CompilerControlAnalyzer().analyze(
             ast,
-            blockComments,
+            compilerBlockComments,
             semanticContext
         );
 
@@ -180,7 +196,7 @@ export class Validator {
             tokens,
             ast,
             problems,
-            macroReferences,
+            effectiveMacroReferences,
             preprocessorConditionalBlocks,
             semanticContext,
             symbolReferences,
@@ -188,7 +204,7 @@ export class Validator {
             symbolOccurrences,
             context.macroDefinitions,
             undefined,
-            context.activeBlockComments
+            compilerBlockComments
         );
 
         return AnalysisResult.create(

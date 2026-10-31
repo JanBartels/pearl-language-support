@@ -12,13 +12,14 @@ export class MacroTable {
     return this.macros.get(name);
   }
 
-  define(name: string, value: string|null, location?: Location, directiveLocation?: Location): boolean {
+  define(name: string, value: string|null, location?: Location, directiveLocation?: Location, replacementLocation?: Location): boolean {
     const redefined = this.macros.get(name) !== undefined;
     this.macros.set(name, { 
       name,
       replacement: value,
       ...(location ? { location } : {}),
-      ...(directiveLocation ? { directiveLocation } : {})
+      ...(directiveLocation ? { directiveLocation } : {}),
+      ...(replacementLocation ? { replacementLocation } : {})
     });
     return redefined;
   }

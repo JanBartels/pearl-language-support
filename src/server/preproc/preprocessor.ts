@@ -9,16 +9,17 @@ import { Location } from '../core/location';
 
 import { Token, TokenKind, CommentKind, isCommentToken } from '../lexer/token';
 import { TokenStream } from '../lexer/tokenStream';
+import { ArrayTokenStream } from '../lexer/arrayTokenStream';
 
 import { Source } from "../source/source";
 import { FileSource } from "../source/fileSource";
-import { MacroSource } from "../source/macroSource";
 import { Lexer } from "../lexer/lexer";
 
 import { MacroDefinition } from './macroDefinition';
 import { MacroReference } from './macroReference';
 import { PreprocessorContext } from './preprocessorContext';
-import { ExpansionStack } from './expansionStack';
+import { ExternalPreprocessorResultBuilder, type ExternalPreprocessorResult } from './externalPreprocessorResult';
+import { appendExpandedMacro } from './externalMacroExpansionWriter';
 import { PreprocessorConditionalBlock } from "./preprocessorConditionalBlock";
 import { PreprocessorConditionalBlockCollection } from "./preprocessorConditionalBlockCollection";
 
@@ -70,15 +71,15 @@ class LexerTokenStream implements TokenStream {
 
 type DirectiveHandler = () => void;
 
-export class Preprocessor implements TokenStream {
+export class Preprocessor {
 
     private static readonly MAX_INCLUDE_DEPTH = 100;
     private currentToken!: Token;
     private readonly handlers = new Map<string, DirectiveHandler>();
-    private readonly expansions = new ExpansionStack();
+    private previousEmitted?: Location;
 
     /**
-     * The conditional stacks are shared with included files and macro expansions.
+     * The conditional stacks are shared with included files.
      * Each preprocessor may close only the conditionals opened by its own input.
      */
     private readonly initialConditionalDepth: number;
@@ -90,7 +91,9 @@ export class Preprocessor implements TokenStream {
         private readonly problems: ProblemCollection,
         private readonly macroReferences: MacroReference[],
         private readonly preprocessorConditionalBlocks: PreprocessorConditionalBlockCollection,
-        private readonly logger: Logger
+        private readonly logger: Logger,
+        private readonly textOutput: ExternalPreprocessorResultBuilder,
+        private readonly includeDepth = 0
     ) {
         this.initialConditionalDepth = context.conditionals.depth();
 
@@ -105,6 +108,17 @@ export class Preprocessor implements TokenStream {
         this.next();
     }
 
+    /**
+     * Compatibility entry point for parser tests that still expect a TokenStream.
+     *
+     * There is only one external-preprocessor implementation: expand to text,
+     * then lex that complete text. In particular, macro replacements must not
+     * be lexed independently, since they can form comment delimiters only after
+     * adjacent fragments have been assembled.
+     *
+     * The caller-owned reference array is retained solely for the historical
+     * API. Production analysis obtains references from ExternalPreprocessorResult.
+     */
     static create(
         tokens: Token[],
         source: Source,
@@ -114,183 +128,143 @@ export class Preprocessor implements TokenStream {
         preprocessorConditionalBlocks: PreprocessorConditionalBlockCollection,
         logger: Logger
     ): TokenStream {
-        const stream = new LexerTokenStream(
-            tokens,
-            source
+        const collected: MacroReference[] = [];
+        const expanded = Preprocessor.createExpanded(
+            tokens, source, context, problems, collected,
+            preprocessorConditionalBlocks, logger
         );
-
-        return new Preprocessor(
-            stream,
-            source,
-            context,
-            problems,
-            macroReferences,
-            preprocessorConditionalBlocks,
-            logger
-        );
+        // createExpanded collects conditional-directive references through its
+        // legacy argument, and ordinary macro uses through its result builder.
+        // Both are represented exactly once in expanded.macroReferences.
+        macroReferences.push(...expanded.macroReferences);
+        const compilerTokens = new Lexer(expanded.source, problems, logger).tokenize();
+        return new ArrayTokenStream(compilerTokens, expanded.source);
     }
 
-    private currentStream(): TokenStream {
-        return this.expansions.peek() ?? this.input;
+    /**
+     * External preprocessor. Produces complete character-level output plus LSP
+     * metadata; a second lexer recognizes PEARL tokens in that complete text.
+     * Internal RTOS-UH compiler directives are not part of this processing.
+     */
+    static createExpanded(
+        tokens: Token[],
+        source: Source,
+        context: PreprocessorContext,
+        problems: ProblemCollection,
+        macroReferences: MacroReference[],
+        preprocessorConditionalBlocks: PreprocessorConditionalBlockCollection,
+        logger: Logger
+    ): ExternalPreprocessorResult {
+        const output = new ExternalPreprocessorResultBuilder(source);
+        const input = new LexerTokenStream(tokens, source);
+        const preprocessor = new Preprocessor(
+            input, source, context, problems, macroReferences,
+            preprocessorConditionalBlocks, logger, output
+        );
+        while (!preprocessor.eof()) preprocessor.next();
+        for (const reference of macroReferences) output.addMacroReference(reference);
+        for (const block of preprocessorConditionalBlocks) output.addConditionalBlock(block);
+        const result = output.build();
+        return result;
     }
 
-    tokenText(token: Token): string {
+    private emitWhitespaceBefore(location: Location): void {
+        if (this.previousEmitted && this.previousEmitted.source === location.source
+            && this.previousEmitted.span.end <= location.span.start) {
+            const gap: Location = {
+                source: location.source,
+                span: { start: this.previousEmitted.span.end, end: location.span.start }
+            };
+            if (/^\s*$/.test(gap.source.getText(gap.span))) {
+                this.textOutput.appendOriginal(gap);
+            }
+        }
+    }
+
+    private emitOriginal(token: Token): void {
+        this.emitWhitespaceBefore(token.location);
+        this.textOutput.appendOriginal(token.location);
+        this.previousEmitted = token.location;
+    }
+
+    private tokenText(token: Token): string {
         return token.location.source.getText(token.location.span);
     }
 
-    getText(span: Span): string {
-        return this.source.getText(span);
-    }
-        
-    current(): Token {
-        return this.currentToken;
-    }
-
-    peek(offset = 0): Token {
-        // TODO
-        // Für den Anfang genügt vermutlich offset==0.
-        if (offset !== 0) {
-            throw new Error("peek(offset) not implemented");
-        }
-
-        return this.currentToken;
-    }
-
-    eof(): boolean {
-
-        // Solange Expansionen aktiv sind, ist der Präprozessor
-        // niemals am Ende.
-        if (!this.expansions.isEmpty()) {
-            return false;
-        }
-
+    private eof(): boolean {
         return this.currentToken.kind === TokenKind.EOF;
     }
 
-    next(): void {
-
+    private next(): void {
+        const stream = this.input;
         while (true) {
-
-            // ----------------------------------------------------
-            // Aktive Makroexpansion?
-            // ----------------------------------------------------
-
-            const expansion = this.expansions.peek();
-            if (expansion) {
-                if (expansion.eof()) {
-                    this.expansions.pop();
-                    continue;
-                }
-
-                this.currentToken = expansion.current();
-                expansion.next();
-                return;
-            }
-
-            // ----------------------------------------------------
-            // Eingabestream erschöpft?
-            // ----------------------------------------------------
-
-            const stream = this.currentStream();
             if (stream.eof()) {
-
-                if (stream === this.input) {
-                    while (this.context.conditionals.depth() > this.initialConditionalDepth) {
-                        this.problems.error(stream.current().location, "Missing #endif.");
-                        this.context.conditionals.leaveConditional();
-                        this.context.conditionalBlocks.leaveConditional();
-                    }
-                }                
+                while (this.context.conditionals.depth() > this.initialConditionalDepth) {
+                    this.problems.error(stream.current().location, "Missing #endif.");
+                    this.context.conditionals.leaveConditional();
+                    this.context.conditionalBlocks.leaveConditional();
+                }
                 this.currentToken = stream.current();
                 return;
             }
             const token = stream.current();
 
-            // ----------------------------------------------------
-            // Inaktiver Bereich?
-            // ----------------------------------------------------
-
             if (!this.context.conditionals.isActive()) {
-
                 if (token.kind === TokenKind.PreprocessorDirective) {
-
                     const directive = stream.tokenText(token).toLowerCase();
-
                     switch (directive) {
-
                     case "#ifdef":
                     case "#ifndef":
                     case "#else":
                     case "#endif":
                         this.handleDirective(token);
                         break;
-
                     default:
                         this.skipToNextLine();
                         break;
                     }
-
                 } else {
-
+                    // Preserve physical line breaks in disabled regions.
+                    if (token.kind === TokenKind.Newline) this.emitSkippedNewline(token);
                     stream.next();
-
                 }
-
                 continue;
             }
 
-            // ----------------------------------------------------
-            // Aktiver Bereich
-            // Direktiven und Makroersetzungen bearbeiten
-            // ----------------------------------------------------
-
-            if (stream === this.input) {
-                switch (token.kind) {
-
-                case TokenKind.PreprocessorDirective:
-                    this.handleDirective(token);
-                    continue;
-
-                case TokenKind.InvalidDirective:
-                    this.handleInvalidDirective(token);
-                    continue;
-
-                case TokenKind.Identifier: {
-
-                    const name = stream.tokenText(token);
-
-                    const macroDefinition = this.context.macroTable.get(name);
-                    if (macroDefinition===undefined) {
-                        // Kein Makro → Identifier durchreichen.
-                        this.currentToken = token;
-                        stream.next();
-                        return;
-                    }
-
-                    this.recordMacroReference(token, macroDefinition!);
-                    if (macroDefinition.replacement === null) {
-                        // Makro ohne Ersetzungstext verschwindet einfach.
-                        stream.next();
-                        continue;
-                    }
-
-                    this.expandMacro(token, macroDefinition!);
+            switch (token.kind) {
+            case TokenKind.PreprocessorDirective:
+                this.handleDirective(token);
+                continue;
+            case TokenKind.InvalidDirective:
+                this.handleInvalidDirective(token);
+                continue;
+            case TokenKind.Identifier: {
+                const name = stream.tokenText(token);
+                const definition = this.context.macroTable.get(name);
+                if (definition) {
+                    this.emitWhitespaceBefore(token.location);
+                    appendExpandedMacro(
+                        this.textOutput, definition, token.location,
+                        macro => this.context.macroTable.get(macro),
+                        (location, message) => this.problems.error(location, message)
+                    );
+                    this.previousEmitted = token.location;
                     stream.next();
                     continue;
                 }
-                }
-
+                break;
+            }
             }
 
-            // Capture only active comments. Child preprocessors capture their
-            // own comments, so an expansion is not recorded a second time.
+            // Source comments serve editor features; compiler comments are
+            // separately obtained by lexing the fully expanded output.
             if (isCommentToken(token) && token.commentKind === CommentKind.Block) {
                 this.context.activeBlockComments.push(token);
             }
             this.currentToken = token;
+            this.emitOriginal(token);
             stream.next();
             return;
-
         }
     }
 
@@ -398,7 +372,8 @@ export class Preprocessor implements TokenStream {
                     name,
                     replacement,
                     nameToken.location,
-                    directiveLocation
+                    directiveLocation,
+                    { source: this.source, span: { start: replacementStart, end: token.location.span.start } }
                 );
 
                 // Ein Semikolon nach dem schliessenden Anfuehrungszeichen
@@ -778,15 +753,23 @@ export class Preprocessor implements TokenStream {
         this.skipToNextLine();
     }
 
+    /**
+     * Retain a real physical line break when removing a directive or a disabled
+     * source line. This separates adjacent PEARL tokens without inventing
+     * spaces inside macro expansions (which may intentionally form comments).
+     */
+    private emitSkippedNewline(token: Token): void {
+        this.textOutput.appendOriginal(token.location);
+        this.previousEmitted = token.location;
+    }
+
     private skipToNextLine(): void {
-
         while (!this.input.eof()) {
-
             if (this.input.current().kind === TokenKind.Newline) {
-                this.input.next();          // Newline ebenfalls konsumieren
+                this.emitSkippedNewline(this.input.current());
+                this.input.next();
                 break;
             }
-
             this.input.next();
         }
     }
@@ -795,10 +778,11 @@ export class Preprocessor implements TokenStream {
         name: string,
         replacement: string | null,
         location: Location,
-        directiveLocation: Location
+        directiveLocation: Location,
+        replacementLocation?: Location
     ): void {
 
-        const redefined = this.context.macroTable.define(name, replacement, location, directiveLocation);
+        const redefined = this.context.macroTable.define(name, replacement, location, directiveLocation, replacementLocation);
         const definition = this.context.macroTable.get(name);
         if (definition) {
             this.context.macroDefinitions.push(definition);
@@ -816,38 +800,6 @@ export class Preprocessor implements TokenStream {
         if (!this.context.macroTable.undefine(name)) {
             this.problems.warning(location, `Macro '${name}' is not defined.`);
         }
-    }
-
-    private expandMacro(
-        macroToken: Token,
-        macroDefinition: MacroDefinition
-    ): void {
-
-        if (this.expansions.size >= Preprocessor.MAX_INCLUDE_DEPTH) {
-            this.problems.error(macroToken.location, `Maximum macro depth (${Preprocessor.MAX_INCLUDE_DEPTH}) exceeded.`);
-            return;
-        }
-
-        // Quelltext für den Makroersetzungstext erzeugen
-        const macroSource = new MacroSource(
-            macroToken.location,
-            macroDefinition.replacement!
-        );
-
-        const lexer = new Lexer(macroSource, this.problems, this.logger);
-
-        const preprocessor = Preprocessor.create(
-            lexer.tokenize(),
-            macroSource,
-            this.context,
-            this.problems,
-            this.macroReferences,
-            this.preprocessorConditionalBlocks,
-            this.logger
-        );
-
-        // Auf den Expansionsstack legen
-        this.expansions.push(preprocessor);
     }
 
     private includeFile(includePath: string, location: Location): void {
@@ -873,24 +825,21 @@ export class Preprocessor implements TokenStream {
             document.uri
         );
 
-        if (this.expansions.size >= Preprocessor.MAX_INCLUDE_DEPTH) {
+        if (this.includeDepth >= Preprocessor.MAX_INCLUDE_DEPTH) {
             this.problems.error(location, `Maximum include depth (${Preprocessor.MAX_INCLUDE_DEPTH}) exceeded.`);
             return;
         }
 
         const fileSource = FileSource.fromDocument(document);
         const lexer = new Lexer(fileSource, this.problems, this.logger);
-        const preprocessor = Preprocessor.create(
-            lexer.tokenize(),
-            fileSource,
-            this.context,
-            this.problems,
-            this.macroReferences,
-            this.preprocessorConditionalBlocks,
-            this.logger
+        const tokens = lexer.tokenize();
+        const child = new Preprocessor(
+            new LexerTokenStream(tokens, fileSource), fileSource, this.context,
+            this.problems, this.macroReferences,
+            this.preprocessorConditionalBlocks, this.logger,
+            this.textOutput, this.includeDepth + 1
         );
-
-        this.expansions.push(preprocessor);
+        while (!child.eof()) child.next();
     }
 
     private recordMacroReference(

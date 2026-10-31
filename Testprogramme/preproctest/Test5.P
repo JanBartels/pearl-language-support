@@ -1,0 +1,9 @@
+MODULE Test5;
+PROBLEM;
+
+#define Untergrenze "1"
+#define Obergrenze "20"
+
+DCL Feld(Untergrenze:Obergrenze) FIXED;
+
+MODEND;

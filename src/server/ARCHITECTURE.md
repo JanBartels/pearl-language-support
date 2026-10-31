@@ -547,11 +547,18 @@ Nicht der gesamte SYSTEM-Teil wird verworfen.
 
 # Präprozessor
 
-Der Präprozessor bildet eine eigenständige Compilerphase vor dem Parser.
+Der externe Präprozessor bildet eine eigenständige Compilerphase vor dem Parser.
+Er erzeugt aus dem ursprünglichen Quelltext einen vollständig expandierten
+PEARL-Quelltext mit Herkunftsinformationen. Erst danach wird dieser Text erneut
+lexikalisch analysiert und an den Parser übergeben.
 
-Seine Aufgabe besteht darin, den Tokenstrom aufzubereiten, bevor daraus der AST erzeugt wird.
+Die externe Präprozessierung ist nicht mit den internen RTOS-UH-Compiler-
+Direktiven (z. B. `#DEFINE` und `#IF`) gleichzusetzen. Diese stellen einen
+separaten, derzeit nicht in dieser Pipeline implementierten Sprachbereich dar.
+Ihre spätere Verarbeitung darf die Trennung der externen Textphase von Parser
+und Semantik nicht umgehen.
 
-Parser und Präprozessor sind bewusst vollständig voneinander getrennt.
+Parser und externer Präprozessor bleiben vollständig voneinander getrennt.
 
 ---
 
@@ -565,28 +572,26 @@ Insbesondere kennt er nicht
 - bedingte Übersetzung
 - Include-Dateien
 
-Er verarbeitet ausschließlich den bereits expandierten Tokenstrom.
+Er verarbeitet ausschließlich den Tokenstrom, den ein zweiter PEARL-Lexer
+aus dem vollständig expandierten Quelltext erzeugt.
 
-Dadurch bleibt der Parser unabhängig von Präprozessorsemantik.
+Dadurch bleibt der Parser unabhängig von der externen Präprozessorsemantik.
 
 ---
 
-## Präprozessor als Stack
+## Rekursive Verarbeitung von Includes und Makros
 
-Die Präprozessierung wird als Stack unabhängiger Präprozessorinstanzen
-realisiert.
+Include-Dateien werden rekursiv mit einer eigenen Präprozessorinstanz
+verarbeitet; die dafür erforderlichen Zustände werden kontrolliert geteilt.
+Nach dem Include wird die Verarbeitung der aufrufenden Quelldatei fortgesetzt.
+Die Include-Tiefe ist begrenzt.
 
-Neue Instanzen entstehen beispielsweise durch
+Makroersetzungen werden dagegen **nicht** als eigenständiger PEARL-Tokenstrom
+lexikalisiert. `MacroTextExpander` expandiert ihre Texte rekursiv und erkennt
+Zyklen sowie eine zu große Schachtelungstiefe.
 
-- Makroexpandierung
-- Include-Dateien
-
-Sobald deren Tokenstrom erschöpft ist, wird automatisch zur vorherigen
-Präprozessorinstanz zurückgekehrt.
-
-Dadurch entsteht eine natürliche rekursive Verarbeitung ohne Spezialfälle für
-Makros oder Includes.
-
+Diese Unterscheidung ist verbindlich: Ein Makro kann erst im Zusammenspiel mit
+benachbarten Textfragmenten gültige PEARL-Tokens oder Kommentargrenzen bilden.
 ---
 
 ## Editorinformationen erhalten
@@ -605,19 +610,27 @@ implementiert werden, ohne dass Parser oder AST Makros kennen müssen.
 
 ---
 
-## Makroexpandierung
+## Makroexpandierung als Texttransformation
 
-Makroexpandierung erfolgt durch verschachtelte Präprozessorinstanzen.
+`MacroTextExpander` durchsucht Makroersetzungstexte nach weiteren Makronamen,
+ohne deren Ergebnis mit dem PEARL-Lexer zu tokenisieren. Er liefert Textfragmente
+und die dabei erkannten Makroreferenzen. Die Rekursion besitzt Schutz gegen
+Zyklen und übermäßige Schachtelung.
 
-Für den Ersetzungstext eines Makros wird eine `MacroSource` erzeugt, die ihren
-Ursprung (die Aufrufstelle des Makros) kennt.
+`ExternalMacroExpansionWriter` überführt diese Fragmente samt Referenzen in den
+Ergebnis-Builder. Zwischen Fragmenten werden **keine künstlichen Trennzeichen**
+eingefügt. Deshalb können Makros beispielsweise die Zeichen `/*` und `*/`
+erzeugen, die erst der abschließende Compiler-Lexer als Kommentarbegrenzer
+erkennt.
 
-Auf dieser `MacroSource` arbeiten anschließend ein eigener Lexer und ein eigener
-Präprozessor.
+Der äußere Präprozessor bleibt für Direktiven, bedingte Übersetzung, Includes
+und den aktiven Makrobestand verantwortlich. Diese Aufgaben werden nicht in den
+`MacroTextExpander` verlagert.
 
-Dadurch wird Makroexpansion vollständig gekapselt und kann beliebig tief
-verschachtelt werden, ohne den Parser zu beeinflussen.
-
+Referenzimplementierungen:
+- `/src/server/preproc/macroTextExpander.ts`
+- `/src/server/preproc/externalMacroExpansionWriter.ts`
+- `/src/server/preproc/externalPreprocessorResult.ts`
 ---
 
 ## Makroreferenzen
@@ -636,6 +649,15 @@ Die `MacroDefinition` enthält
 - Definitionsposition (falls vorhanden)
 
 Vordefinierte Makros besitzen bewusst keine Definitionsposition.
+
+Bei verschachtelten Makros wird die Referenz des inneren Makros auf dessen
+Schreibweise im Ersetzungstext der äußeren Makrodefinition bezogen, soweit
+diese physisch vorhanden ist. Die unmittelbar im Programm geschriebene äußere
+Makroverwendung behält ihre eigene Position. Damit dürfen verschachtelte
+Referenzen die Navigation an der äußeren Aufrufstelle nicht verdecken.
+
+Makroreferenzen gehören zu den Präprozessormetadaten und werden nicht aus dem
+AST oder den Tokens des zweiten Lexers rekonstruiert.
 
 Referenzimplementierung:
 - `/src/server/preproc/macroDefinition.ts`
@@ -659,57 +681,64 @@ Referenzimplementierung:
 
 ## Include-Dateien
 
-Include-Dateien werden rekursiv präprozessiert.
+Include-Dateien werden rekursiv präprozessiert und als Text in das gemeinsame
+Ergebnis eingefügt. Der nachfolgende Compiler-Lexer sieht einen durchgehenden,
+expandierten PEARL-Quelltext. Der Parser benötigt keine Kenntnis der Dateigrenzen.
 
-Der Parser erhält unabhängig von der Anzahl eingebundener Dateien einen zusammenhängenden Tokenstrom.
+Jede eingebundene Datei besitzt eine eigene `FileSource`; ihre Textfragmente
+bewahren diese Herkunft in der `ExpandedSource`. Dadurch können Diagnosen und
+Editoranfragen auf die ursprünglichen Dateien zurückgeführt werden.
 
-Für den LSP bleiben die einzelnen Quelldateien dennoch erhalten, damit Positionen, Diagnosen und Navigation korrekt auf die ursprünglichen Dateien abgebildet werden können.
+Die Include-Pfadsyntax wird **im externen Präprozessor** verarbeitet, nicht im
+PEARL-Parser. Auch Makros innerhalb des Include-Pfads werden dort aufgelöst.
+Beispielsweise funktionieren beide Formen:
 
-Jede Include-Datei besitzt eine eigene `FileSource`.
+```text
+#define InclDir "'/home/jan/pearl-lsp'"
+#include InclDir/testinc.h
+#include "InclDir/testinc.h"
+```
 
-Beim Verlassen einer Include-Datei kehrt der Präprozessor automatisch zur
-vorherigen Quelldatei zurück.
+Die vorhandene Behandlung der Begrenzungszeichen und der Pfadmakros ist von
+der lexikalischen Analyse des abschließenden PEARL-Texts unabhängig.
 
-Das Location-Mapping sorgt dafür, dass sämtliche Diagnosen und LSP-Anfragen
-stets auf die richtige Quelldatei verweisen.
-
-Dadurch bleibt die physische Dateistruktur trotz eines logisch zusammenhängenden
-Tokenstroms vollständig erhalten.
-
+Referenzimplementierung:
+- `/src/server/preproc/preprocessor.ts`
+- `/src/server/source/fileSource.ts`
 ---
 
-## Location-Mapping
+## Herkunfts-Mapping des expandierten Textes
 
-Alle während der Präprozessierung erzeugten Tokens müssen ihre Position wieder
-auf den ursprünglichen Quelltext zurückführen können.
+`ExpandedSource` repräsentiert den vollständigen expandierten Text als Folge
+von Fragmenten. Unverändert übernommene Quelltextbereiche besitzen eine
+zeichengetreue Zuordnung (`direct`); erzeugter Makrotext besitzt einen Anker
+an seiner Makroverwendung (`generated`). Includes behalten ihre jeweilige
+`FileSource` als physische Herkunft.
 
-Dazu bildet jede `Source` die Positionen ihrer erzeugten Zeichen auf ihre
-Ursprungsquelle ab.
+Eine normale `Location` bezeichnet weiterhin genau einen zusammenhängenden
+Bereich innerhalb **einer** `Source`. Zwei unterschiedliche Ursprünge dürfen
+nicht zu einem erfundenen, zusammenhängenden Quelltextbereich verschmolzen
+werden.
 
-Für normale Dateien ist dies die Datei selbst.
+- `Source.mapLocation()` und `mapToOriginalLocation()` liefern weiterhin die
+  primäre Position. Bei einem Token aus verschiedenen Fragmenten bleibt der
+  erste Ursprungsabschnitt der Anker.
+- Direkt benachbarte, unverändert übernommene Fragmente derselben physischen
+  Quelle können verlustfrei zu einem vollständigen Bereich zusammengefasst
+  werden.
+- `Source.mapLocations()` (optional) und `mapToOriginalLocations()` geben alle
+  beitragenden Ursprungsbereiche in Ausgabereihenfolge zurück, auch über
+  verschachtelte Sources hinweg.
 
-Eine `MacroSource` bildet sämtliche Positionen auf die Position der
-Makroverwendung ab.
+Die Mehrfachherkunft ergänzt das bisherige Mapping; sie ersetzt weder
+`Location` noch `SourceValue`. Bestehende LSP-Funktionen dürfen für ihre
+primäre Navigationsposition weiterhin das einfache Mapping verwenden.
 
-Dadurch beziehen sich
-
-- Hover
-- Go to Definition
-- Fehlermeldungen
-- Semantic Tokens
-
-immer auf den Quelltext, den der Benutzer tatsächlich geschrieben hat, nicht auf
-den expandierten Makrotext.
-
-Das Location-Mapping erfolgt schrittweise über die gesamte Source-Kette und ist
-dadurch unabhängig von der Anzahl verschachtelter Makroexpandierungen oder
-Include-Dateien.
-
-Referenzimplementierung
+Referenzimplementierungen:
 - `/src/server/source/source.ts`
+- `/src/server/source/expandedSource.ts`
 - `/src/server/source/fileSource.ts`
-- `/src/server/source/macroSource.ts`
-
+- `/src/server/core/sourceOffset.ts`
 ---
 
 ## ConditionStack
@@ -724,8 +753,9 @@ Jeder Eintrag beschreibt den Zustand eines geöffneten
 
 Blocks.
 
-Der Stack entscheidet ausschließlich darüber, ob Tokens aktuell verarbeitet oder
-übersprungen werden.
+Der Stack entscheidet darüber, ob die Eingabe aktuell verarbeitet oder
+übersprungen wird. Aus deaktivierten Zweigen dürfen keine compilerseitig
+wirksamen Textfragmente oder Kommentare entstehen.
 
 Die eigentliche Makroverwaltung bleibt davon vollständig unabhängig.
 
@@ -753,43 +783,57 @@ Sie erscheinen niemals im AST.
 
 ---
 
-## Tokenstrom transformieren
+## Vollständigen Quelltext erzeugen
 
-Der Präprozessor verarbeitet den vom Lexer erzeugten Tokenstrom.
+Der erste Lexer erkennt die ursprünglichen Präprozessordirektiven und die
+Kommentare im Eingabetext. Der externe Präprozessor verarbeitet diesen
+Tokenstrom, entfernt Direktiven und inaktive Zweige, expandiert Makros
+zeichenweise und fügt Includes ein. Dabei erhält er notwendige
+Zeilenumbrüche und unveränderten Whitespace, ohne Trennzeichen zwischen
+Makrofragmenten zu erfinden.
 
-Dabei entfernt er sämtliche Präprozessordirektiven aus dem Tokenstrom und
-führt deren Wirkung unmittelbar aus.
+`ExternalPreprocessorResult` umfasst:
 
-Beispiele:
+- `source`: den vollständig expandierten Text als `ExpandedSource`,
+- `macroReferences`: Referenzen für die LSP-Makronavigation,
+- `conditionalBlocks`: Metadaten bedingter Übersetzung.
 
-- `#define` erzeugt oder verändert Makrodefinitionen.
-- `#undef` entfernt Makrodefinitionen.
-- `#ifdef` und `#ifndef` steuern die bedingte Übersetzung.
-- `#include` ersetzt sich durch den Inhalt der eingebundenen Datei.
+Der Validator lexikalisiert die gesamte `ExpandedSource` mit einem **zweiten
+PEARL-Lexer** und übergibt dessen Tokens über `ArrayTokenStream` an den Parser.
+Compiler und LSP beziehen Makroreferenzen aus
+`ExternalPreprocessorResult.macroReferences`; parallele veraltete
+Referenzsammlungen dürfen nicht zur primären Quelle werden.
 
-Der Parser erhält ausschließlich den bereits präprozessierten Tokenstrom.
-
-Er verarbeitet daher niemals Präprozessordirektiven oder deren Syntax.
-
-Der Präprozessor bildet damit die klare Trennstelle zwischen lexikalischer
-Analyse und eigentlicher Sprachgrammatik.
-
+Referenzimplementierungen:
+- `/src/server/preproc/preprocessor.ts`
+- `/src/server/preproc/externalPreprocessorResult.ts`
+- `/src/server/validation/validator.ts`
 ---
 
-## Präprozessor als Tokenstrom-Transformation
+## Einheitliche Textpipeline und Kompatibilitätsadapter
 
-Der Präprozessor arbeitet ausschließlich auf Tokenebene.
+Die maßgebliche externe Verarbeitung ist `Preprocessor.createExpanded()`:
 
-Er analysiert keine grammatischen Konstrukte und erzeugt keinen AST.
+```text
+Originaldatei
+  -> erster Lexer (Präprozessordirektiven und Originalkommentare)
+  -> externer Präprozessor (Makros, Bedingungen, Includes)
+  -> ExternalPreprocessorResult / ExpandedSource
+  -> zweiter Lexer (vollständige PEARL-Lexik)
+  -> TokenStream / Parser -> AST -> Semantik -> LSP
+```
 
-Seine Ein- und Ausgabe sind jeweils Tokenströme.
+`Preprocessor.create()` bleibt als Kompatibilitätseinstieg für vorhandene
+Parser- und Semantiktests erhalten, führt jedoch **dieselbe Textpipeline** aus
+und liefert erst nach dem zweiten Lexer einen `TokenStream` zurück.
+Es darf keine zweite tokenbasierte Makroexpansionslogik daneben entstehen.
 
-Dadurch bleiben Präprozessor und Parser vollständig unabhängig voneinander.
+Der Präprozessor kennt keine PEARL-Grammatik und erzeugt keinen AST. Damit
+bleiben die Verantwortlichkeiten von Präprozessor, Lexer und Parser getrennt.
 
-Referenzimplementierung:
+Referenzimplementierungen:
 - `/src/server/preproc/preprocessor.ts`
-- `/src/server/lexer/tokenStream.ts`
-
+- `/src/server/lexer/arrayTokenStream.ts`
 ---
 
 ## Informationen für den LSP erhalten
@@ -875,11 +919,13 @@ eine Position im Quelltext.
 
 ### Compilersicht
 
-Die Compilersicht beschreibt die Position eines Tokens innerhalb des aktuell
-verarbeiteten Tokenstroms.
+Die Compilersicht beschreibt nach der externen Präprozessierung die Position
+im vollständig expandierten Text (`ExpandedSource`). Der zweite Lexer und die
+compilerseitige Kommentarverarbeitung verwenden diese gemeinsame Quelle.
 
-Diese Position ist für Compilerphasen wie Präprozessor und Parser maßgeblich,
-da sie den tatsächlich analysierten Tokenstrom widerspiegelt.
+Originaltokens des ersten Lexers besitzen dagegen Positionen in der jeweiligen
+Eingabe-`Source`. Solche Positionen dürfen nicht ohne explizite Zuordnung mit
+Offsets aus der `ExpandedSource` verglichen werden.
 
 ### Editorsicht
 
@@ -902,7 +948,10 @@ aktuellen `Source`.
 Die Abbildung auf die ursprüngliche Quelldatei erfolgt bewusst nicht
 automatisch.
 
-Stattdessen wird sie bei Bedarf explizit über `Source.mapLocation()` durchgeführt.
+Stattdessen wird sie bei Bedarf explizit über `Source.mapLocation()` bzw.
+`mapToOriginalLocation()` durchgeführt. Wenn mehrere Ursprungsbereiche
+benötigt werden, stehen ergänzend `Source.mapLocations()` und
+`mapToOriginalLocations()` zur Verfügung.
 
 Dadurch kann jede Compilerphase selbst entscheiden, welche Sicht auf den
 Quelltext benötigt wird.
@@ -932,66 +981,68 @@ Referenzimplementierung:
 
 ## Source-Mapping
 
-Eine `Location` beschreibt zunächst die Position innerhalb der aktuellen
-`Source`.
+Die Tokens des zweiten Lexers besitzen `Location`s in der `ExpandedSource`.
+Diese Positionen sind für zusammenhängende compilerseitige Analysen geeignet.
 
-Bei Makroexpandierungen oder Include-Dateien entspricht diese Position daher
-nicht zwangsläufig der ursprünglichen Position im Quelltext.
+Für LSP-Ausgaben wird die Herkunft explizit über
+`mapToOriginalLocation()` ermittelt. `mapToOriginalLocations()` kann bei
+Fragmenten mit unterschiedlicher Herkunft zusätzlich alle ursprünglichen
+Bereiche erhalten. Eine einzelne `Location` kann solche nicht zusammenhängenden
+Ursprünge nicht vollständig repräsentieren.
 
-Über `Source.mapLocation()` kann eine `Location` schrittweise auf ihre
-Ursprungsquelle zurückgeführt werden.
+Parser und AST behalten die vorhandenen Regeln für `SourceValue` und originale
+Editorpositionen. Wo die Auswertung *lexikalische Nachbarschaft* im expandierten
+Text benötigt (insbesondere die Zuordnung von Parameternamen aus Kommentaren),
+steht die lexikalische Position zusätzlich zur Verfügung.
 
-Dadurch verweisen Editorfunktionen wie
-
-- Hover
-- Go to Definition
-- Peek Definition
-- Diagnosen
-
-stets auf den Quelltext, den der Benutzer tatsächlich geschrieben hat.
-
-Compilerinterne Analysen können dagegen bewusst auf den expandierten
-Quelltextpositionen arbeiten, sofern dies zweckmäßig ist.
-
+Referenzimplementierungen:
+- `/src/server/core/sourceOffset.ts`
+- `/src/server/core/sourceValue.ts`
+- `/src/server/parser/parserBase.ts`
 ---
 
-## Kommentare gehören zum Quelltext
+## Zwei Kommentarsichten
 
-Kommentare gehören nicht zur Grammatik.
+Kommentare gehören nicht zur PEARL-Grammatik. In der Präprozessorpipeline
+gibt es jedoch **zwei bewusst unterschiedliche Kommentarsichten**:
 
-Der Parser erhält deshalb keine Kommentartoken.
+- **Originalkommentare:** Der erste Lexer erkennt Kommentare im geschriebenen
+  Quelltext. Diese Sicht wird für editorbezogene Funktionen wie Folding und
+  die Anzeige ursprünglich geschriebener Kommentare benötigt.
+- **Compilerkommentare:** Der zweite Lexer erkennt Kommentare im vollständig
+  expandierten Text. Nur diese Sicht ist maßgeblich für compilerseitige
+  Optionen, semantische Auswertungen und die Dokumentation von Parametern.
 
-Editorrelevante Kommentare werden jedoch während der lexikalischen Analyse
-gesammelt.
+Durch Makroexpansion erzeugte `/*`- und `*/`-Grenzen gehören zur zweiten Sicht.
+Kommentare in deaktivierten Präprozessorzweigen dürfen die Compilersicht nicht
+beeinflussen. Compiler-Steuerkommentare und AST-Positionen müssen für direkte
+Positionsvergleiche auf dieselbe `Source` bezogen sein.
 
-Dazu gehören insbesondere
-
-- Blockkommentare
-- Compiler-Steuerkommentare (`/*+...*/`, `/*-...*/`)
-
-Diese Informationen stehen später beispielsweise für Folding oder Hover zur
-Verfügung.
-
+Referenzimplementierungen:
+- `/src/server/validation/validator.ts`
+- `/src/server/validation/analysis.ts`
 ---
 
 ## Whitespace und Kommentare
 
-Leerzeichen und Tabulatoren besitzen keine syntaktische Bedeutung und werden
-vom Lexer verworfen.
+Leerzeichen und Tabulatoren besitzen in der PEARL-Grammatik gewöhnlich keine
+syntaktische Bedeutung. Für die **Textexpansion** ist ihr Erhalt jedoch wichtig:
+Der externe Präprozessor übernimmt unveränderte Zwischenräume und notwendige
+Zeilenumbrüche aus dem Originaltext.
 
-Zeilenumbrüche und Kommentare werden dagegen als eigene Token erzeugt.
+Zeilenumbrüche und Kommentare werden als eigene Tokens erkannt. Der Parser
+überspringt solche Trivia im Allgemeinen mit `skipTrivia()`; die endgültige
+Tokenisierung erfolgt aber erst nach dem Zusammenbau des gesamten Textes.
 
-Dadurch können nachfolgende Compilerphasen selbst entscheiden, ob diese
-Informationen benötigt oder ignoriert werden.
-
-Der Parser überspringt diese Token im Allgemeinen mit `skipTrivia()`.
+Insbesondere darf der Präprozessor an Fragmentgrenzen weder bestehende
+Trennung unabsichtlich verlieren noch zusätzliche Trennung erfinden.
 
 ---
 
 ## Präprozessordirektiven
 
-Präprozessordirektiven werden bereits vom Lexer erkannt und als eigene
-Tokenarten erzeugt.
+Externe Präprozessordirektiven werden vom **ersten** Lexer erkannt und als
+eigene Tokenarten erzeugt.
 
 Beispiele:
 
@@ -1005,8 +1056,8 @@ Der Lexer interpretiert diese Direktiven jedoch nicht.
 
 Ihre Verarbeitung erfolgt ausschließlich im Präprozessor.
 
-Der Parser erhält Präprozessordirektiven niemals zu Gesicht, da sie bereits vom
-Präprozessor vollständig verarbeitet wurden.
+Der Parser erhält diese Direktiven niemals zu Gesicht, da sie vor dem
+zweiten Lexer vom externen Präprozessor vollständig verarbeitet wurden.
 
 ---
 
@@ -1463,45 +1514,37 @@ obwohl beide zum selben `ModuleNode` gehören.
 
 ## Hover
 
-Hover wird vollständig durch den AST gesteuert.
+Für PEARL-Sprachelemente wird Hover über die Positionssuche im AST und
+`DocumentationProvider` realisiert. Das Ergebnis wird als `AstLookupResult`
+weitergegeben; ein Provider beschreibt dabei seine eigene AST-Struktur.
 
-Die Positionssuche erfolgt über
+Präprozessorkonstrukte sind **keine AST-Knoten**. Ihre Hover-Informationen
+werden aus den eigens erhaltenen Makroreferenzen bzw. Metadaten bedingter
+Übersetzung gewonnen. Diese Erkennung muss vor einem irreführenden AST-Lookup
+in den expandierten Text möglich sein.
 
-```ts
-lookupSourceValue(offset)
-```
-
-Das Ergebnis wird als `AstLookupResult` an den
-`DocumentationProvider` übergeben.
-
-Der `DocumentationProvider` beschreibt ausschließlich seinen eigenen
-AST-Knoten.
-
-Referenzimplementierung:
+Referenzimplementierungen:
 - `/src/server/documentation/documentationProvider.ts`
-- `/src/server/documentation/moduleDocumentationProvider.ts`
-- `/src/server/ast/moduleNode.ts`
-- `src/server/documentation/macroDocumentationProvider.ts`
+- `/src/server/documentation/macroDocumentationProvider.ts`
 - `/src/server/ast/astLookupResult.ts`
 - `/src/server/server.ts`
-
 ---
 
 ## Go to Definition
 
-Go to Definition verwendet dieselbe Positionssuche wie Hover.
+Für normale PEARL-Sprachelemente nutzt die Navigation die AST-Positionssuche,
+die Semantik und die Symbolbindung.
 
-Nach dem Lookup entscheidet ausschließlich das gefundene Sprachelement,
-ob eine Definition existiert und wohin navigiert werden kann.
+Für Makroverwendungen wird zuerst die vom Präprozessor überlieferte
+`MacroReference` ausgewertet. Ihre originale Verwendungsposition kann sonst
+mit einem ganz anderen, aus der Makroexpansion entstandenen AST-Sprachelement
+zusammenfallen. Erst wenn keine Präprozessorreferenz zutrifft, greift die
+semantische Navigation.
 
-Dadurch unterscheiden sich Hover und Go to Definition lediglich in der
-abschließenden Auswertung.
-
-Referenzimplementierung:
-- `/src/server/ast/moduleNode.ts`
+Referenzimplementierungen:
 - `/src/server/ast/astLookupResult.ts`
+- `/src/server/preproc/macroReference.ts`
 - `/src/server/server.ts`
-
 ---
 
 ## Folding
@@ -1552,9 +1595,9 @@ Compilerinformationen verwenden.
 
 Beispiele:
 
-- Hover → AST
-- Go to Definition → Symboltabelle
-- Folding → AST und Blockkommentare
+- Hover → AST/DocumentationProvider oder Präprozessormetadaten
+- Go to Definition → Symbolbindung oder Makroreferenzen
+- Folding → AST, Originalkommentare und Präprozessorinformationen
 - Semantic Tokens → AST und Semantik
 
 Es sollen keine editor­spezifischen Parallelstrukturen aufgebaut werden.

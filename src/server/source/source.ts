@@ -16,4 +16,12 @@ export interface Source {
     getText(span?: Span): string;
 
     mapLocation(location: Location): Location;
+
+    /**
+     * Optional multi-origin mapping for composite sources.
+     * Unlike mapLocation(), this retains every contributing source region.
+     * Locations are returned in expanded-text order; they can still refer to
+     * an intermediate Source and therefore require transitive mapping.
+     */
+    mapLocations?(location: Location): readonly Location[];
 }

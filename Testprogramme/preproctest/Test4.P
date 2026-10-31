@@ -1,0 +1,10 @@
+MODULE Test4;
+PROBLEM;
+
+#define Start "/*"
+#define Ende "*/"
+#define Inhalt "Start 0:40 Ende"
+
+SPC Feld(Inhalt) FIXED GLOBAL;
+
+MODEND;

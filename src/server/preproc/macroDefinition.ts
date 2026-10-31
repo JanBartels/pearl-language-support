@@ -9,6 +9,9 @@ export interface MacroDefinition {
 
     readonly replacement: string | null;
 
+    /** Literal contents between the quotes of a source #define, if available. */
+    readonly replacementLocation?: Location;
+
     readonly location?: Location;
 
     /** The #define keyword, if introduced in source (not through settings). */
