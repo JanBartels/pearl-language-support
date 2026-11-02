@@ -12,6 +12,8 @@ import { ReturnStatementParser } from "./returnStatementParser";
 import { GotoStatementParser } from "./gotoStatementParser";
 import { IdentifierStatementTailParser } from "./identifierStatementTailParser";
 import { EmptyStatementNode } from "../../../ast/problem/statements/emptyStatementNode";
+import { SynchronizationStatementParser } from "./synchronizationStatementParser";
+import { SemaSetStatementParser } from "./semaSetStatementParser";
 import { AssignmentParser } from "./assignmentParser";
 
 /** All nested statement constructs are dispatched through this common entry point. */
@@ -34,6 +36,14 @@ export class StatementParser extends ParserBase {
 
         if (this.isKeyword("CASE")) {
             return new CaseStatementParser(this.context).parse();
+        }
+
+        if (this.isKeyword(["REQUEST", "RELEASE", "ENTER", "LEAVE", "RESERVE", "FREE"])) {
+            return new SynchronizationStatementParser(this.context).parse();
+        }
+
+        if (this.isKeyword("SEMASET")) {
+            return new SemaSetStatementParser(this.context).parse();
         }
 
         if (this.isKeyword("CALL")) {

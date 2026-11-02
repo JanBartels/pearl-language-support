@@ -1,0 +1,21 @@
+P=MPC603;
+SC=2000;
+
+MODULE M;
+PROBLEM;
+
+TYPE Inner STRUCT[
+    Lock SEMA
+];
+
+TYPE Outer STRUCT[
+    Part Inner,
+    Pointer REF BOLT
+];
+
+Worker: PROC;
+    DCL Local Outer;
+    DCL Pointer REF SEMA;
+END;
+
+MODEND;

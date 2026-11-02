@@ -33,6 +33,8 @@ import { validateProcedureActualParameters, validateBuiltinIdentificationParamet
 import type { CharacterTransferDiagnosticContext } from './procedureActualParameterValidator';
 import { matchBuiltinSignature } from './builtins/builtinSignature';
 import { ProcedureParameterNameIndex } from './procedureParameterNameIndex';
+import { SynchronizationStatementNode } from '../ast/problem/statements/synchronizationStatementNode';
+import { SemaSetStatementNode } from '../ast/problem/statements/semaSetStatementNode';
 import { CallStatementNode } from '../ast/problem/statements/callStatementNode';
 import { RepetitionNode } from '../ast/problem/statements/repetitionNode';
 import { RepetitionExpressionClauseNode } from '../ast/problem/statements/repetitionExpressionClauseNode';
@@ -1174,6 +1176,17 @@ class SemanticAnalysisState implements
         });
     }
 
+    reportLocalSynchronizationObject(name: SourceValue<string>, typeName: string, parameter: boolean): void {
+        this.addDiagnostic({
+            code: SemanticDiagnosticCode.LocalSynchronizationObject,
+            severity: SemanticDiagnosticSeverity.Warning,
+            location: name.location,
+            message: parameter
+                ? `Wertparameter '${name.value}' enthält ${typeName}; für taskübergreifende Synchronisation REF oder IDENT verwenden.`
+                : `Lokales Objekt '${name.value}' enthält ${typeName} und ist für andere Tasks nicht erreichbar.`
+        });
+    }
+
     reportInvalidDeclarationScope(keyword: SourceValue<string>, typeName: string): void {
         this.addDiagnostic({
             code: SemanticDiagnosticCode.InvalidDeclarationScope,
@@ -1872,6 +1885,19 @@ export class SemanticAnalyzer {
             return this.analyzeChildren(node, environment, state);
         }
 
+        if (node.kind === AstKind.SemaSetStatement) {
+            if (environment) this.analyzeSemaSetStatement(node as SemaSetStatementNode, environment, state);
+            return environment;
+        }
+
+        if (node.kind === AstKind.SynchronizationStatement) {
+            if (environment) {
+                this.analyzeSynchronizationStatement(
+                    node as SynchronizationStatementNode, environment, state);
+            }
+            return environment;
+        }
+
         if (node.kind === AstKind.Assignment) {
             if (!environment) throw new Error('Assignment without semantic environment.');
             this.analyzeAssignment(node as AssignmentNode, environment, state);
@@ -2184,6 +2210,15 @@ export class SemanticAnalyzer {
             }
             return [parameter, type] as const;
         }));
+        for (const parameter of node.parameters) {
+            if (parameter.identKeyword) continue;
+            const type = parameterTypes.get(parameter);
+            const synchronizationType = type && this.containedSynchronizationType(type, state);
+            if (!synchronizationType) continue;
+            for (const name of parameter.identifiers?.identifiers ?? []) {
+                state.reportLocalSynchronizationObject(name, synchronizationType, true);
+            }
+        }
         const signature: ProcedureType = {
             kind: SemanticTypeKind.Procedure,
             parameters: node.parameters.flatMap(parameter =>
@@ -2271,6 +2306,73 @@ export class SemanticAnalyzer {
      * address/reference; with CONT the referenced value is assigned. Both
      * cases share the transfer checks used by parameter and RETURN semantics.
      */
+    private analyzeSemaSetStatement(
+        node: SemaSetStatementNode,
+        environment: Environment,
+        state: SemanticAnalysisState
+    ): void {
+        if (node.value) {
+            const type = state.expressionTypeResolver.resolve(node.value, environment);
+            const actual = type && state.resolveUnderlyingType(type);
+            if (actual && actual.kind !== SemanticTypeKind.Reference
+                && actual.kind !== SemanticTypeKind.VoidReference
+                && (actual.kind !== SemanticTypeKind.Fixed || (actual.precision ?? 15) !== 15)
+                && node.keyword.location) {
+                state.diagnostics.push({
+                    code: SemanticDiagnosticCode.InvalidSemaSetValue,
+                    severity: SemanticDiagnosticSeverity.Error,
+                    location: node.keyword.location,
+                    message: 'SEMASET erwartet einen FIXED(15)-Ausdruck.'
+                });
+            }
+        }
+        if (node.sema) {
+            const type = state.expressionTypeResolver.resolve(node.sema, environment);
+            const underlying = type && state.resolveUnderlyingType(type);
+            const actual = underlying?.kind === SemanticTypeKind.Reference
+                ? state.resolveUnderlyingType(underlying.target) : underlying;
+            if (actual && actual.kind !== SemanticTypeKind.Sema) {
+                const source = node.sema.segments[node.sema.segments.length - 1]?.identifier;
+                if (source?.location) state.diagnostics.push({
+                    code: SemanticDiagnosticCode.InvalidSynchronizationOperand,
+                    severity: SemanticDiagnosticSeverity.Error,
+                    location: source.location,
+                    message: 'SEMASET erwartet einen SEMA-Operanden.'
+                });
+            }
+        }
+    }
+
+    private analyzeSynchronizationStatement(
+        node: SynchronizationStatementNode,
+        environment: Environment,
+        state: SemanticAnalysisState
+    ): void {
+        const expected = node.keyword.value === 'REQUEST' || node.keyword.value === 'RELEASE'
+            ? SemanticTypeKind.Sema : SemanticTypeKind.Bolt;
+        for (const operand of node.operands) {
+            const type = state.expressionTypeResolver.resolve(operand, environment);
+            if (!type) continue; // Independent resolution diagnostics are authoritative.
+            const underlying = state.resolveUnderlyingType(type);
+            // Access through a reference is permitted; other access paths are
+            // resolved by the shared expression type resolver.
+            const actual = underlying?.kind === SemanticTypeKind.Reference
+                ? state.resolveUnderlyingType(underlying.target) : underlying;
+            if (!actual) continue;
+            if (actual.kind !== expected) {
+                const source = operand.segments[operand.segments.length - 1]?.identifier;
+                if (source?.location) {
+                    state.diagnostics.push({
+                        code: SemanticDiagnosticCode.InvalidSynchronizationOperand,
+                        severity: SemanticDiagnosticSeverity.Error,
+                        location: source.location,
+                        message: `${node.keyword.value} erwartet einen ${expected === SemanticTypeKind.Sema ? 'SEMA' : 'BOLT'}-Operanden.`
+                    });
+                }
+            }
+        }
+    }
+
     private analyzeAssignment(
         node: AssignmentNode,
         environment: Environment,
@@ -2734,6 +2836,15 @@ export class SemanticAnalyzer {
             )
             : undefined;
 
+        if (environment.scope.kind !== ScopeKind.Module) {
+            const synchronizationType = this.containedSynchronizationType(type, state);
+            if (synchronizationType) {
+                for (const identifier of node.identifiers.identifiers) {
+                    state.reportLocalSynchronizationObject(identifier, synchronizationType, false);
+                }
+            }
+        }
+
         return this.introduceDeclaredDataObjects(
             node.identifiers,
             type,
@@ -2747,6 +2858,32 @@ export class SemanticAnalyzer {
         );
     }
 
+    /** Follow value-contained components, but never cross a REF boundary. */
+    private containedSynchronizationType(
+        type: SemanticType,
+        state: SemanticAnalysisState,
+        visited: Set<SemanticType> = new Set()
+    ): 'SEMA' | 'BOLT' | undefined {
+        const actual = state.resolveUnderlyingType(type);
+        if (!actual || visited.has(actual)) return undefined;
+        visited.add(actual);
+        switch (actual.kind) {
+            case SemanticTypeKind.Sema: return 'SEMA';
+            case SemanticTypeKind.Bolt: return 'BOLT';
+            case SemanticTypeKind.Array:
+            case SemanticTypeKind.VirtualArray:
+                return this.containedSynchronizationType(actual.elementType, state, visited);
+            case SemanticTypeKind.Struct:
+                for (const component of actual.components) {
+                    const found = this.containedSynchronizationType(component.type, state, visited);
+                    if (found) return found;
+                }
+                return undefined;
+            default:
+                return undefined;
+        }
+    }
+
     private analyzeSynchronizationDeclaration(
         node: DclDeclarationSentenceNode,
         attribute: SemaAttributeNode | BoltAttributeNode,
@@ -2756,7 +2893,9 @@ export class SemanticAnalyzer {
         state: SemanticAnalysisState
     ): Environment {
         if (environment.scope.kind !== ScopeKind.Module) {
-            state.reportInvalidDeclarationScope(attribute.keyword, typeName);
+            for (const identifier of node.identifiers.identifiers) {
+                state.reportLocalSynchronizationObject(identifier, typeName, false);
+            }
         }
 
         let type = baseType;
@@ -3058,7 +3197,9 @@ export class SemanticAnalyzer {
         state: SemanticAnalysisState
     ): Environment {
         if (environment.scope.kind !== ScopeKind.Module) {
-            state.reportInvalidDeclarationScope(attribute.keyword, typeName);
+            for (const identifier of node.identifiers.identifiers) {
+                state.reportLocalSynchronizationObject(identifier, typeName, false);
+            }
         }
 
         let type = baseType;

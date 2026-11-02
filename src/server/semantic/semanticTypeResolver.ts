@@ -5,6 +5,7 @@ import { SourceValue } from "../core/sourceValue";
 
 import { ProcedureSignatureNode } from '../ast/problem/procedures/procedureSignatureNode';
 import { ProcedureReferenceTargetNode } from '../ast/problem/types/procedureReferenceTargetNode';
+import { SynchronizationTypeNode } from "../ast/problem/types/synchronizationTypeNode";
 import { SynchronizationReferenceTargetNode } from '../ast/problem/types/synchronizationReferenceTargetNode';
 import { ProcedureParameterTypeNode } from '../ast/problem/declarations/procedureParameterTypeNode';
 import { FormalParameterTypeNode } from '../ast/problem/declarations/formalParameterNode';
@@ -82,6 +83,11 @@ export class SemanticTypeResolver {
     resolve( node: ProblemDataTypeNode, environment: Environment ): SemanticType | undefined {
 
         switch (node.kind) {
+
+            case AstKind.SynchronizationType:
+                return { kind: (node as SynchronizationTypeNode).keyword.value === "SEMA"
+                    ? SemanticTypeKind.Sema
+                    : SemanticTypeKind.Bolt };
 
             case AstKind.SimpleType:
                 return this.resolveSimpleType( node as SimpleTypeNode, environment );

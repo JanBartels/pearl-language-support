@@ -4,6 +4,7 @@
 import { ExpressionNode } from '../../../ast/problem/expressions/expressionNode';
 import { DyadicExpressionNode } from '../../../ast/problem/expressions/dyadicExpressionNode';
 import { MonadicExpressionNode } from '../../../ast/problem/expressions/monadicExpressionNode';
+import { TryExpressionNode } from '../../../ast/problem/expressions/tryExpressionNode';
 import { ParenthesizedExpressionNode } from '../../../ast/problem/expressions/parenthesizedExpressionNode';
 import { LiteralExpressionNode } from '../../../ast/problem/expressions/literalExpressionNode';
 import { ParserBase } from '../../parserBase';
@@ -81,6 +82,13 @@ export class ExpressionParser extends ParserBase {
 
     private parseMonadicOrOperand(): ExpressionNode | undefined {
         this.skipTrivia();
+        if (this.isKeyword('TRY')) {
+            const keyword = this.tokenValue(this.current());
+            this.next();
+            const sema = new NameExpressionParser(this.context).parse();
+            if (!sema) this.problems.error(this.location(), 'Expected SEMA name after TRY.');
+            return new TryExpressionNode(keyword, sema);
+        }
         const operator = this.acceptOperator(['+', '-'])
             ?? this.acceptKeyword(MONADIC_OPERATORS);
         if (operator) {

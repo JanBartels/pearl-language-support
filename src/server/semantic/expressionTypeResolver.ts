@@ -11,6 +11,7 @@ import { NameExpressionNode } from '../ast/problem/expressions/nameExpressionNod
 import type { NameSegmentNode } from '../ast/problem/expressions/nameSegmentNode';
 import { ParenthesizedExpressionNode } from '../ast/problem/expressions/parenthesizedExpressionNode';
 import { MonadicExpressionNode } from '../ast/problem/expressions/monadicExpressionNode';
+import { TryExpressionNode } from '../ast/problem/expressions/tryExpressionNode';
 import { DyadicExpressionNode } from '../ast/problem/expressions/dyadicExpressionNode';
 import type { Environment } from './environment';
 import type { ClockConstantValue, DurationConstantValue } from './semanticConstantValue';
@@ -98,6 +99,9 @@ export class ExpressionTypeResolver {
                 break;
             case AstKind.ParenthesizedExpression:
                 type = this.resolve((node as ParenthesizedExpressionNode).expression, environment);
+                break;
+            case AstKind.TryExpression:
+                type = this.tryExpression(node as TryExpressionNode, environment);
                 break;
             case AstKind.MonadicExpression:
                 type = this.monadic(node as MonadicExpressionNode, environment);
@@ -418,6 +422,20 @@ export class ExpressionTypeResolver {
     /** Diagnostics refer to actual source values, never to a synthetic AST location. */
     private argumentDiagnosticSource(node: ExpressionNode): SourceValue<string> | undefined {
         return expressionSource(node);
+    }
+
+    private tryExpression(node: TryExpressionNode, environment: Environment): SemanticType | undefined {
+        if (!node.sema) return undefined;
+        const resolved = this.resolve(node.sema, environment);
+        const underlying = resolved && this.context.resolveUnderlyingType(resolved);
+        const actual = underlying?.kind === SemanticTypeKind.Reference
+            ? this.context.resolveUnderlyingType(underlying.target) : underlying;
+        if (!actual) return undefined; // Name-resolution diagnostics already reported.
+        if (actual.kind !== SemanticTypeKind.Sema) {
+            this.context.reportInvalidExpressionOperands(node.keyword);
+            return undefined;
+        }
+        return { kind: SemanticTypeKind.Bit, length: 1 };
     }
 
     private monadic(node: MonadicExpressionNode, environment: Environment): SemanticType | undefined {

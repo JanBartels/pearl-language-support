@@ -27,6 +27,7 @@ export enum AstKind {
     NameArgumentList,
     ParenthesizedExpression,
     MonadicExpression,
+    TryExpression,
     DyadicExpression,
     ConstantFixedExpression,
     ConstantFixedTerm,
@@ -39,6 +40,7 @@ export enum AstKind {
     VirtualDimensionList,
 
     SimpleType,
+    SynchronizationType,
     NamedType,
 
     ProblemDataAttribute,
@@ -89,6 +91,8 @@ export enum AstKind {
     LabeledStatement,
     EmptyStatement,
 
+    SynchronizationStatement,
+    SemaSetStatement,
     Assignment,
     Operator,
     Literal,

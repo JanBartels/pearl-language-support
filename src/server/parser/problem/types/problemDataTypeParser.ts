@@ -5,6 +5,7 @@ import { ParserBase } from "../../parserBase";
 
 import { ProblemDataTypeNode } from "../../../ast/problem/types/problemDataTypeNode";
 
+import { SynchronizationTypeParser } from "./synchronizationTypeParser";
 import { SimpleTypeParser } from "./simpleTypeParser";
 import { StructTypeParser } from "./structTypeParser";
 import { NamedTypeParser } from "./namedTypeParser";
@@ -29,6 +30,11 @@ export class ProblemDataTypeParser extends ParserBase {
         const refType = new RefTypeParser( this.context ).parse();
         if (refType) {
             return refType;
+        }
+
+        const synchronizationType = new SynchronizationTypeParser(this.context).parse();
+        if (synchronizationType) {
+            return synchronizationType;
         }
 
         return new NamedTypeParser( this.context ).parse();
