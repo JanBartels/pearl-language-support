@@ -193,6 +193,14 @@ export function isTypeAssignable(
 ): boolean {
     if (semanticTypeEquals(target, source, lengths)) return true;
 
+    // RTOS-UH permits a generic REF STRUCT[] (VOID REF) value to be stored
+    // in a typed REF destination. This does not establish type identity:
+    // IDENT and REF PROC signature comparisons remain exact.
+    if (target.kind === SemanticTypeKind.Reference
+        && source.kind === SemanticTypeKind.VoidReference) {
+        return target.targetInvariant || !source.targetInvariant;
+    }
+
     // A read-only reference can point to a writable object, but never vice versa.
     if (target.kind === SemanticTypeKind.Reference
         && source.kind === SemanticTypeKind.Reference) {
@@ -364,16 +372,35 @@ export function characterTruncationForValueTransfer(
 }
 
 /**
- * Assignment compatibility is currently the same as transfer by value.
- * In RTOS-UH, copying a CHAR value truncates or blank-pads in both assignments
- * and non-IDENT parameter passing. Keep the named entry point so any future
- * assignment-only rules can remain separate from the shared transfer rules.
+ * Assignment compatibility is distinct from parameter value transfer.
+ * FIXED/FLOAT assignments demand matching precision; BIT/CHAR assignments
+ * truncate or pad. The existing parameter rules are not changed here.
  */
 export function isAssignmentValueCompatible(
     target: SemanticType,
     source: SemanticType,
     lengths: SimpleTypeLengths = RTOS_UH_DEFAULT_TYPE_LENGTHS
 ): boolean | undefined {
+    // RTOS-UH distinguishes precision from string length in assignments:
+    // FIXED/FLOAT require matching precisions (use FIT explicitly); BIT values
+    // are truncated or zero-padded. CHAR values are truncated or blank-padded
+    // by the existing scalar transfer rule. Neither rule relaxes IDENT.
+    const to = canonicalizeSemanticType(target, lengths);
+    const from = canonicalizeSemanticType(source, lengths);
+    const fromValue = from.kind === SemanticTypeKind.Reference
+        ? canonicalizeSemanticType(from.target, lengths) : from;
+    if (to.kind === SemanticTypeKind.Fixed && fromValue.kind === SemanticTypeKind.Fixed)
+        return to.precision === fromValue.precision;
+    if (to.kind === SemanticTypeKind.Float && fromValue.kind === SemanticTypeKind.Float)
+        return to.precision === fromValue.precision;
+    if (to.kind === SemanticTypeKind.Bit && fromValue.kind === SemanticTypeKind.Bit)
+        return true;
+    // RTOS-UH total assignment of arrays: preserve rank, extents and element
+    // types. No implicit conversion of distinct element types.
+    if (to.kind === SemanticTypeKind.Array || from.kind === SemanticTypeKind.Array) {
+        return to.kind === SemanticTypeKind.Array && from.kind === SemanticTypeKind.Array
+            && semanticTypeEquals(to, from, lengths);
+    }
     return isValueTransferCompatible(target, source, lengths);
 }
 

@@ -72,8 +72,8 @@ test('dyadic LWB/UPB select any valid dimension and can be used in FOR', () => {
     const loop = r.repetitions[0];
     assert.ok(loop.fromClause?.expression instanceof DyadicExpressionNode);
     assert.ok(loop.toClause?.expression instanceof DyadicExpressionNode);
-    expectFixed(r.semantic.expressionTypes.get(loop.fromClause!.expression!), 31);
-    expectFixed(r.semantic.expressionTypes.get(loop.toClause!.expression!), 31);
+    expectFixed(r.semantic.expressionTypes.get(loop.fromClause!.expression!), 15);
+    expectFixed(r.semantic.expressionTypes.get(loop.toClause!.expression!), 15);
 });
 
 test('a named INV FIXED dimension can select a dimension of a TYPE alias array', () => {
@@ -81,7 +81,7 @@ test('a named INV FIXED dimension can select a dimension of a TYPE alias array',
         R: PROC RETURNS(FIXED(31)); RETURN(Dim UPB A); END;`);
     assert.deepEqual(r.syntax, []);
     assert.deepEqual(r.errors, []);
-    expectFixed(r.semantic.expressionTypes.get(r.returns[0].expression!), 31);
+    expectFixed(r.semantic.expressionTypes.get(r.returns[0].expression!), 15);
 });
 
 test('only constant dimensions outside 1:rank cause a dimension diagnostic', () => {

@@ -5,6 +5,7 @@ import type { Location as LspLocation, Position } from 'vscode-languageserver';
 import { AMBIGUOUS_MACRO_OCCURRENCE, type MacroOccurrenceIndex } from '../preproc/macroOccurrenceIndex';
 import type { DocumentRegistry } from '../utility/documentRegistry';
 import { mapLspLocation } from './lspLocationMapper';
+import { identifierEndFallbackPosition } from './identifierEndFallback';
 
 /**
  * undefined: cursor is not on a macro; []: selected macro has no requested
@@ -20,7 +21,13 @@ export function findMacroReferences(
     const document = registry.get(uri);
     if (!document) return undefined;
 
-    const occurrence = index.lookupAt({ uri, offset: document.offsetAt(position) });
+    let occurrence = index.lookupAt({ uri, offset: document.offsetAt(position) });
+    if (occurrence === undefined) {
+        const fallback = identifierEndFallbackPosition(document, position);
+        if (fallback) {
+            occurrence = index.lookupAt({ uri, offset: document.offsetAt(fallback) });
+        }
+    }
     if (occurrence === undefined) return undefined;
     if (occurrence === AMBIGUOUS_MACRO_OCCURRENCE) return [];
 

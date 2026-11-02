@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
+import { procedureAddressType } from './procedureAddressType';
 import { AstKind } from '../ast/astKind';
 import type { AstNode } from '../ast/astNode';
 import { SourceValue } from '../core/sourceValue';
@@ -2323,12 +2324,8 @@ export class SemanticAnalyzer {
         }
         if (!node.contOperator && object.assignmentProtected === undefined) return;
 
-        // Whole arrays cannot be copied with the scalar/STRUCT assignment.
-        if (target.kind === SemanticTypeKind.Array
-            || target.kind === SemanticTypeKind.VirtualArray) {
-            state.reportInvalidArrayAssignment(source);
-            return;
-        }
+        // RTOS-UH permits total array assignments. Compatibility is checked
+        // below without erasing element types, ranks or known bounds.
 
         // NIL is typeless and can only be assigned in a reference context.
         // Parentheses around NIL don't change that contextual rule.
@@ -2344,8 +2341,13 @@ export class SemanticAnalyzer {
             return;
         }
 
-        if (!expressionType || !node.expression) return;
-        const actual = resolveReferenceTransferType(expressionType,
+        if (!node.expression) return;
+        const address = target.kind === SemanticTypeKind.Reference
+            && target.target.kind === SemanticTypeKind.Procedure
+            ? procedureAddressType(node.expression, environment) : undefined;
+        const actualType = address ?? expressionType;
+        if (!actualType) return;
+        const actual = resolveReferenceTransferType(actualType,
             type => state.resolveUnderlyingType(type));
         if (!actual) return;
         const rightSource = expressionSource(node.expression) ?? node.operator;
@@ -2354,7 +2356,7 @@ export class SemanticAnalyzer {
             const actualObject = classifyObjectExpressionInfo(node.expression, environment,
                 type => state.resolveUnderlyingType(type));
             if (isReferenceTransferCompatible(target, actual, actualObject) === false) {
-                state.reportInvalidAssignmentValueType(rightSource, targetType, expressionType);
+                state.reportInvalidAssignmentValueType(rightSource, targetType, actualType);
             }
             return;
         }
@@ -2362,7 +2364,7 @@ export class SemanticAnalyzer {
         if (compatibility === false) {
             // CONT changes the effective target from REF T to T.
             state.reportInvalidAssignmentValueType(
-                rightSource, node.contOperator ? target : targetType, expressionType
+                rightSource, node.contOperator ? target : targetType, actualType
             );
         } else if (compatibility === true) {
             const truncation = characterTruncationForValueTransfer(target, actual);
@@ -3220,7 +3222,6 @@ export class SemanticAnalyzer {
 
             const symbol: DataObjectSymbol = {
                 kind: SymbolKind.DataObject,
-                declarationScope: environment.scope.kind,
                 name: identifier,
                 definition: identifier,
                 type,
@@ -3265,7 +3266,6 @@ export class SemanticAnalyzer {
             if (requireGlobal) {
                 const symbol: DataObjectSymbol = {
                     kind: SymbolKind.DataObject,
-                    declarationScope: environment.scope.kind,
                     name: identifier,
                     definition: identifier,
                     type,
@@ -3293,7 +3293,6 @@ export class SemanticAnalyzer {
 
             const symbol: DataObjectSymbol = {
                 kind: SymbolKind.DataObject,
-                declarationScope: environment.scope.kind,
                 name: identifier,
                 definition: identifier,
                 type,
@@ -3344,7 +3343,6 @@ export class SemanticAnalyzer {
 
             const symbol: DataObjectSymbol = {
                 kind: SymbolKind.DataObject,
-                declarationScope: environment.scope.kind,
                 name: identifier,
                 definition: systemDeclaration?.name ?? identifier,
                 type,

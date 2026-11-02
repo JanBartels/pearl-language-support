@@ -104,13 +104,12 @@ test('scalar widening uses assignment rules, not strict type identity', () => {
     assert.deepEqual(result.errors, []);
 });
 
-test('numeric and character narrowing are rejected', () => {
+test('numeric value arguments reject narrowing while CHAR values may truncate', () => {
     const result = analyze(`F: PROC(A FLOAT(23), B FIXED(15), C CHAR(2)) RETURNS(FIXED);
         RETURN(1); END;
         R: PROC RETURNS(FIXED); RETURN(F(1.0(55), 3(31), 'abcd')); END;`);
     assert.deepEqual(result.syntax, []);
     assert.deepEqual(result.errors.map(d => d.code), [
-        SemanticDiagnosticCode.InvalidCallArgumentType,
         SemanticDiagnosticCode.InvalidCallArgumentType,
         SemanticDiagnosticCode.InvalidCallArgumentType
     ]);

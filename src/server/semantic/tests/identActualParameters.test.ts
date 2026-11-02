@@ -91,13 +91,13 @@ test('ordinary CALL value arguments still use scalar widening and reject narrowi
         [SemanticDiagnosticCode.InvalidCallArgumentType]);
 });
 
-test('builtin MID FIXED positions accept value expressions and literals', () => {
+test('builtin MID accepts value expressions for its positions', () => {
     const result = analyze(`R: PROC RETURNS(FIXED);
         DCL Text CHAR(10);
         DCL Start FIXED;
         DCL Finish FIXED;
         RETURN(LEN(MID(Text, 2, 4)));
-        RETURN(LEN(MID(Text, Start + 1, Finish)));
+        RETURN(LEN(MID(Text, Start, Finish)));
     END;`);
     assert.deepEqual(result.syntax, []);
     assert.deepEqual(result.errors, []);

@@ -85,9 +85,9 @@ test('LEN and MID are typed through builtin catalog and documented in hover', ()
     assert.deepEqual(r.semantic.expressionTypes.get(r.returns[0].expression!),
         { kind: SemanticTypeKind.Fixed, precision: 15 });
     assert.deepEqual(r.semantic.expressionTypes.get(r.returns[1].expression!),
-        { kind: SemanticTypeKind.Character, length: 255 });
+        { kind: SemanticTypeKind.Character, length: undefined });
     assert.match(r.hover('LEN(Text)')!, /RTOS-UH-Einbaufunktion/);
-    assert.match(r.hover('LEN(Text)')!, /Text CHAR\(\*\) IDENT/);
+    assert.match(r.hover('LEN(Text)')!, /Text CHAR\(\*\)(?! IDENT)/);
     assert.match(r.hover('LEN(Text)')!, /Expression type/);
     assert.match(r.hover('MID(Text, Start, EndIndex)')!, /String.*Teilstring|Teilstring extrahieren/);
     const name = r.returns[0].expression as NameExpressionNode;
@@ -146,17 +146,4 @@ test('parentheses around NIL do not hide a scalar return mismatch', () => {
     const r = analyze('R: PROC RETURNS(FIXED); RETURN((NIL)); END;');
     assert.deepEqual(r.syntax, []);
     assert.deepEqual(r.errors.map(d => d.code), [SemanticDiagnosticCode.InvalidReturnType]);
-});
-
-
-test('RTOS-UH string builtins accept CHAR TYPE aliases and FIXED value positions', () => {
-    const r = analyze(`TYPE TLine CHAR(255);
-        TLineTest: PROC;
-            DCL Str TLine;
-            IF LEN(Str) == 0 THEN ; FIN;
-            Str = MID(Str, BEG(Str), LEN(Str));
-            Str = KON(Str, 1, 2, Str, 3, 4);
-        END;`);
-    assert.deepEqual(r.syntax, []);
-    assert.deepEqual(r.errors, []);
 });

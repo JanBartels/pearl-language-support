@@ -31,9 +31,6 @@ const stringFunction = (name: string, description: string,
     name, description, category: 'function', availability: 'optional', source: 'RTOS-UH 5.7.17',
     signatures: [{ parameters, result: returns(result) }]
 });
-const sliceParams = [p('String1', charAny, true), p('Anfang1', fixed15),
-    p('Ende1', fixed15), p('String2', charAny, true),
-    p('Anfang2', fixed15), p('Ende2', fixed15)];
 
 /**
  * Only routines known *implicitly* to the RTOS-UH PEARL90 compiler belong here.
@@ -72,17 +69,31 @@ export const RTOS_UH_BUILTINS: readonly BuiltinDefinition[] = [
     },
     procedure('REFADD', 'Zeigerarithmetik, keine gewöhnliche Prozedur.', 'RTOS-UH 5.7.9',
         [p('Zeiger', { kind: 'reference' }, true), p('Versatz', fixedEither)]),
-    stringFunction('BEG', 'Erste Nicht-Leerstelle im String.', [p('Text', charAny, true)], fixed15),
-    stringFunction('LEN', 'Letzte Nicht-Leerstelle im String.', [p('Text', charAny, true)], fixed15),
-    stringFunction('INSTR', 'Teilstringsuche.', sliceParams, fixed15),
+    // Virtual, implementation-oriented type signatures for the PEARL90 compiler.
+    // These are NOT valid SPC declarations for PEARL90: the runtime library uses
+    // a special calling convention (RTOS-UH 5.7.17, cf. 8.4 and 8.6).
+    // The IDENT annotations in the handbook's informational PEARL80 signatures
+    // do not describe the actual PEARL90 argument acceptance.
+    stringFunction('BEG', 'Erste Nicht-Leerstelle im String.', [p('string', charAny)], fixed15),
+    stringFunction('INSTR', 'Teilstringsuche.', [
+        p('string1', charAny), p('anf1', fixed15), p('end1', fixed15),
+        p('string2', charAny), p('anf2', fixed15), p('end2', fixed15)
+    ], fixed15),
+    stringFunction('LEN', 'Letzte Nicht-Leerstelle im String.', [p('string', charAny)], fixed15),
     stringFunction('MID', 'Teilstring extrahieren.',
-        [p('Text', charAny, true), p('Anfang', fixed15), p('Ende', fixed15)],
-        { kind: 'character', length: 255 }),
-    stringFunction('KON', 'Teilstrings verbinden.', sliceParams, { kind: 'character', length: 255 }),
-    stringFunction('INSER', 'Teilstring einfügen.', sliceParams, { kind: 'character', length: 255 }),
-    { name: 'CMPW', category: 'function', availability: 'optional',
-        source: 'RTOS-UH 5.7.17', description: 'Strings mit Wildcards vergleichen; Ergebnistyp noch ungeklärt.',
-        signatures: [{ parameters: sliceParams }] },
+        [p('string', charAny), p('anf', fixed15), p('end', fixed15)], charAny),
+    stringFunction('KON', 'Teilstrings verbinden.', [
+        p('string1', charAny), p('anf1', fixed15), p('end1', fixed15),
+        p('string2', charAny), p('anf2', fixed15), p('end2', fixed15)
+    ], charAny),
+    stringFunction('INSER', 'Teilstring einfügen.', [
+        p('string1', charAny), p('anf1', fixed15), p('end1', fixed15),
+        p('string2', charAny), p('anf2', fixed15), p('end2', fixed15)
+    ], charAny),
+    stringFunction('CMPW', 'Strings mit Wildcards vergleichen.', [
+        p('string1', charAny), p('anf1', fixed15), p('end1', fixed15),
+        p('string2', charAny), p('anf2', fixed15), p('end2', fixed15)
+    ], fixed15),
 ];
 
 const catalog = new Map(RTOS_UH_BUILTINS.map(definition => [definition.name, definition]));

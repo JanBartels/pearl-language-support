@@ -7,6 +7,7 @@ import { AstKind } from '../ast/astKind';
 import { LiteralExpressionNode } from '../ast/problem/expressions/literalExpressionNode';
 import { ParenthesizedExpressionNode } from '../ast/problem/expressions/parenthesizedExpressionNode';
 import type { Environment } from './environment';
+import { procedureAddressType } from './procedureAddressType';
 import { classifyObjectExpression, classifyObjectExpressionInfo, expressionSource } from './expressionObject';
 import type { BuiltinSignature } from './builtins/builtinSignature';
 import type { ProcedureType, SemanticType } from './semanticType';
@@ -80,11 +81,18 @@ export function validateProcedureActualParameters(
             }
             continue;
         }
-        if (!actual) {
+        // For a REF PROC formal, a bare procedure name is a procedure
+        // address, not the return value of an implicit function call.
+        const address = expected.kind === SemanticTypeKind.Reference
+            && expected.target.kind === SemanticTypeKind.Procedure
+            ? procedureAddressType(expression, environment) : undefined;
+        const contextualActual = address ?? actual;
+        if (!contextualActual) {
             valid = false;
             continue;
         }
-        const received = resolveReferenceTransferType(actual, type => context.resolveUnderlyingType(type));
+        const received = resolveReferenceTransferType(contextualActual,
+            type => context.resolveUnderlyingType(type));
         if (!received) {
             valid = false;
             continue;
@@ -115,21 +123,16 @@ export function validateProcedureActualParameters(
                 if (object.category !== 'object' || !isReferenceType(received)) {
                     context.reportInvalidIdentificationArgument(source, target, index + 1);
                     valid = false;
-                } else if (!(expected.kind === SemanticTypeKind.VoidReference
-                    ? isTypeAssignable(expected, received)
-                    : semanticTypeEquals(expected, received))) {
-                    // REF STRUCT[] IDENT identifies the reference variable, but
-                    // its VOID target accepts a typed reference as well. This
-                    // does not weaken exact IDENT matching for typed REF formals.
+                } else if (!semanticTypeEquals(expected, received)) {
                     context.reportInvalidFunctionArgumentType(source, target, index + 1,
-                        formal.type, actual);
+                        formal.type, contextualActual);
                     valid = false;
                 }
             } else {
                 const compatible = isReferenceTransferCompatible(expected, received, object);
                 if (compatible === false) {
                     context.reportInvalidFunctionArgumentType(source, target, index + 1,
-                        formal.type, actual);
+                        formal.type, contextualActual);
                     valid = false;
                 }
             }
@@ -148,7 +151,7 @@ export function validateProcedureActualParameters(
                 ? received.target : received;
             if (!isIdentificationTypeCompatible(expected, identifiedType)) {
                 context.reportInvalidFunctionArgumentType(source, target, index + 1,
-                    formal.type, actual);
+                    formal.type, contextualActual);
                 valid = false;
             }
             continue;
@@ -160,7 +163,7 @@ export function validateProcedureActualParameters(
         const compatibility = isValueTransferCompatible(expected, received);
         if (compatibility === false) {
             context.reportInvalidFunctionArgumentType(source, target, index + 1,
-                formal.type, actual);
+                formal.type, contextualActual);
             valid = false;
         } else if (compatibility === true) {
             const truncation = characterTruncationForValueTransfer(expected, received);

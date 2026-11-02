@@ -40,21 +40,38 @@ function analyze(code: string) {
 
 const mismatch = SemanticDiagnosticCode.InvalidAssignmentValueType;
 
-test('FIXED widths, FLOAT widening and FLOAT-to-FIXED narrowing', () => {
+test('FIXED assignments require FIT for either mismatching precision', () => {
     const r = analyze(`R: PROC;
         DCL Small FIXED(15), Wide FIXED(31), F FLOAT(31);
         Wide := Small;
         Small := Wide;
+        Wide := Small FIT Wide;
+        Small := Wide FIT Small;
         F := Small;
         Small := F;
     END;`);
     assert.deepEqual(r.syntax, []);
-    assert.deepEqual(r.errors.map(e => e.code), [mismatch, mismatch]);
-    assert.match(r.errors[0].message, /erwartet FIXED\(15\), erhalten FIXED\(31\)/);
-    assert.match(r.errors[1].message, /erwartet FIXED\(15\), erhalten FLOAT\(31\)/);
+    assert.deepEqual(r.errors.map(e => e.code), [mismatch, mismatch, mismatch]);
+    assert.match(r.errors[0].message, /erwartet FIXED\(31\), erhalten FIXED\(15\)/);
+    assert.match(r.errors[1].message, /erwartet FIXED\(15\), erhalten FIXED\(31\)/);
+    assert.match(r.errors[2].message, /erwartet FIXED\(15\), erhalten FLOAT\(31\)/);
 });
 
-test('BIT narrowing remains invalid while CHAR assignments pad or truncate', () => {
+test('FLOAT assignments require matching precision or explicit FIT', () => {
+    const r = analyze(`R: PROC;
+        DCL Single FLOAT, Double FLOAT(31);
+        Single := Double;
+        Double := Single;
+        Single := Double FIT Single;
+        Double := Single FIT Double;
+    END;`);
+    assert.deepEqual(r.syntax, []);
+    assert.deepEqual(r.errors.map(e => e.code), [mismatch, mismatch]);
+    assert.match(r.errors[0].message, /erwartet FLOAT, erhalten FLOAT\(31\)/);
+    assert.match(r.errors[1].message, /erwartet FLOAT\(31\), erhalten FLOAT[.]/);
+});
+
+test('BIT and CHAR assignments may narrow or widen lengths', () => {
     const r = analyze(`R: PROC;
         DCL B4 BIT(4), B8 BIT(8), C3 CHAR(3), C5 CHAR(5);
         B8 := B4;
@@ -63,8 +80,7 @@ test('BIT narrowing remains invalid while CHAR assignments pad or truncate', () 
         C3 := C5;
     END;`);
     assert.deepEqual(r.syntax, []);
-    assert.deepEqual(r.errors.map(e => e.code), [mismatch]);
-    assert.match(r.errors[0].message, /BIT\(4\).*BIT\(8\)/);
+    assert.deepEqual(r.errors, []);
 });
 
 test('STRUCT assignment preserves exact component types and named diagnostics', () => {
@@ -89,15 +105,14 @@ test('anonymous STRUCT assignment checks each component, without scalar widening
     assert.match(r.errors[0].message, /STRUCT\[E FIXED\].*STRUCT\[E FLOAT\]/);
 });
 
-test('array element assignment allowed but whole-array assignment prohibited', () => {
+test('array element and identical total array assignments are allowed', () => {
     const r = analyze(`R: PROC;
         DCL A(10) FIXED, B(10) FIXED;
         A(1) := B(2);
         A := B;
     END;`);
     assert.deepEqual(r.syntax, []);
-    assert.deepEqual(r.errors.map(e => e.code), [SemanticDiagnosticCode.InvalidArrayAssignment]);
-    assert.equal(r.errors[0].location.span.start, r.source.text.indexOf('A := B'));
+    assert.deepEqual(r.errors, []);
 });
 
 test('value assignment to a structured array component uses the selected component type', () => {

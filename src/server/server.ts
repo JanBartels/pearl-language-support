@@ -49,6 +49,7 @@ import { mapLspLocation } from './lsp/lspLocationMapper';
 import { createHover } from './lsp/createHover';
 import { findReferences } from './lsp/findReferences';
 import { findMacroReferences } from './lsp/findMacroReferences';
+import { identifierEndFallbackPosition } from './lsp/identifierEndFallback';
 import { ConnectionLogger } from './utility/logging/connectionLogger';
 import { SemanticTokenService } from './semanticTokens/semanticTokenService';
 import { TokenLegend } from './semanticTokens/tokenLegend';
@@ -271,7 +272,12 @@ connection.onDefinition(params => {
         references: group.references.map(formatMacroLocation)
     })) )}`);
     // END TEMP-MACRO-NAV-DIAG
-    const macro = analysisResult.lookupMacro(position);
+    const fallbackCursor = identifierEndFallbackPosition(document, params.position);
+    const fallbackPosition: SourceOffset | undefined = fallbackCursor
+        ? { uri, offset: document.offsetAt(fallbackCursor) }
+        : undefined;
+    const macro = analysisResult.lookupMacro(position)
+        ?? (fallbackPosition ? analysisResult.lookupMacro(fallbackPosition) : undefined);
     // BEGIN TEMP-MACRO-NAV-DIAG: report HIT/MISS separately from AST lookup.
     navigationTrace(id, `macroLookup=${macro ? 'HIT' : 'MISS'} macroName=${macro?.definition.name ?? 'missing'} macroDefinitionLocation=${formatMacroLocation(macro?.definition.location)}`);
     // END TEMP-MACRO-NAV-DIAG
@@ -280,8 +286,34 @@ connection.onDefinition(params => {
         navigationTrace(id, `END reason=macro target=${JSON.stringify(target)}`);
         return target;
     }
-    const lookup = analysisResult.rootAnalysis.ast.lookupSourceValue(position);
     const semanticContext = analysisResult.rootAnalysis.semanticContext;
+    let lookup = analysisResult.rootAnalysis.ast.lookupSourceValue(position);
+    let relation = lookup && semanticContext
+        ? lookupLocalSpecificationRelation(semanticContext.localSpecificationRelations, lookup.element)
+        : undefined;
+    let definition = lookup && semanticContext
+        ? relation?.definition ?? lookupSymbolDefinition(semanticContext.bindings, lookup.element)
+        : undefined;
+
+    // An editor selection can put the caret immediately after the identifier.
+    // Retry only if the exact position has no resolvable definition. Keep the
+    // AST and its half-open SourceValue locations unchanged.
+    if (!definition?.location && fallbackPosition && semanticContext) {
+        const leftLookup = analysisResult.rootAnalysis.ast.lookupSourceValue(fallbackPosition);
+        if (leftLookup) {
+            const leftRelation = lookupLocalSpecificationRelation(
+                semanticContext.localSpecificationRelations, leftLookup.element
+            );
+            const leftDefinition = leftRelation?.definition
+                ?? lookupSymbolDefinition(semanticContext.bindings, leftLookup.element);
+            if (leftDefinition?.location) {
+                lookup = leftLookup;
+                definition = leftDefinition;
+                // TEMP-NAV-DEBUG: caret-at-identifier-end fallback.
+                navigationTrace(id, `identifierEndFallback=${fallbackCursor?.line}:${fallbackCursor?.character}`);
+            }
+        }
+    }
     navigationTrace(id, `lookup=${lookup ? JSON.stringify(lookup.element.value) : 'missing'} semanticContext=${!!semanticContext}`);
     if (!lookup || !semanticContext) {
         navigationTrace(id, `END reason=${!lookup ? 'lookup-missing' : 'semantic-context-missing'}`);
@@ -289,11 +321,6 @@ connection.onDefinition(params => {
     }
     const bound = lookupBoundSymbol(semanticContext.bindings, lookup.element);
     navigationTrace(id, `boundSymbol=${bound ? String(bound.name.value) : 'missing'}`);
-    const relation = lookupLocalSpecificationRelation(
-        semanticContext.localSpecificationRelations, lookup.element
-    );
-    const definition = relation?.definition
-        ?? lookupSymbolDefinition(semanticContext.bindings, lookup.element);
     if (!definition?.location) {
         navigationTrace(id, 'END reason=definition-missing');
         return undefined;

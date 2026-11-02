@@ -57,7 +57,7 @@ test('warning enabled by default, including VS Code settings default', () => {
     assert.match(result.warnings[0].message, /CHAR\(8\).*CHAR\(3\)/);
 });
 
-test('no warning for widening, equal lengths or incompatible BIT assignment', () => {
+test('no CHAR truncation warning for widening, equal lengths or BIT truncation', () => {
     const r = analyze(`R: PROC;
         DCL Short CHAR(3), Long CHAR(8), B4 BIT(4), B8 BIT(8);
         Long := Short;
@@ -65,7 +65,7 @@ test('no warning for widening, equal lengths or incompatible BIT assignment', ()
         B4 := B8;
     END;`);
     assert.deepEqual(r.warnings, []);
-    assert.equal(r.errors.length, 1);
+    assert.deepEqual(r.errors, []);
 });
 
 test('CHAR literals warn only when too long for the target', () => {
@@ -129,7 +129,7 @@ test('warning disabled via semantic options suppresses only truncation diagnosti
     END;`, false);
     assert.deepEqual(r.syntax, []);
     assert.deepEqual(r.warnings, []);
-    assert.equal(r.errors.length, 1);
+    assert.deepEqual(r.errors, []);
 });
 
 test('real-world CHAR(128)/CHAR(255) and literal argument examples', () => {

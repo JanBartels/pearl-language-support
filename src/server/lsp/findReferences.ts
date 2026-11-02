@@ -7,6 +7,7 @@ import type { SymbolOccurrences } from '../semantic/symbolOccurrenceIndex';
 import type { Analysis } from '../validation/analysis';
 import type { DocumentRegistry } from '../utility/documentRegistry';
 import { mapLspLocation } from './lspLocationMapper';
+import { identifierEndFallbackPosition } from './identifierEndFallback';
 
 /**
  * Converts compiler symbol occurrences to the original physical documents.
@@ -30,6 +31,26 @@ export function findReferences(
         const occurrences = [...group.declarations, ...group.references];
         if (occurrences.some(value => atCursor(value, uri, position, registry))) {
             candidates.push(group);
+        }
+    }
+
+    // A double-click can leave the caret exactly after the identifier. Keep
+    // half-open ranges; retry at the previous character only when the normal
+    // lookup found no occurrence and this is an identifier boundary.
+    if (candidates.length === 0) {
+        const document = registry.get(uri);
+        const fallback = document && identifierEndFallbackPosition(document, position);
+        if (fallback) {
+            for (const group of index.all) {
+                const occurrences = [...group.declarations, ...group.references];
+                if (occurrences.some(value => atCursor(value, uri, fallback, registry))) {
+                    candidates.push(group);
+                }
+            }
+            if (candidates.length > 0) {
+                // TEMP-NAV-DEBUG: keep the general navigation diagnostics.
+                trace?.(`identifierEndFallback=${fallback.line}:${fallback.character} cursorCandidates=${candidates.length}`);
+            }
         }
     }
 

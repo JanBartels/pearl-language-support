@@ -73,7 +73,7 @@ test('TOFLOAT retains FIXED precision, TOBIT includes the sign bit in RTOS-UH', 
     ]);
 });
 
-test('TOCHAR produces CHARACTER(1); ENTIER and ROUND produce FIXED(g)', () => {
+test('TOCHAR produces CHARACTER(1); RTOS-UH ENTIER and ROUND produce FIXED(15)', () => {
     const r = analyze(`C: PROC RETURNS(CHAR(1)); RETURN(TOCHAR 65); END;
         E: PROC RETURNS(FIXED(31)); RETURN(ENTIER 2.5(31)); END;
         R: PROC RETURNS(FIXED(31)); RETURN(ROUND 2.5(31)); END;`);
@@ -81,8 +81,8 @@ test('TOCHAR produces CHARACTER(1); ENTIER and ROUND produce FIXED(g)', () => {
     assert.deepEqual(r.errors, []);
     assert.deepEqual(r.returns.map(ret => r.semantic.expressionTypes.get(ret.expression!)), [
         { kind: SemanticTypeKind.Character, length: 1 },
-        { kind: SemanticTypeKind.Fixed, precision: 31 },
-        { kind: SemanticTypeKind.Fixed, precision: 31 }
+        { kind: SemanticTypeKind.Fixed, precision: 15 },
+        { kind: SemanticTypeKind.Fixed, precision: 15 }
     ]);
 });
 
@@ -212,10 +212,10 @@ test('unspecified lengths remain unspecified in TOBIT and TOFIXED', () => {
     ]);
 });
 
-test('TOFIXED does not produce the invalid type FIXED(0) from BIT(1)', () => {
+test('TOFIXED BIT(1) is accepted without producing FIXED(0)', () => {
     const r = analyze(`R: PROC RETURNS(FIXED); RETURN(TOFIXED '1'B); END;`);
     assert.deepEqual(r.syntax, []);
-    assert.deepEqual(r.errors.map(d => d.code),
-        [SemanticDiagnosticCode.InvalidExpressionOperands]);
-    assert.equal(r.errors[0].location.source.getText(r.errors[0].location.span), 'TOFIXED');
+    assert.deepEqual(r.errors, []);
+    assert.deepEqual(r.semantic.expressionTypes.get(r.returns[0].expression!),
+        { kind: SemanticTypeKind.Fixed, precision: 1 });
 });

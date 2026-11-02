@@ -84,8 +84,11 @@ export class ExpressionParser extends ParserBase {
         const operator = this.acceptOperator(['+', '-'])
             ?? this.acceptKeyword(MONADIC_OPERATORS);
         if (operator) {
-            // Unary operators have rank 1, but -A**B means -(A**B).
-            const operand = this.parseWithMinimumPower(7);
+            // Sign operators bind less strongly than ** (so -A**B means
+            // -(A**B)). Named monadic conversions bind before FIT/UPB etc.:
+            // ROUND(F) FIT 1(31) means (ROUND(F)) FIT 1(31).
+            const operand = this.parseWithMinimumPower(
+                this.tokenText(operator) === '+' || this.tokenText(operator) === '-' ? 7 : 8);
             if (!operand) {
                 this.problems.error(this.location(),
                     `Expected operand after '${this.tokenText(operator)}'.`);

@@ -140,7 +140,7 @@ test('8.3f: REF reassignment and CONT copy have different expected RHS types', (
     assert.equal(r.assignments.length, 8);
 });
 
-test('8.3f: whole-array write is invalid even when the element type is compatible', () => {
+test('8.3f: whole-array write is allowed for identical array types', () => {
     const r = analyze(`
         R: PROC(I FIXED);
             DCL A(10) FIXED, B(10) FIXED;
@@ -148,7 +148,7 @@ test('8.3f: whole-array write is invalid even when the element type is compatibl
             A := B;
         END;`);
     assert.deepEqual(r.syntax, []);
-    assert.deepEqual(codes(r), [D.InvalidArrayAssignment]);
+    assert.deepEqual(codes(r), []);
     assert.equal(r.assignments.length, 2);
 });
 

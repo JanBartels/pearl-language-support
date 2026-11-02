@@ -76,14 +76,13 @@ test('CHAR assignments accept both truncation and blank padding', () => {
     assert.deepEqual(r.errors, []);
 });
 
-test('BIT assignment still diagnoses narrowing', () => {
+test('BIT assignment truncates excess bits in RTOS-UH', () => {
     const r = analyze(`R: PROC;
         DCL Short BIT(2), Long BIT(8);
         Short := Long;
     END;`);
     assert.deepEqual(r.syntax, []);
-    assert.equal(r.errors.length, 1);
-    assert.match(r.errors[0].message, /BIT\(2\).*BIT\(8\)/);
+    assert.deepEqual(r.errors, []);
 });
 
 test('mixed FLOAT(23) and FIXED(31) arithmetic stays FLOAT(23)', () => {
@@ -101,18 +100,30 @@ test('mixed FLOAT(23) and FIXED(31) arithmetic stays FLOAT(23)', () => {
     }
 });
 
-test('explicit FLOAT precision controls mixed arithmetic, while FIXED/FIXED division is unchanged', () => {
+test('explicit FLOAT precision controls mixed arithmetic, but FIXED/FIXED division uses default FLOAT', () => {
     const r = analyze(`R: PROC(F FLOAT(31), Wide FIXED(31)) RETURNS(FLOAT(31));
         RETURN(F / Wide);
         RETURN(Wide / Wide);
     END;`);
     assert.deepEqual(r.syntax, []);
     assert.deepEqual(r.errors, []);
-    for (const statement of r.returns) {
-        assert.ok(statement.expression);
-        assert.deepEqual(r.semantic.expressionTypes.get(statement.expression),
-            { kind: SemanticTypeKind.Float, precision: 31 });
-    }
+    assert.deepEqual(r.semantic.expressionTypes.get(r.returns[0].expression!),
+        { kind: SemanticTypeKind.Float, precision: 31 });
+    assert.deepEqual(r.semantic.expressionTypes.get(r.returns[1].expression!),
+        { kind: SemanticTypeKind.Float, precision: 23 });
+});
+
+test('Reg1 and Reg2 expression precision is fixed by RTOS-UH operations', () => {
+    const r = analyze(`Reg1: PROC RETURNS(FIXED);
+        RETURN(ROUND(42 / 47.11) + 1); END;
+        Reg2: PROC RETURNS(FLOAT);
+        RETURN(1(31) / 10); END;`);
+    assert.deepEqual(r.syntax, []);
+    assert.deepEqual(r.errors, []);
+    assert.deepEqual(r.returns.map(ret => r.semantic.expressionTypes.get(ret.expression!)), [
+        { kind: SemanticTypeKind.Fixed, precision: 15 },
+        { kind: SemanticTypeKind.Float, precision: 23 }
+    ]);
 });
 
 test('FLOAT value parameters accept REF FIXED(31) with implicit dereference', () => {

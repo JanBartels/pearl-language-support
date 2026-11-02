@@ -136,13 +136,16 @@ export class CompilerControlAnalyzer {
     ): boolean {
         const keyword = procedure.procKeyword.location;
         const nextToken = procedure.firstHeaderTokenAfterProc()?.location;
-        if (!keyword || !nextToken || comment.source !== keyword.source
+        // AST SourceValues are mapped to the physical editor source, while
+        // compiler comments originate in the second lexer (ExpandedSource).
+        const originalComment = comment.source.mapLocation(comment);
+        if (!keyword || !nextToken || originalComment.source !== keyword.source
             || nextToken.source !== keyword.source) {
             return false;
         }
 
-        return keyword.span.end <= comment.span.start
-            && comment.span.end <= nextToken.span.start;
+        return keyword.span.end <= originalComment.span.start
+            && originalComment.span.end <= nextToken.span.start;
     }
 
     private modulesOf(root: AstNode): readonly ModuleNode[] {

@@ -1,0 +1,106 @@
+P=MPC603;
+SC=2000;
+MODULE Regression23;
+
+PROBLEM;
+
+! SPC ROUND PROC( FLOAT ) RETURNS( FIXED ) GLOBAL;
+
+Reg1: PROC;
+DCL RX FIXED;
+    RX = ROUND( 42 / 47.11 ) + 1;
+END;
+
+Reg2: PROC;
+DCL F FLOAT;
+    F = 1(31) / 10;
+END;
+
+Reg3: PROC;
+DCL F FLOAT;
+DCL X FIXED(31);
+    X = ROUND( F ) FIT 1(31);
+END;
+
+TYPE TReg4P REF PROC RETURNS( BIT );
+Reg4GP: PROC( CB TReg4P ) GLOBAL;
+Reg4CB: PROC RETURNS( BIT);
+    RETURN('0'B);
+END;
+Reg4: PROC;
+    Reg4GP(Reg4CB);
+END;
+
+SPC Reg5P PROC( FIXED, CHAR(4) ) GLOBAL;
+Reg5: PROC;
+DCL B_1 BIT(1);
+DCL B BIT;
+    Reg5P( 3, TOCHAR( TOFIXED( B )));
+    Reg5P( 3, TOCHAR( TOFIXED( B_1 )));
+END;
+
+Reg6: PROC;
+DCL B16 BIT(16);
+DCL B32 BIT(32);
+    B16 = B32;  ! Zulässig. Wird abgeschnitten und .BIT(1) bis .BIT(16) zugewiesen
+END;
+
+Reg7: PROC;
+DCL V REF STRUCT[];
+DCL C REF CHAR(255);
+DCL X REF FIXED;
+    C = V;  ! Zulässig
+    X = V;  ! Zulässig
+END;
+
+Reg8: PROC;
+DCL V REF STRUCT[];
+DCL C REF CHAR(255);
+DCL X REF FIXED;
+    C = V;  ! Zulässig
+    X = V;  ! Zulässig
+END;
+
+Reg9: PROC;
+DCL X REF FIXED;
+DCL C REF CHAR(255);
+    X = INSTR( C, 1, 4, '1234', 1, 4 ); ! Zulässig. IDENT entfallen lassen?
+END;
+
+TYPE Reg10S STRUCT [
+    Klein (128) CHAR,
+    Gross (100000) CHAR
+];
+Reg10: PROC;
+DCL P REF Reg10S;
+DCL X15 FIXED;
+DCL X31 FIXED(31);
+    X15 = 1 UPB P.Klein;    ! Zulässig. Liefert FIXED(15) weil Arraygrenzen klein genug
+    X31 = 1 UPB P.Gross;    ! Zulässig. Liefert FIXED(31) weil Arraygrenzen zu groß für FIXED(15)
+END;
+
+Reg11: PROC;
+DCL (A,B) (128) CHAR;
+    A = B;  ! Zulässig
+END;
+
+Reg12: PROC /*+G*/ GLOBAL;
+END;
+
+TYPE Reg13CB REF PROC RETURNS(BIT);
+
+Reg13H: PROC(CB Reg13CB);
+END;
+
+Reg13P: PROC RETURNS(BIT);
+    RETURN('1'B);
+END;
+
+Reg13: PROC;
+DCL Slot Reg13CB;
+
+    Reg13H(Reg13P);  ! Derzeit fälschlich abgelehnt
+    Reg13H(Slot);  ! Wird akzeptiert
+END;
+
+MODEND;

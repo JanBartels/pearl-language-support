@@ -259,13 +259,7 @@ export class ExpressionTypeResolver {
         // An argument with an earlier diagnostic has no known type. Do not
         // manufacture an additional builtin error in that case.
         if (types.some(type => !type)) return undefined;
-        // Builtin signatures describe effective types, not the TYPE aliases used
-        // to declare the actual arguments. Preserve the original argument nodes
-        // for the separate IDENT-object validation below.
-        const effectiveTypes = (types as readonly SemanticType[])
-            .map(type => this.context.resolveUnderlyingType(type));
-        if (effectiveTypes.some(type => !type)) return undefined;
-        const match = matchBuiltinSignature(builtin, effectiveTypes as readonly SemanticType[]);
+        const match = matchBuiltinSignature(builtin, types as readonly SemanticType[]);
         if (!match) {
             this.context.reportInvalidBuiltinArgumentType(first.identifier, builtin.name);
             return undefined;
@@ -461,14 +455,11 @@ export class ExpressionTypeResolver {
                 // An unspecified CHAR length may depend on LENGTH; do not
                 // invent a fixed default length here.
                 if (operand.kind === SemanticTypeKind.Bit) {
-                    // FIXED(0) is not a valid RTOS-UH type. An unspecified
-                    // length remains unspecified until LENGTH is considered.
-                    if (operand.length !== undefined && operand.length < 2) {
-                        this.context.reportInvalidExpressionOperands(node.operator);
-                        return undefined;
-                    }
+                    // BIT(1) is accepted by RTOS-UH as a TOFIXED operand.
+                    // The minimum representable FIXED precision is 1.
                     return { kind: SemanticTypeKind.Fixed,
-                        precision: operand.length === undefined ? undefined : operand.length - 1 };
+                        precision: operand.length === undefined ? undefined
+                            : Math.max(1, operand.length - 1) };
                 }
                 if (operand.kind === SemanticTypeKind.Character
                     && (operand.length === undefined || operand.length === 1)) {
@@ -495,7 +486,9 @@ export class ExpressionTypeResolver {
             case 'ENTIER':
             case 'ROUND':
                 if (operand.kind === SemanticTypeKind.Float) {
-                    return { kind: SemanticTypeKind.Fixed, precision: operand.precision };
+                    // RTOS-UH's ROUND/ENTIER result is FIXED(15), even for a
+                    // wide FLOAT operand (manual's RND/EN overflow diagnostic).
+                    return { kind: SemanticTypeKind.Fixed, precision: 15 };
                 }
                 break;
             case 'LWB':
@@ -611,6 +604,16 @@ export class ExpressionTypeResolver {
                     node.operator, dimension, rank);
                 return undefined;
             }
+            if (right.kind === SemanticTypeKind.Array && dimension !== undefined) {
+                const bounds = right.dimensions[Number(dimension) - 1];
+                if (bounds) {
+                    const min = -32768n;
+                    const max = 32767n;
+                    return { kind: SemanticTypeKind.Fixed,
+                        precision: bounds.lowerBound >= min && bounds.lowerBound <= max
+                            && bounds.upperBound >= min && bounds.upperBound <= max ? 15 : 31 };
+                }
+            }
             return { kind: SemanticTypeKind.Fixed, precision: 31 };
         }
         if (['+', '-', '*', '/', '//', 'REM', '**'].includes(op)) {
@@ -716,7 +719,14 @@ export class ExpressionTypeResolver {
             if (op === '**') return left.kind === SemanticTypeKind.Fixed
                 ? { kind: SemanticTypeKind.Fixed, precision: left.precision }
                 : { kind: SemanticTypeKind.Float, precision: left.precision };
-            if (op === '/') return { kind: SemanticTypeKind.Float, precision };
+            if (op === '/') {
+                // RTOS-UH: dividing two FIXED operands yields default FLOAT
+                // precision, not FLOAT(31) when one integer operand is wide.
+                // A FLOAT operand retains control over the FLOAT precision.
+                return { kind: SemanticTypeKind.Float,
+                    precision: floatPrecisions.length > 0 ? precision
+                        : RTOS_UH_DEFAULT_TYPE_LENGTHS.float };
+            }
             return left.kind === SemanticTypeKind.Float || right.kind === SemanticTypeKind.Float
                 ? { kind: SemanticTypeKind.Float, precision }
                 : { kind: SemanticTypeKind.Fixed, precision };

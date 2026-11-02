@@ -96,6 +96,14 @@ function matchType(
     type: SemanticType,
     variables: Map<string, number>
 ): boolean {
+    // A typed REF actual is read by value when the builtin formal is not
+    // a reference itself (RTOS-UH 5.6.2.3). Keep REFADD's reference formal
+    // unchanged, and leave VOID/nested references unresolved.
+    if (pattern.kind !== 'reference' && type.kind === SemanticTypeKind.Reference
+        && type.target.kind !== SemanticTypeKind.Reference
+        && type.target.kind !== SemanticTypeKind.VoidReference) {
+        return matchType(pattern, type.target, variables);
+    }
     switch (pattern.kind) {
         case 'any': return true;
         case 'reference': return type.kind === SemanticTypeKind.Reference
