@@ -27,7 +27,7 @@ import { SemanticTypeKind } from '../semanticType';
 const logger: Logger = { info() {}, warn() {}, error() {} };
 function analyze(program: string) {
     const source = new FileSource('file:///time-expressions.pearl',
-        `MODULE M; PROBLEM; ${program} MODEND;`);
+        `P=MPC603; SC=2000; MODULE M; PROBLEM; ${program} MODEND;`);
     const problems = new ProblemCollection();
     const context = new PreprocessorContext(
         {} as DocumentRegistry, new MacroTable(), new ConditionalStack(),

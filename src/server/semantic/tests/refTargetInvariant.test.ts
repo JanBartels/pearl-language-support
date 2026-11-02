@@ -26,7 +26,7 @@ const logger: Logger = { info() {}, warn() {}, error() {} };
 
 function analyze(code: string) {
     const source = new FileSource('file:///ref-target-invariant.pearl',
-        `MODULE RefInvariant; PROBLEM; ${code} MODEND;`);
+        `P=MPC603; SC=2000; MODULE RefInvariant; PROBLEM; ${code} MODEND;`);
     const problems = new ProblemCollection();
     const tokens = new Lexer(source, problems, logger).tokenize();
     const context = new PreprocessorContext(

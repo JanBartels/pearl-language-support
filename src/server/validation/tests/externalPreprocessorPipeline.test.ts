@@ -24,7 +24,7 @@ function run(withDeclarations: boolean) {
     const source = new FileSource('file:///RecursiveMacros.P', `P=MPC603;
 SC=2000;
 MODULE Macro;
-SYSTEM;
+PROBLEM;
 ${withDeclarations ? '#define DEKLARATIONEN\n' : ''}
 #ifdef DEKLARATIONEN
 #define VAR "DCL"

@@ -30,7 +30,7 @@ const parameterCount = [1, 6, 1, 3, 6, 6, 6] as const;
 
 function analyze(body: string) {
     const source = new FileSource('file:///string-builtin-signatures.P',
-        `MODULE M; PROBLEM; ${body} MODEND;`);
+        `P=MPC603; SC=2000; MODULE M; PROBLEM; ${body} MODEND;`);
     const problems = new ProblemCollection();
     const context = new PreprocessorContext(
         {} as DocumentRegistry, new MacroTable(), new ConditionalStack(),

@@ -21,7 +21,7 @@ import type { Logger } from '../../utility/logging/logger';
 const logger: Logger = { info() {}, warn() {}, error() {} };
 function analyze(code: string) {
     const source = new FileSource('file:///value-parameter-transfer.pearl',
-        `MODULE M; PROBLEM; ${code} MODEND;`);
+        `P=MPC603; SC=2000; MODULE M; PROBLEM; ${code} MODEND;`);
     const problems = new ProblemCollection();
     const preprocessorContext = new PreprocessorContext(
         {} as DocumentRegistry, new MacroTable(), new ConditionalStack(),

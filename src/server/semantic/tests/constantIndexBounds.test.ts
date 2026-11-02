@@ -23,7 +23,7 @@ import { SemanticTypeKind } from '../semanticType';
 
 const logger: Logger = { info() {}, warn() {}, error() {} };
 function analyze(body: string) {
-    const source = new FileSource('file:///bounds.pearl', `MODULE M; PROBLEM; ${body} MODEND;`);
+    const source = new FileSource('file:///bounds.pearl', `P=MPC603; SC=2000; MODULE M; PROBLEM; ${body} MODEND;`);
     const problems = new ProblemCollection();
     const stream = Preprocessor.create(new Lexer(source, problems, logger).tokenize(), source,
         new PreprocessorContext({} as DocumentRegistry, new MacroTable(), new ConditionalStack(),

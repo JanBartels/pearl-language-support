@@ -22,7 +22,7 @@ import type { AstNode } from '../../ast/astNode';
 
 const logger: Logger = { info() {}, warn() {}, error() {} };
 function analyze(body: string) {
-    const source = new FileSource('file:///assignment-ref.pearl', `MODULE M; PROBLEM; ${body} MODEND;`);
+    const source = new FileSource('file:///assignment-ref.pearl', `P=MPC603; SC=2000; MODULE M; PROBLEM; ${body} MODEND;`);
     const problems = new ProblemCollection();
     const context = new PreprocessorContext({} as DocumentRegistry, new MacroTable(),
         new ConditionalStack(), new PreprocessorConditionalBlockStack());

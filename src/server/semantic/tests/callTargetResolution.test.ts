@@ -30,7 +30,7 @@ const logger: Logger = { info() {}, warn() {}, error() {} };
 
 function analyze(declarations: string, body: string) {
     const source = new FileSource('file:///call-target-resolution.pearl',
-        `MODULE Test; PROBLEM; ${declarations}\nRunner: TASK;\n${body}\nEND; MODEND;`);
+        `P=MPC603; SC=2000; MODULE Test; PROBLEM; ${declarations}\nRunner: TASK;\n${body}\nEND; MODEND;`);
     const problems = new ProblemCollection();
     const tokens = new Lexer(source, problems, logger).tokenize();
     const context = new PreprocessorContext(

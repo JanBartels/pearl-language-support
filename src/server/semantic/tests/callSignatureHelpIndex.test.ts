@@ -29,7 +29,7 @@ const logger: Logger = { info() {}, warn() {}, error() {} };
 const uri = 'file:///signature-help.pearl';
 
 function fixture(statement: string) {
-    const text = `MODULE Test; PROBLEM; P: PROC(A FIXED, B FIXED, C FIXED); END;
+    const text = `P=MPC603; SC=2000; MODULE Test; PROBLEM; P: PROC(A FIXED, B FIXED, C FIXED); END;
 Runner: TASK;
 ${statement}
 END; MODEND;`;
@@ -91,7 +91,7 @@ test('an incomplete call at source EOF admits cursor immediately after comma', (
     const f = fixture(text);
     // The fixture appends END and MODEND, so the parser does not reach EOF.
     // Verify the zero-width EOF recovery end through a separate fixture.
-    const source = new FileSource('file:///eof.pearl', 'MODULE; PROBLEM; P: PROC(A FIXED); END; T: TASK; P(1,');
+    const source = new FileSource('file:///eof.pearl', 'P=MPC603; SC=2000; MODULE; PROBLEM; P: PROC(A FIXED); END; T: TASK; P(1,');
     const problems = new ProblemCollection();
     const tokens = new Lexer(source, problems, logger).tokenize();
     const stream = Preprocessor.create(tokens, source, new PreprocessorContext(
@@ -161,7 +161,7 @@ test('a call entirely inside an include uses the include URI, not the root URI',
 
 
 test('function expressions expose signature help and select nested calls', () => {
-    const text = `MODULE Test; PROBLEM;
+    const text = `P=MPC603; SC=2000; MODULE Test; PROBLEM;
 F: PROC(A FIXED, B FIXED) RETURNS(FIXED); RETURN(A + B); END;
 G: PROC(X FIXED) RETURNS(FIXED); RETURN(X); END;
 Runner: TASK;

@@ -3367,7 +3367,8 @@ export class SemanticAnalyzer {
                 definition: identifier,
                 type,
                 assignmentProtected,
-                global
+                global,
+                declarationScope: environment.scope.kind
             };
 
             (environment.scope as MutableScope).symbols.push(symbol);
@@ -3411,7 +3412,8 @@ export class SemanticAnalyzer {
                     definition: identifier,
                     type,
                     assignmentProtected,
-                    global
+                    global,
+                    declarationScope: environment.scope.kind
                 };
 
                 state.bind(identifier, symbol);
@@ -3438,7 +3440,8 @@ export class SemanticAnalyzer {
                 definition: identifier,
                 type,
                 assignmentProtected,
-                global
+                global,
+                declarationScope: environment.scope.kind
             };
 
             state.bind(identifier, symbol);
@@ -3488,7 +3491,8 @@ export class SemanticAnalyzer {
                 definition: systemDeclaration?.name ?? identifier,
                 type,
                 assignmentProtected: false,
-                global: systemDeclaration ? (global ?? { kind: 'global' }) : global
+                global: systemDeclaration ? (global ?? { kind: 'global' }) : global,
+                declarationScope: environment.scope.kind
             };
 
             state.bind(identifier, symbol);

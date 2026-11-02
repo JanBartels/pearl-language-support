@@ -34,7 +34,8 @@ export interface ProcedureActualParameterValidationContext {
 
 /** Identical argument rules for expression calls and CALL statements.
  * IDENT requires an object of the exact type; REF IDENT additionally
- * requires an actual reference variable. REF by value accepts a compatible
+ * requires an actual reference variable. The writable VOID REF formal
+ * (REF STRUCT[] IDENT) accepts compatible typed reference variables. REF by value accepts a compatible
  * reference or the address of a suitable object (RTOS-UH 5.6.2.6).
  * Non-IDENT scalars and structures are checked as value transfers, including
  * automatic dereferencing of typed REF actuals in non-REF contexts.
@@ -123,7 +124,14 @@ export function validateProcedureActualParameters(
                 if (object.category !== 'object' || !isReferenceType(received)) {
                     context.reportInvalidIdentificationArgument(source, target, index + 1);
                     valid = false;
-                } else if (!semanticTypeEquals(expected, received)) {
+                } else if (!(expected.kind === SemanticTypeKind.VoidReference
+                    && !expected.targetInvariant
+                    ? isTypeAssignable(expected, received)
+                    : semanticTypeEquals(expected, received))) {
+                    // The generic writable VOID REF formal accepts typed REF
+                    // variables (including REF PROC aliases), but cannot
+                    // discard REF INV target protection. Typed REF IDENT and
+                    // REF INV STRUCT[] IDENT retain their existing exact rules.
                     context.reportInvalidFunctionArgumentType(source, target, index + 1,
                         formal.type, contextualActual);
                     valid = false;

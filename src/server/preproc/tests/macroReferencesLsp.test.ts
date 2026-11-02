@@ -37,6 +37,7 @@ function registryFor(sources: Map<string, string>): DocumentRegistry {
             const text = sources.get(uri);
             return text === undefined ? null : {
                 positionAt: (offset: number) => locationAt(text, offset),
+                getText: () => text,
                 offsetAt: (position: { line: number; character: number }) => {
                     const lines = text.split('\n');
                     let offset = 0;

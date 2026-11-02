@@ -106,7 +106,8 @@ test('preprocessing an included #define reports incomplete expansion at LEN call
     while (!preprocessor.eof()) preprocessor.next();
     const literal = [...problems].filter(problem => problem.message === 'Unterminated string literal.');
     assert.equal(literal.length, 1);
-    assert.equal(literal[0]!.location.span.start, 0); // Offset in the MacroSource
+    assert.equal(literal[0]!.location.source.uri, mainUri);
+    assert.ok(literal[0]!.location.span.start > 0); // Offset in the complete ExpandedSource
     const mapped = mapDiagnostics(problems, registry);
     const diagnostic = mapped.get(mainUri)?.find(d => d.message === 'Unterminated string literal.');
     assert.deepEqual(diagnostic?.range, {

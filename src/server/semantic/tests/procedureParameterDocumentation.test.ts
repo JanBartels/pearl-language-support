@@ -30,7 +30,7 @@ function analyze(
     statements = 'P(42);',
     includes: Record<string, string> = {}
 ) {
-    const rootText = `MODULE; PROBLEM;\n${declarations}\nRunner: TASK;\n${statements}\nEND; MODEND;`;
+    const rootText = `P=MPC603; SC=2000; MODULE; PROBLEM;\n${declarations}\nRunner: TASK;\n${statements}\nEND; MODEND;`;
     const source = new FileSource('file:///root.pearl', rootText);
     const registry = {
         resolveInclude: (_parent: string, path: string) =>

@@ -22,7 +22,7 @@ const logger: Logger = { info() {}, warn() {}, error() {} };
 
 function analyze(body: string) {
     const source = new FileSource('file:///nil-comparison.pearl',
-        `MODULE M; PROBLEM; TYPE HS STRUCT[E FIXED]; ${body} MODEND;`);
+        `P=MPC603; SC=2000; MODULE M; PROBLEM; TYPE HS STRUCT[E FIXED]; ${body} MODEND;`);
     const problems = new ProblemCollection();
     const context = new PreprocessorContext(
         {} as DocumentRegistry, new MacroTable(), new ConditionalStack(),

@@ -27,7 +27,7 @@ const logger: Logger = { info() {}, warn() {}, error() {} };
 
 function analyze(body: string, prelude = '') {
     const source = new FileSource('file:///repeat-fixed-clauses.pearl',
-        `MODULE M; PROBLEM; ${prelude} R: PROC(I FIXED); ${body} END; MODEND;`);
+        `P=MPC603; SC=2000; MODULE M; PROBLEM; ${prelude} R: PROC(I FIXED); ${body} END; MODEND;`);
     const problems = new ProblemCollection();
     const tokens = new Lexer(source, problems, logger).tokenize();
     const context = new PreprocessorContext(

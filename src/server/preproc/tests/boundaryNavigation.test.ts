@@ -59,7 +59,7 @@ MODEND;
 
 test('external macro comments survive compiler lexing in specification mode', () => {
     const { expanded, problems } = run(false);
-    assert.match(expanded.source.text, /SPC\s+Var\(\s*\/\*\s*0:40\s*\*\/\s*\)\s+FIXED;/);
+    assert.match(expanded.source.text, /SPC\s+Var\(\s*\/\*\s*0:40\s*\*\/\s*\)\s+FIXED\s+GLOBAL;/);
     assert.ok(![...problems].some(p => p.message === 'Unterminated block comment.'));
     assert.ok(![...problems].some(p => p.message === "Expected 'MODEND'."));
     assert.equal(expanded.macroReferences.length >= 5, true);
@@ -67,7 +67,7 @@ test('external macro comments survive compiler lexing in specification mode', ()
 
 test('external macro declaration mode survives compiler lexing', () => {
     const { expanded, problems } = run(true);
-    assert.match(expanded.source.text, /DCL\s+Var\(\s*0:40\s*\)\s+FIXED;/);
+    assert.match(expanded.source.text, /DCL\s+Var\(\s*0:40\s*\)\s+FIXED\s+GLOBAL;/);
     assert.ok(![...problems].some(p => p.message === 'Unterminated block comment.'));
 });
 

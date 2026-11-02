@@ -26,7 +26,7 @@ const logger: Logger = { info() {}, warn() {}, error() {} };
 
 function analyze(code: string) {
     const source = new FileSource('file:///real-project-regressions.pearl',
-        `MODULE M; PROBLEM; ${code} MODEND;`);
+        `P=MPC603; SC=2000; MODULE M; PROBLEM; ${code} MODEND;`);
     const problems = new ProblemCollection();
     const context = new PreprocessorContext(
         {} as DocumentRegistry, new MacroTable(), new ConditionalStack(),

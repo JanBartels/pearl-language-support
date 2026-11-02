@@ -98,6 +98,58 @@ export class ExpandedSource implements Source {
         return origins;
     }
 
+    /**
+     * Return the exact expanded-text pieces of a token, together with their
+     * originating source locations. Unlike mapLocations(), this keeps the
+     * text and origins paired, so a parser can retain SourceValue boundaries.
+     */
+    sourceFragments(location: Location): readonly { text: string; location: Location; generated: boolean }[] {
+        this.assertOwnLocation(location);
+        const pieces: { text: string; location: Location; generated: boolean }[] = [];
+        let offset = 0;
+        for (const fragment of this.fragments) {
+            const end = offset + fragment.text.length;
+            const start = Math.max(location.span.start, offset);
+            const stop = Math.min(location.span.end, end);
+            if (start < stop) {
+                const text = fragment.text.slice(start - offset, stop - offset);
+                const generated = fragment.mapping === 'generated';
+                const origin = generated ? fragment.origin : {
+                    source: fragment.origin.source,
+                    span: {
+                        start: fragment.origin.span.start + start - offset,
+                        end: fragment.origin.span.start + stop - offset
+                    }
+                };
+                const previous = pieces[pieces.length - 1];
+                if (previous && !generated && !previous.generated
+                    && previous.location.source === origin.source
+                    && previous.location.span.end === origin.span.start) {
+                    pieces[pieces.length - 1] = {
+                        text: previous.text + text,
+                        location: {
+                            source: origin.source,
+                            span: { start: previous.location.span.start, end: origin.span.end }
+                        },
+                        generated: false
+                    };
+                } else if (previous && generated && previous.generated
+                    && previous.location.source === origin.source
+                    && previous.location.span.start === origin.span.start
+                    && previous.location.span.end === origin.span.end) {
+                    pieces[pieces.length - 1] = {
+                        text: previous.text + text, location: origin, generated: true
+                    };
+                } else {
+                    pieces.push({ text, location: origin, generated });
+                }
+            }
+            offset = end;
+            if (offset >= location.span.end) break;
+        }
+        return pieces;
+    }
+
     private assertOwnLocation(location: Location): void {
         if (location.source !== this) {
             throw new Error('Location does not belong to this ExpandedSource.');

@@ -29,7 +29,7 @@ const protectedTarget = SemanticDiagnosticCode.AssignmentToInvariant;
 
 function analyze(body: string) {
     const source = new FileSource('file:///assignment-selector.pearl',
-        `MODULE M; PROBLEM; ${body} MODEND;`);
+        `P=MPC603; SC=2000; MODULE M; PROBLEM; ${body} MODEND;`);
     const problems = new ProblemCollection();
     const context = new PreprocessorContext({} as DocumentRegistry, new MacroTable(),
         new ConditionalStack(), new PreprocessorConditionalBlockStack());

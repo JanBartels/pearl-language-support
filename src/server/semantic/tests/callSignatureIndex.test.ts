@@ -27,7 +27,7 @@ const logger: Logger = { info() {}, warn() {}, error() {} };
 
 function analyze(declarations: string, statements: string) {
     const source = new FileSource('file:///signature-index.pearl',
-        `MODULE Test; PROBLEM; ${declarations}\nRunner: TASK;\n${statements}\nEND; MODEND;`);
+        `P=MPC603; SC=2000; MODULE Test; PROBLEM; ${declarations}\nRunner: TASK;\n${statements}\nEND; MODEND;`);
     const problems = new ProblemCollection();
     const tokens = new Lexer(source, problems, logger).tokenize();
     const context = new PreprocessorContext(

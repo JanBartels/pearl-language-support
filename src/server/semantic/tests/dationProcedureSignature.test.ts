@@ -60,7 +60,7 @@ function analyze(sourceText: string) {
 }
 
 test('RTOS-UH ASSIGN: missing DATION direction is valid and stays unconstrained', () => {
-    const parsed = analyze(`MODULE Demo; PROBLEM;
+    const parsed = analyze(`P=MPC603; SC=2000; MODULE Demo; PROBLEM;
 SPC ASSIGN ENTRY(DATION ALPHIC IDENT, CHAR(24)) GLOBAL;
 Main: TASK;
     CALL ASSIGN(A1, '/TY');
@@ -89,7 +89,7 @@ test('Direction from a preprocessor macro can be omitted without corrupting the 
 #else
 #define INOUTP90_ "INOUT"
 #endif
-MODULE Demo; PROBLEM;
+P=MPC603; SC=2000; MODULE Demo; PROBLEM;
 SPC ASSIGN ENTRY(DATION INOUTP90_ ALPHIC IDENT, CHAR(24)) GLOBAL;
 Main: TASK;
 CALL ASSIGN(A1, '/TY');
@@ -104,7 +104,7 @@ MODEND;`);
 });
 
 test('An explicit DATION direction is still retained', () => {
-    const parsed = analyze(`MODULE Demo; PROBLEM;
+    const parsed = analyze(`P=MPC603; SC=2000; MODULE Demo; PROBLEM;
 SPC SetDevice ENTRY(DATION INOUT ALPHIC IDENT, CHAR(24)) GLOBAL;
 Main: TASK;
 CALL SetDevice(A1, '/TY');

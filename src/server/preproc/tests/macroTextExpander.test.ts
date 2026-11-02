@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
-import { describe, expect, it } from 'vitest';
+import { strict as assert } from 'node:assert';
+import { describe, it } from 'node:test';
 import { expandMacroText } from '../macroTextExpander';
 import { MacroTable } from '../macroTable';
 import type { Location } from '../../core/location';
@@ -24,12 +25,12 @@ describe('expandMacroText', () => {
         const errors: string[] = [];
         const result = expandMacroText(table.get('Boundary')!, invocation,
             name => table.get(name), (_location, message) => errors.push(message));
-        expect(result.fragments.map(f => f.text).join('')).toBe('/* 0:40 */');
-        expect(result.references.map(r => r.definition.name)).toEqual([
+        assert.equal(result.fragments.map(f => f.text).join(''), '/* 0:40 */');
+        assert.deepEqual(result.references.map(r => r.definition.name), [
             'Boundary', 'WertIst', 'Count', 'WertEnde'
         ]);
-        expect(errors).toEqual([]);
-        expect(result.fragments.every(f => f.invocation === invocation)).toBe(true);
+        assert.deepEqual(errors, []);
+        assert.equal(result.fragments.every(f => f.invocation === invocation), true);
     });
 
     it('preserves the declaration variant and does not expand string contents', () => {
@@ -39,7 +40,7 @@ describe('expandMacroText', () => {
         table.define('WertEnde', ' ');
         table.define('Boundary', "WertIst 0:Count WertEnde 'Count'");
         const result = expandMacroText(table.get('Boundary')!, invocation, name => table.get(name), () => {});
-        expect(result.fragments.map(f => f.text).join('')).toBe("  0:40   'Count'");
+        assert.equal(result.fragments.map(f => f.text).join(''), "  0:40   'Count'");
     });
 
     it('terminates a cyclic macro expansion with a diagnostic', () => {
@@ -49,7 +50,7 @@ describe('expandMacroText', () => {
         const errors: string[] = [];
         expandMacroText(table.get('A')!, invocation, name => table.get(name),
             (_location, message) => errors.push(message));
-        expect(errors).toHaveLength(1);
-        expect(errors[0]).toContain('A -> B -> A');
+        assert.equal(errors.length, 1);
+        assert.ok(errors[0]?.includes('A -> B -> A'));
     });
 });

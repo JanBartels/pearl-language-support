@@ -54,6 +54,13 @@ function registryFor(...sources: { uri: string; text: string }[]): DocumentRegis
                     const prior = source.text.slice(0, offset);
                     const line = prior.split('\n').length - 1;
                     return { line, character: prior.length - prior.lastIndexOf('\n') - 1 };
+                },
+                getText: () => source.text,
+                offsetAt: (position: { line: number; character: number }) => {
+                    const lines = source.text.split('\n');
+                    let offset = 0;
+                    for (let i = 0; i < position.line; i++) offset += (lines[i]?.length ?? 0) + 1;
+                    return offset + position.character;
                 }
             };
         }
@@ -73,7 +80,7 @@ function refsAt(analysis: Analysis, text: string, at: number, includeDeclaration
 }
 
 test('7.3: declaration cursor and reference cursor return same bound uses', () => {
-    const text = `MODULE; PROBLEM;
+    const text = `P=MPC603; SC=2000; MODULE; PROBLEM;
         TYPE Node FIXED;
         DCL a REF Node;
         DCL b REF Node;
@@ -90,7 +97,7 @@ test('7.3: declaration cursor and reference cursor return same bound uses', () =
 });
 
 test('7.3: shadowed type references stay in separate declaration groups', () => {
-    const text = `MODULE; PROBLEM;
+    const text = `P=MPC603; SC=2000; MODULE; PROBLEM;
         TYPE Level FIXED;
         DCL outer REF Level;
         Main: PROC;
@@ -113,7 +120,7 @@ test('7.3: shadowed type references stay in separate declaration groups', () => 
 });
 
 test('7.3: GLOBAL SPC has a local declaration but no fabricated external definition', () => {
-    const text = `MODULE; PROBLEM;
+    const text = `P=MPC603; SC=2000; MODULE; PROBLEM;
         SPC Work PROC GLOBAL;
         Main: PROC;
             CALL Work;
@@ -126,7 +133,7 @@ test('7.3: GLOBAL SPC has a local declaration but no fabricated external definit
 });
 
 test('7.3: local SPC/PROC are one semantic target, with two declaration sites', () => {
-    const text = `MODULE; PROBLEM;
+    const text = `P=MPC603; SC=2000; MODULE; PROBLEM;
         SPC Work PROC;
         Work: PROC; END;
         Main: PROC; CALL Work; END;
@@ -141,7 +148,7 @@ test('7.3: local SPC/PROC are one semantic target, with two declaration sites', 
 });
 
 test('7.3: unknown names, keywords and builtin calls do not invent symbol references', () => {
-    const text = `MODULE; PROBLEM;
+    const text = `P=MPC603; SC=2000; MODULE; PROBLEM;
         Main: PROC; CALL Unknown; CALL SEEK; END;
         MODEND;`;
     const analysis = makeAnalysis(text);
@@ -151,14 +158,14 @@ test('7.3: unknown names, keywords and builtin calls do not invent symbol refere
 });
 
 test('7.3: named declaration with no uses supports includeDeclaration', () => {
-    const text = 'MODULE; PROBLEM; TYPE Empty FIXED; MODEND;';
+    const text = 'P=MPC603; SC=2000; MODULE; PROBLEM; TYPE Empty FIXED; MODEND;';
     const analysis = makeAnalysis(text);
     assert.equal(refsAt(analysis, text, text.indexOf('Empty')).length, 0);
     assert.equal(refsAt(analysis, text, text.indexOf('Empty'), true).length, 1);
 });
 
 test('7.3: distinct URI prevents cross-file offset collisions', () => {
-    const text = 'MODULE; PROBLEM; TYPE Node FIXED; DCL a REF Node; MODEND;';
+    const text = 'P=MPC603; SC=2000; MODULE; PROBLEM; TYPE Node FIXED; DCL a REF Node; MODEND;';
     const analysis = makeAnalysis(text);
     const registry = registryFor({ uri, text }, { uri: 'file:///other.pearl', text });
     const result = findReferences(analysis, 'file:///other.pearl', { line: 0, character: text.indexOf('Node') }, true, registry);
@@ -166,7 +173,7 @@ test('7.3: distinct URI prevents cross-file offset collisions', () => {
 });
 
 test('7.3: GOTO targets are connected to labels, not similarly spelled variables', () => {
-    const text = `MODULE; PROBLEM;
+    const text = `P=MPC603; SC=2000; MODULE; PROBLEM;
         Main: PROC;
             GOTO Next;
             Next: ;
@@ -189,7 +196,7 @@ test('7.3: macro-expanded uses are displayed once at the invocation', () => {
 test('7.3: include definition and root-file use have their own physical URIs', () => {
     const includeUri = 'file:///defs.pearl';
     const includeText = 'TYPE Shared FIXED;\n';
-    const rootText = 'MODULE; PROBLEM;\n#include "defs.pearl"\nDCL p REF Shared; MODEND;';
+    const rootText = 'P=MPC603; SC=2000; MODULE; PROBLEM;\n#include "defs.pearl"\nDCL p REF Shared; MODEND;';
     const source = new FileSource(uri, rootText);
     const problems = new ProblemCollection();
     const tokens = new Lexer(source, problems, quietLogger).tokenize();
@@ -219,15 +226,15 @@ test('7.3: include definition and root-file use have their own physical URIs', (
 });
 
 test('RTOS-UH: GLOBAL(module) is rejected, bare GLOBAL is accepted', () => {
-    const valid = makeAnalysis('MODULE; PROBLEM; SPC Remote PROC GLOBAL; MODEND;');
-    const invalid = makeAnalysis('MODULE; PROBLEM; SPC Remote PROC GLOBAL(Foreign); MODEND;');
+    const valid = makeAnalysis('P=MPC603; SC=2000; MODULE; PROBLEM; SPC Remote PROC GLOBAL; MODEND;');
+    const invalid = makeAnalysis('P=MPC603; SC=2000; MODULE; PROBLEM; SPC Remote PROC GLOBAL(Foreign); MODEND;');
     assert.equal(invalid.problems.size(), valid.problems.size() + 1);
     assert.ok([...invalid.problems].some(problem => problem.message.includes('only GLOBAL')));
     assert.equal(invalid.symbolOccurrences.all.some(group => group.declaration.value === 'Foreign'), false);
 });
 
 test('7.2 correction: GLOBAL SPC TASK does not bind a non-GLOBAL local TASK', () => {
-    const text = 'MODULE; PROBLEM; SPC Worker TASK GLOBAL; Worker: TASK; END; MODEND;';
+    const text = 'P=MPC603; SC=2000; MODULE; PROBLEM; SPC Worker TASK GLOBAL; Worker: TASK; END; MODEND;';
     const analysis = makeAnalysis(text);
     const nameLocations = analysis.symbolOccurrences.all.filter(group => group.declaration.value === 'Worker');
     assert.equal(nameLocations.length, 2);

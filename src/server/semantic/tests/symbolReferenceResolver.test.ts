@@ -67,7 +67,7 @@ function name(value: string): SourceValue<string> {
 }
 
 test('pipeline: named types resolve to declaration, unknown types remain unresolved', () => {
-    const result = analyze(`MODULE; PROBLEM;
+    const result = analyze(`P=MPC603; SC=2000; MODULE; PROBLEM;
         TYPE Node FIXED;
         DCL p REF Node;
         DCL q REF MissingType;
@@ -86,17 +86,17 @@ test('pipeline: named types resolve to declaration, unknown types remain unresol
 });
 
 test('pipeline: forward REF type is allowed, but ordinary forward TYPE is not invented', () => {
-    const ref = analyze(`MODULE; PROBLEM; TYPE Link REF Later; TYPE Later FIXED; MODEND;`);
+    const ref = analyze(`P=MPC603; SC=2000; MODULE; PROBLEM; TYPE Link REF Later; TYPE Later FIXED; MODEND;`);
     const later = pick(ref.resolutions.all, 'Later', SymbolReferenceKind.Type);
     assert.equal(later.length, 1);
     assert.equal(later[0].kind, 'bound');
 
-    const ordinary = analyze(`MODULE; PROBLEM; TYPE Alias Later; TYPE Later FIXED; MODEND;`);
+    const ordinary = analyze(`P=MPC603; SC=2000; MODULE; PROBLEM; TYPE Alias Later; TYPE Later FIXED; MODEND;`);
     assert.equal(pick(ordinary.resolutions.all, 'Later')[0]?.kind, 'unresolved');
 });
 
 test('pipeline: a CALL with an SPC resolves to that specification and a missing CALL stays unresolved', () => {
-    const result = analyze(`MODULE; PROBLEM;
+    const result = analyze(`P=MPC603; SC=2000; MODULE; PROBLEM;
         SPC Work PROC GLOBAL;
         Main: PROC;
             CALL Work;
@@ -114,7 +114,7 @@ test('pipeline: a CALL with an SPC resolves to that specification and a missing 
 });
 
 test('pipeline: a forward GOTO uses the existing label resolver', () => {
-    const result = analyze(`MODULE; PROBLEM;
+    const result = analyze(`P=MPC603; SC=2000; MODULE; PROBLEM;
         Main: PROC;
             GOTO Next;
             Next: ;
@@ -163,7 +163,7 @@ test('same names in distinct occurrences cannot collapse, and unbound results pr
 });
 
 test('pipeline: nested TYPE declarations shadow module TYPE without conflating their uses', () => {
-    const result = analyze(`MODULE; PROBLEM;
+    const result = analyze(`P=MPC603; SC=2000; MODULE; PROBLEM;
         TYPE Level FIXED;
         DCL outer REF Level;
         Main: PROC;
@@ -184,7 +184,7 @@ test('pipeline: nested TYPE declarations shadow module TYPE without conflating t
 });
 
 test('pipeline: local SPC/PROC relation leads to the real definition', () => {
-    const result = analyze(`MODULE; PROBLEM;
+    const result = analyze(`P=MPC603; SC=2000; MODULE; PROBLEM;
         SPC Work PROC;
         Work: PROC;
         END;
@@ -205,14 +205,14 @@ test('pipeline: local SPC/PROC relation leads to the real definition', () => {
 });
 
 test('pipeline: builtin names have a distinct result, and visible symbols take precedence', () => {
-    const builtin = analyze(`MODULE; PROBLEM;
+    const builtin = analyze(`P=MPC603; SC=2000; MODULE; PROBLEM;
         Main: PROC;
             CALL SEEK;
         END;
         MODEND;`);
     assert.equal(pick(builtin.resolutions.all, 'SEEK', SymbolReferenceKind.Call)[0]?.kind, 'builtin');
 
-    const declared = analyze(`MODULE; PROBLEM;
+    const declared = analyze(`P=MPC603; SC=2000; MODULE; PROBLEM;
         DCL SEEK FIXED;
         Main: PROC;
             CALL SEEK;
@@ -245,7 +245,7 @@ test('pipeline: a macro-expanded identifier binds and retains its own SourceValu
 });
 
 test('pipeline: a GLOBAL SPC without local definition binds to its own specification', () => {
-    const result = analyze(`MODULE; PROBLEM;
+    const result = analyze(`P=MPC603; SC=2000; MODULE; PROBLEM;
         SPC Remote PROC GLOBAL;
         Main: PROC;
             CALL Remote;

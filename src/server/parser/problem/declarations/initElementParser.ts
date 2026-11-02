@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
-import type { SourceValue } from '../../../core/sourceValue';
+import { SourceValue } from '../../../core/sourceValue';
+import { mapToOriginalLocation } from '../../../core/sourceOffset';
+import { ExpandedSource } from '../../../source/expandedSource';
 import type { Token } from '../../../lexer/token';
 
 import { ParserBase } from '../../parserBase';
@@ -71,12 +73,12 @@ export class InitElementParser extends ParserBase {
             // Makroexpansionen koennen eine einzige PEARL-Zeichenkettenkonstante
             // in mehrere benachbarte StringLiteral-Tokens aufteilen. Ihre
             // einzelnen Quelltextstellen bleiben als SourceValues erhalten.
-            const literals: SourceValue<string>[] = [this.tokenValue(characterString)];
+            const literals: SourceValue<string>[] = this.literalSourceValues(characterString);
             let previous: Token = characterString;
 
             while (this.isStringLiteral() && this.areAdjacentStringTokens(previous, this.current())) {
                 const current = this.acceptStringLiteral()!;
-                literals.push(this.tokenValue(current));
+                literals.push(...this.literalSourceValues(current));
                 previous = current;
             }
 
@@ -146,6 +148,24 @@ export class InitElementParser extends ParserBase {
         }
 
         return undefined;
+    }
+
+    /**
+     * The compiler lexer recognizes a string as a whole, even when its quotes
+     * and control sequences cross expansion boundaries. Preserve those source
+     * boundaries in the AST without changing the lexical interpretation.
+     */
+    private literalSourceValues(token: Token): SourceValue<string>[] {
+        if (!(token.location.source instanceof ExpandedSource)) {
+            return [this.tokenValue(token)];
+        }
+        const pieces = token.location.source.sourceFragments(token.location);
+        if (pieces.length <= 1) return [this.tokenValue(token)];
+        return pieces.map(piece => new SourceValue(
+            piece.text,
+            mapToOriginalLocation(piece.location),
+            token.location
+        ));
     }
 
     /**

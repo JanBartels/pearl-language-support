@@ -28,7 +28,7 @@ const D = SemanticDiagnosticCode;
 
 function analyze(program: string) {
     const source = new FileSource('file:///assignment-final-regression.pearl',
-        `MODULE M; PROBLEM;\n${program}\nMODEND;`);
+        `P=MPC603; SC=2000; MODULE M; PROBLEM;\n${program}\nMODEND;`);
     const problems = new ProblemCollection();
     const preprocessor = new PreprocessorContext({} as DocumentRegistry, new MacroTable(),
         new ConditionalStack(), new PreprocessorConditionalBlockStack());

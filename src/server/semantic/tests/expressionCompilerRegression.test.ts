@@ -27,7 +27,7 @@ import { AstLookupResultDocumentationProvider } from '../../documentation/astLoo
 const logger: Logger = { info() {}, warn() {}, error() {} };
 function analyze(body: string) {
     const source = new FileSource('file:///expression-compiler-regression.pearl',
-        `MODULE M; PROBLEM; ${body} MODEND;`);
+        `P=MPC603; SC=2000; MODULE M; PROBLEM; ${body} MODEND;`);
     const problems = new ProblemCollection();
     const context = new PreprocessorContext(
         {} as DocumentRegistry, new MacroTable(), new ConditionalStack(),
@@ -87,7 +87,7 @@ test('LEN and MID are typed through builtin catalog and documented in hover', ()
     assert.deepEqual(r.semantic.expressionTypes.get(r.returns[1].expression!),
         { kind: SemanticTypeKind.Character, length: undefined });
     assert.match(r.hover('LEN(Text)')!, /RTOS-UH-Einbaufunktion/);
-    assert.match(r.hover('LEN(Text)')!, /Text CHAR\(\*\)(?! IDENT)/);
+    assert.match(r.hover('LEN(Text)')!, /Signatur.*`LEN\([^)]*CHAR\(\*\)(?! IDENT)/);
     assert.match(r.hover('LEN(Text)')!, /Expression type/);
     assert.match(r.hover('MID(Text, Start, EndIndex)')!, /String.*Teilstring|Teilstring extrahieren/);
     const name = r.returns[0].expression as NameExpressionNode;

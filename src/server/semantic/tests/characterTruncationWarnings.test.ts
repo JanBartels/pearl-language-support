@@ -23,7 +23,7 @@ const logger: Logger = { info() {}, warn() {}, error() {} };
 
 function analyze(code: string, warnOnCharTruncation?: boolean) {
     const source = new FileSource('file:///char-warnings.pearl',
-        `MODULE M; PROBLEM; ${code} MODEND;`);
+        `P=MPC603; SC=2000; MODULE M; PROBLEM; ${code} MODEND;`);
     const problems = new ProblemCollection();
     const context = new PreprocessorContext(
         {} as DocumentRegistry, new MacroTable(), new ConditionalStack(),
