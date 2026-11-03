@@ -38,6 +38,8 @@ DCL MySema SEMA;
 Defines the initial values of the declared SEMA variables.
 
 The values must be non-negative constant FIXED expressions.
+In RTOS-UH, \`PRESET\` is supported for individual SEMA variables
+(including an identifier list), but not for SEMA arrays.
 
 Example:
 

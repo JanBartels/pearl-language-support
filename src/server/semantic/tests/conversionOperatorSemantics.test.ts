@@ -49,7 +49,7 @@ function analyze(body: string) {
     };
 }
 
-test('TOFIXED follows RTOS-UH BIT(lg) -> FIXED(lg - 1) and CHAR(1) -> FIXED(7)', () => {
+test('TOFIXED follows RTOS-UH BIT(lg) -> FIXED(lg - 1) and CHAR(1) -> FIXED(15)', () => {
     const r = analyze(`R: PROC RETURNS(FIXED(31));
         RETURN(TOFIXED '1010'B); RETURN(TOFIXED 'A');
     END;`);
@@ -58,7 +58,7 @@ test('TOFIXED follows RTOS-UH BIT(lg) -> FIXED(lg - 1) and CHAR(1) -> FIXED(7)',
     const types = r.returns.map(ret => r.semantic.expressionTypes.get(ret.expression!));
     assert.deepEqual(types, [
         { kind: SemanticTypeKind.Fixed, precision: 3 },
-        { kind: SemanticTypeKind.Fixed, precision: 7 }
+        { kind: SemanticTypeKind.Fixed, precision: 15 }
     ]);
 });
 
@@ -183,7 +183,7 @@ test('declared BIT and CHAR types are converted without inserting default length
     assert.deepEqual(r.errors, []);
     assert.deepEqual(r.returns.map(ret => r.semantic.expressionTypes.get(ret.expression!)), [
         { kind: SemanticTypeKind.Fixed, precision: 7 },
-        { kind: SemanticTypeKind.Fixed, precision: 7 }
+        { kind: SemanticTypeKind.Fixed, precision: 15 }
     ]);
 });
 

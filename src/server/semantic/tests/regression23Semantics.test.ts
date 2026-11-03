@@ -139,7 +139,7 @@ test('REF PROC assignment rejects different return signature', () => {
 });
 
 
-test('FIXED and FLOAT assignments reject mismatching widths while BIT and CHAR adapt', () => {
+test('FIXED and FLOAT assignments widen safely and reject narrowing without FIT', () => {
     const result = analyze(`R: PROC;
         DCL I15 FIXED, I31 FIXED(31), F23 FLOAT, F31 FLOAT(31);
         DCL B8 BIT(8), B16 BIT(16), C3 CHAR(3), C6 CHAR(6);
@@ -151,7 +151,7 @@ test('FIXED and FLOAT assignments reject mismatching widths while BIT and CHAR a
         C3 = C6; C6 = C3;
     END;`);
     assert.deepEqual(result.syntax, []);
-    assert.equal(result.errors.length, 4, JSON.stringify(result.errors));
+    assert.equal(result.errors.length, 2, JSON.stringify(result.errors));
     assert.ok(result.errors.every(message => message.startsWith('Zuweisung:')),
         JSON.stringify(result.errors));
 });

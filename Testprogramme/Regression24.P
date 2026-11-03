@@ -1,0 +1,99 @@
+P=MPC603;
+SC=2000;
+MODULE Regression24;
+
+PROBLEM;
+
+SPC InvSema INV SEMA GLOBAL;    ! Erwartet: Fehler wegen INV SEMA.
+DCL SC(1:2) SEMA PRESET(1,2);   ! Erwartet: Fehler wegen PRESET bei SEMA-Feld.
+
+#define cs1 "1"
+Reg1: PROC;
+DCL RX REF FIXED;
+
+    CASE RX     ! Gültig: REF FIXED wird hier implizit dereferenziert.
+    ALT (cs1)
+        RETURN;
+    FIN;        
+END;
+
+Reg2: PROC;;    ! Erwartet: Warnung wegen überflüssigem Semikolon.
+DCL F FLOAT;
+END;
+
+Reg3: PROC;
+    BEGIN;      ! Erwartet: Warnung wegen überflüssigem Semikolon.
+        DCL F FLOAT;
+    END;
+END;
+
+Reg4: PROC;
+DCL P REF(,) FLOAT;     ! Gültig: Referenz auf zweidimensionales FLOAT-Feld.
+END;
+
+Reg5: PROC;
+DCL CV CLOCK INIT(12:00:00.0001);   ! Erwartet: Fehler wegen nicht exakt darstellbarem Zeitwert.
+DCL DV DURATION INIT(0.0001 SEC);   ! Erwartet: Fehler wegen nicht exakt darstellbarem Zeitwert.
+END;
+
+Reg6: PROC;
+DCL DV DURATION INIT(+2 SEC);   ! Erwartet: Syntaxfehler wegen führendem Plus.
+DCL FV FLOAT INIT(+2.85);       ! Erwartet: Syntaxfehler wegen führendem Plus.
+END;
+
+TYPE Reg7Char255 CHAR(255);
+Reg7: PROC;
+DCL L FIXED;
+DCL C Reg7Char255;
+    L := LEN( C );          ! Gültig: LEN akzeptiert den CHAR-Typalias.
+END;
+
+Reg8: PROC;
+DCL F FIXED(15);
+    F = TOFIXED( '1' );     ! Gültig: TOFIXED liefert FIXED(15).
+END;
+
+Reg9: PROC;
+DCL F FLOAT;
+DCL D DURATION;
+DCL X31 FIXED(31);
+    F = F * (D / D) / X31;      ! Gültig: DURATION / DURATION ergibt FLOAT(23).
+END;
+
+Reg10P: PROC( V REF STRUCT[] );
+END;
+Reg10: PROC;
+    Reg10P('huhu');             ! Gültig, mit Warnung vor Schreibzugriff auf ein Literal.
+END;
+
+Reg11P: PROC( B (2000) FIXED IDENT); ! Gültig: Feld-Formalparameter mit fester Dimension.
+END;
+Reg11: PROC;
+DCL B (2000) FIXED;
+    Reg11P(B);
+END;
+
+Reg12: PROC;
+DCL Short FIXED(15);
+DCL Long FIXED(31);
+
+    Short = Long;               ! Erwartet: Fehler bei Verengung von FIXED(31) auf FIXED(15).
+    Short = Long FIT Short;     ! Gültig.
+    Long = Short;               ! Gültig.
+    Long = Short FIT Long;      ! Gültig.
+END;
+
+Reg13P: PROC( P REF STRUCT[] IDENT);
+END;
+Reg13: PROC;
+DCL VoidPtr REF STRUCT[];
+DCL ConstVoidPtr REF INV STRUCT[];
+DCL XPtr REF FIXED;
+DCL ConstXPtr REF INV FIXED;
+    Reg13P( VoidPtr );          ! Gültig.
+    Reg13P( ConstVoidPtr );     ! Gültig, mit Warnung wegen möglichem INV-Schutzverlust.
+    Reg13P( XPtr );             ! Gültig.
+    Reg13P( ConstXPtr );        ! Gültig, mit Warnung wegen möglichem INV-Schutzverlust.
+END;
+
+MODEND;

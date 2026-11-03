@@ -10,6 +10,7 @@ import { DocumentationProvider } from '../../../documentation/documentationProvi
 import { FormalParameterDocumentationProvider } from '../../../documentation/problem/declarations/formalParameterDocumentationProvider';
 import { OneIdentifierOrListNode } from '../identifiers/oneIdentifierOrListNode';
 import { VirtualDimensionListNode } from '../dimensions/virtualDimensionListNode';
+import { DimensionAttributeNode } from '../dimensions/dimensionAttributeNode';
 import { ProblemDataTypeNode } from '../types/problemDataTypeNode';
 import { ProcedureParameterTypeNode } from './procedureParameterTypeNode';
 
@@ -20,7 +21,7 @@ export class FormalParameterNode extends AstNode {
 
     constructor(
         public readonly identifiers: OneIdentifierOrListNode | undefined,
-        public readonly dimension: VirtualDimensionListNode | undefined,
+        public readonly dimension: VirtualDimensionListNode | DimensionAttributeNode | undefined,
         public readonly invKeyword: SourceValue<string> | undefined,
         public readonly type: FormalParameterTypeNode,
         public readonly identKeyword: SourceValue<string> | undefined

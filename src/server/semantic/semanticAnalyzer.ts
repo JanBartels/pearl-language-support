@@ -311,6 +311,34 @@ class SemanticAnalysisState implements
         });
     }
 
+    reportReferenceTargetProtectionLoss(
+        source: SourceValue<string>, target: SourceValue<string>, position: number
+    ): void {
+        if (!source.location) return;
+        this.addDiagnostic({
+            code: SemanticDiagnosticCode.ReferenceTargetProtectionLoss,
+            severity: SemanticDiagnosticSeverity.Warning,
+            location: source.location,
+            message: `Aktualparameter ${position} von '${target.value}': `
+                + 'REF INV wird an REF STRUCT[] IDENT übergeben; '
+                + 'der Schutz des referenzierten Objekts ist damit nicht gewährleistet.'
+        });
+    }
+
+    reportMutableReferenceToCharacterLiteral(
+        source: SourceValue<string>, target: SourceValue<string>, position: number
+    ): void {
+        if (!source.location) return;
+        this.addDiagnostic({
+            code: SemanticDiagnosticCode.MutableReferenceToCharacterLiteral,
+            severity: SemanticDiagnosticSeverity.Warning,
+            location: source.location,
+            message: `Aktualparameter ${position} von '${target.value}': `
+                + 'Ein CHARACTER-Literal wird als veränderliche REF STRUCT[] übergeben; '
+                + 'ein Schreibzugriff auf den Literalspeicher ist nicht sicher.'
+        });
+    }
+
     reportInvalidIdentificationArgument(
         source: SourceValue<string>, target: SourceValue<string>,
         position: number, formalName?: string, reason?: 'protected'
@@ -1253,6 +1281,24 @@ class SemanticAnalysisState implements
         });
     }
 
+    reportInvalidInvariantSynchronizationObject(inv: SourceValue<string>, typeName: 'SEMA' | 'BOLT'): void {
+        this.addDiagnostic({
+            code: SemanticDiagnosticCode.InvalidInvariantSynchronizationObject,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: inv.location,
+            message: `INV ist für ${typeName}-Objekte nicht zulässig: Synchronisationsobjekte müssen veränderlich sein.`
+        });
+    }
+
+    reportUnsupportedSemaArrayPreset(keyword: SourceValue<string>): void {
+        this.addDiagnostic({
+            code: SemanticDiagnosticCode.UnsupportedSemaArrayPreset,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: keyword.location,
+            message: 'RTOS-UH unterstützt PRESET nicht für SEMA-Felder; PRESET ist nur für einzelne SEMA-Variablen zulässig.'
+        });
+    }
+
     reportInvariantWithoutInitialization(identifier: SourceValue<string>): void {
         this.addDiagnostic({
             code: SemanticDiagnosticCode.InvariantWithoutInitialization,
@@ -1370,7 +1416,7 @@ class SemanticAnalysisState implements
     ): void {
         this.addDiagnostic({
             code: SemanticDiagnosticCode.TimeResolutionLoss,
-            severity: SemanticDiagnosticSeverity.Warning,
+            severity: SemanticDiagnosticSeverity.Error,
             location: source.location,
             message: `${typeName}-Wert ist mit der Modul-Zeitauflösung ${this.formatTimeResolution(resolution)} `
                 + 'nicht exakt darstellbar.'
@@ -2016,7 +2062,13 @@ export class SemanticAnalyzer {
         statement: CaseStatementNode, environment: Environment, state: SemanticAnalysisState
     ): void {
         const type = state.expressionTypeResolver.resolve(statement.selector, environment);
-        const effective = type && state.resolveUnderlyingType(type);
+        const underlying = type && state.resolveUnderlyingType(type);
+        // RTOS-UH 5.6.2.3: a typed REF is automatically dereferenced in
+        // value contexts. CASE compares the referenced value, not the address.
+        // Keep the expression's recorded type as REF for Hover/navigation;
+        // only the CASE selector check uses the value type.
+        const effective = underlying?.kind === SemanticTypeKind.Reference
+            ? state.resolveUnderlyingType(underlying.target) : underlying;
         const indexed = statement.alternatives.some(alt => alt.caseListTokens !== undefined);
         // RTOS-UH restricts CASE to FIXED(15) (not FIXED(31)) or,
         // for indexed CASE, CHAR(1). Resolve the effective precision here
@@ -2025,8 +2077,7 @@ export class SemanticAnalyzer {
                 && (effective.precision ?? 15) === 15
             || (indexed && effective?.kind === SemanticTypeKind.Character
                 && (effective.length === 1 || effective.length === undefined));
-        if (effective && effective.kind !== SemanticTypeKind.Reference
-            && effective.kind !== SemanticTypeKind.VoidReference && !valid) {
+        if (effective && !valid) {
             state.reportCaseProblem(SemanticDiagnosticCode.InvalidCaseSelector,
                 statement.selectorTokens[0] ?? statement.caseKeyword,
                 indexed ? 'CASE-Selektor muss FIXED(15) oder CHAR(1) sein.'
@@ -2043,8 +2094,10 @@ export class SemanticAnalyzer {
         }> = [];
         for (const alternative of statement.alternatives) {
             for (const range of alternative.ranges) {
-                const lower = this.analyzeCaseBound(range.lower, effective, environment, state);
-                const explicitUpper = this.analyzeCaseBound(range.upper, effective, environment, state);
+                // A bad selector has its own diagnostic. Do not turn otherwise
+                // valid ALT constants into misleading secondary type errors.
+                const lower = this.analyzeCaseBound(range.lower, valid ? effective : undefined, environment, state);
+                const explicitUpper = this.analyzeCaseBound(range.upper, valid ? effective : undefined, environment, state);
                 const upper = range.colon ? explicitUpper : lower;
                 // Nonconstant/ill-typed/incomplete ranges have their own diagnostics.
                 // Never claim that their unknown values overlap another ALT.
@@ -2205,8 +2258,11 @@ export class SemanticAnalyzer {
         const parameterTypes = new Map(node.parameters.map(parameter => {
             let type = state.typeResolver.resolveProcedureParameterType(parameter.type, environment);
             if (type && parameter.dimension) {
-                type = { kind: SemanticTypeKind.VirtualArray as const,
-                    elementType: type, rank: parameter.dimension.rank };
+                type = parameter.dimension.kind === AstKind.VirtualDimensionList
+                    ? { kind: SemanticTypeKind.VirtualArray as const,
+                        elementType: type, rank: (parameter.dimension as VirtualDimensionListNode).rank }
+                    : state.resolveDimensionedType(type,
+                        parameter.dimension as DimensionAttributeNode, environment);
             }
             return [parameter, type] as const;
         }));
@@ -2569,7 +2625,12 @@ export class SemanticAnalyzer {
                         node.target, builtinExpectedArity(builtin), node.argumentsList?.length ?? 0
                     );
                 } else if (actualTypes.every(type => type !== undefined)) {
-                    const match = matchBuiltinSignature(builtin, actualTypes as SemanticType[]);
+                    // TYPE aliases must be treated like their underlying types
+                    // in CALL built-ins just as in expression built-ins.
+                    const resolvedActuals = (actualTypes as SemanticType[]).map(type =>
+                        resolveReferenceTransferType(type,
+                            candidate => state.resolveUnderlyingType(candidate)) ?? type);
+                    const match = matchBuiltinSignature(builtin, resolvedActuals);
                     if (!match) {
                         state.reportInvalidBuiltinArgumentType(node.target, builtin.name);
                     } else {
@@ -2820,7 +2881,13 @@ export class SemanticAnalyzer {
             state.reportGlobalDeclarationOutsideModule(attribute.global.keyword);
         }
 
-        if (attribute.inv && !attribute.initialization) {
+        // REF boundaries are intentionally not crossed: INV REF SEMA protects the
+        // reference variable, not the semaphore to which it points.
+        const invariantSynchronizationType = attribute.inv
+            ? this.containedSynchronizationType(type, state) : undefined;
+        if (attribute.inv && invariantSynchronizationType) {
+            state.reportInvalidInvariantSynchronizationObject(attribute.inv, invariantSynchronizationType);
+        } else if (attribute.inv && !attribute.initialization) {
             for (const identifier of node.identifiers.identifiers) {
                 state.reportInvariantWithoutInitialization(identifier);
             }
@@ -2917,24 +2984,28 @@ export class SemanticAnalyzer {
             const semaAttribute = attribute as SemaAttributeNode;
 
             if (semaAttribute.presetKeyword) {
-                semaPresetValues = this.evaluateSemaPresetValues(
-                    semaAttribute,
-                    environment,
-                    state
-                );
-
-                const elementsPerSymbol = this.semanticElementCount(type);
-                const expectedValues = elementsPerSymbol * BigInt(node.identifiers.identifiers.length);
-
-                if (BigInt(semaAttribute.presetValues.length) !== expectedValues) {
-                    state.reportSemaPresetElementCount(
-                        semaAttribute.presetKeyword,
-                        expectedValues,
-                        semaAttribute.presetValues.length
-                    );
-                    semaPresetValues = undefined;
+                // The language report permits dimensions in SEMA declarations,
+                // but RTOS-UH rejects PRESET on an array (even with a matching
+                // number of elements). Preserve the array symbol for LSP lookup.
+                if (type.kind === SemanticTypeKind.Array) {
+                    state.reportUnsupportedSemaArrayPreset(semaAttribute.presetKeyword);
                 } else {
-                    semaValuesPerSymbol = Number(elementsPerSymbol);
+                    semaPresetValues = this.evaluateSemaPresetValues(
+                        semaAttribute,
+                        environment,
+                        state
+                    );
+                    const expectedValues = BigInt(node.identifiers.identifiers.length);
+                    if (BigInt(semaAttribute.presetValues.length) !== expectedValues) {
+                        state.reportSemaPresetElementCount(
+                            semaAttribute.presetKeyword,
+                            expectedValues,
+                            semaAttribute.presetValues.length
+                        );
+                        semaPresetValues = undefined;
+                    } else {
+                        semaValuesPerSymbol = 1;
+                    }
                 }
             }
         }
@@ -3177,6 +3248,15 @@ export class SemanticAnalyzer {
             state.reportGlobalDeclarationOutsideModule(attribute.global.keyword);
         }
 
+        // SPC ... INV SEMA/BOLT is grammatically accepted by the general data
+        // attribute parser, but cannot represent a usable synchronization object.
+        if (attribute.inv) {
+            const synchronizationType = this.containedSynchronizationType(type, state);
+            if (synchronizationType) {
+                state.reportInvalidInvariantSynchronizationObject(attribute.inv, synchronizationType);
+            }
+        }
+
         return this.introduceSpecifiedDataObjects(
             node.identifiers,
             type,
@@ -3312,20 +3392,6 @@ export class SemanticAnalyzer {
         }
 
         return valid ? values : undefined;
-    }
-
-    private semanticElementCount(type: SemanticType): bigint {
-        if (type.kind !== SemanticTypeKind.Array) {
-            return BigInt(1);
-        }
-
-        let count = BigInt(1);
-
-        for (const dimension of type.dimensions) {
-            count *= dimension.upperBound - dimension.lowerBound + BigInt(1);
-        }
-
-        return count;
     }
 
     private introduceDeclaredDataObjects(

@@ -4,18 +4,18 @@
 import { FormalParameterNode } from '../../../ast/problem/declarations/formalParameterNode';
 import { ParserBase } from '../../parserBase';
 import { OneIdentifierOrListParser } from '../identifiers/oneIdentifierOrListParser';
-import { VirtualDimensionListParser } from '../dimensions/virtualDimensionListParser';
+import { FormalParameterDimensionParser } from '../dimensions/formalParameterDimensionParser';
 import { ProblemDataTypeParser } from '../types/problemDataTypeParser';
 import { ProcedureParameterTypeParser } from './procedureParameterTypeParser';
 
-/** FormalParameter ::= [IdentifierOrList [VirtualDimensions]] [INV] ParameterType [IDENT]. */
+/** FormalParameter ::= [IdentifierOrList [VirtualDimensions | DimensionAttribute]] [INV] ParameterType [IDENT]. */
 export class FormalParameterParser extends ParserBase {
     override parse(): FormalParameterNode | undefined {
         this.skipTrivia();
         const identifiers = new OneIdentifierOrListParser(this.context).parse();
         // RTOS-UH permits unnamed formal parameters, e.g. PROC(FLOAT IDENT).
         const dimension = identifiers
-            ? new VirtualDimensionListParser(this.context).parse()
+            ? new FormalParameterDimensionParser(this.context).parse()
             : undefined;
         this.skipTrivia();
         const inv = this.acceptKeyword('INV');

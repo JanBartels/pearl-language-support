@@ -1,0 +1,98 @@
+P=MPC603;
+SC=2000;
+MODULE Regression24;
+
+PROBLEM;
+
+! SPC ROUND PROC( FLOAT ) RETURNS( FIXED ) GLOBAL;
+
+#define cs1 "1"
+Reg1: PROC;
+DCL RX REF FIXED;
+
+    CASE RX     ! Hier fehlt die Dereferenzierung
+    ALT (cs1)
+        RETURN;
+    FIN;        
+END;
+
+Reg2: PROC;;    ! Semikolon falsch; Compiler Ok; Warnung im LSP?
+DCL F FLOAT;
+END;
+
+Reg3: PROC;
+    BEGIN;      ! Semikolon falsch; Compiler Ok; Warnung im LSP?
+        DCL F FLOAT;
+    END;
+END;
+
+Reg4: PROC;
+DCL P REF(,) FLOAT;     ! LSP: REF auf Felder geht nicht.
+END;
+
+Reg5: PROC;
+DCL CV CLOCK INIT(12:00:00.0001);   ! Compiler: Error /LIMIT/, LSP Warnung
+DCL DV DURATION INIT(0.0001 SEC);   ! Compiler: Error /LIMIT/, LSP Warnung
+END;
+
+Reg6: PROC;
+DCL DV DURATION INIT(+2 SEC);   ! Compiler: Error /SYNTAX/, LSP ok
+DCL FV FLOAT INIT(+2.85);       ! Compiler: Error /SYNTAX/, LSP ok
+END;
+
+TYPE Reg7Char255 CHAR(255);
+Reg7: PROC;
+DCL L FIXED;
+DCL C Reg7Char255;
+    L := LEN( C );          ! Typprüfung unvollständig
+END;
+
+Reg8: PROC;
+DCL F FIXED(15);
+    F = TOFIXED( '1' );     ! TOFIXED liefert FIXED(15) statt FIXED(7)
+END;
+
+Reg9: PROC;
+DCL F FLOAT;
+DCL D DURATION;
+DCL X31 FIXED(31);
+    F = F * (D / D) / X31;      ! Gesamtausdruck ist FLOAT(23) statt FLOAT(31)
+END;
+
+Reg10P: PROC( V REF STRUCT[] );
+END;
+Reg10: PROC;
+    Reg10P('huhu');             ! Compiler ok, LSP Fehler.
+END;
+
+Reg11P: PROC( B (2000) FIXED IDENT); ! Compiler ok, LSP Fehler
+END;
+Reg11: PROC;
+DCL B (2000) FIXED;
+    Reg11P(B);
+END;
+
+Reg12: PROC;
+DCL Short FIXED(15);
+DCL Long FIXED(31);
+
+    Short = Long;               ! Compiler: Fehlermeldung
+    Short = Long FIT Short;     ! Compiler ok
+    Long = Short;               ! Compiler ok
+    Long = Short FIT Long;      ! Compiler ok
+END;
+
+Reg13P: PROC( P REF STRUCT[] IDENT);
+END;
+Reg13: PROC;
+DCL VoidPtr REF STRUCT[];
+DCL ConstVoidPtr REF INV STRUCT[];
+DCL XPtr REF FIXED;
+DCL ConstXPtr REF INV FIXED;
+    Reg13P( VoidPtr );          ! Compiler: ok
+    Reg13P( ConstVoidPtr );     ! Compiler: ok, neu: LSP: Warnung wegen INV-Verlust?
+    Reg13P( XPtr );             ! Compiler: ok
+    Reg13P( ConstXPtr );        ! Compiler: ok, neu: LSP: Warnung wegen INV-Verlust?
+END;
+
+MODEND;

@@ -290,3 +290,26 @@ test('other temporal ALT expression forms also keep their diagnostic locations',
     assert.equal(errors[0].location.span.start, r.source.text.indexOf('12:34:56'));
     assert.equal(errors[1].location.span.start, r.source.text.indexOf('5 SEC'));
 });
+
+
+test('CASE automatically dereferences typed REF scalar selectors without changing expression type', () => {
+    const r = analyze(`DCL RX REF FIXED, RC REF CHAR(1), RW REF FIXED(31);
+        CASE RX ALT (1) RETURN; FIN;
+        CASE RC ALT ('x') RETURN; FIN;
+        CASE RW ALT (1) RETURN; FIN;`);
+    assert.deepEqual(r.syntax, []);
+    assert.deepEqual(r.codes, [SemanticDiagnosticCode.InvalidCaseSelector]);
+    assert.equal(r.semantic.expressionTypes.get(r.statements[0].selector!)?.kind,
+        SemanticTypeKind.Reference);
+    assert.equal(r.semantic.expressionTypes.get(r.statements[1].selector!)?.kind,
+        SemanticTypeKind.Reference);
+});
+
+test('CASE does not assume a scalar value type for untyped REF or non-scalar targets', () => {
+    const r = analyze(`DCL V REF STRUCT[], N REF CHAR(2);
+        CASE V ALT (1) RETURN; FIN;
+        CASE N ALT (1) RETURN; FIN;`);
+    assert.deepEqual(r.syntax, []);
+    assert.deepEqual(r.codes, [SemanticDiagnosticCode.InvalidCaseSelector,
+        SemanticDiagnosticCode.InvalidCaseSelector]);
+});

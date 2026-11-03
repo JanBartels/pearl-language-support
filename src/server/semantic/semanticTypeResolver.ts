@@ -5,6 +5,7 @@ import { SourceValue } from "../core/sourceValue";
 
 import { ProcedureSignatureNode } from '../ast/problem/procedures/procedureSignatureNode';
 import { ProcedureReferenceTargetNode } from '../ast/problem/types/procedureReferenceTargetNode';
+import { ReferenceArrayTargetNode } from '../ast/problem/types/referenceArrayTargetNode';
 import { SynchronizationTypeNode } from "../ast/problem/types/synchronizationTypeNode";
 import { SynchronizationReferenceTargetNode } from '../ast/problem/types/synchronizationReferenceTargetNode';
 import { ProcedureParameterTypeNode } from '../ast/problem/declarations/procedureParameterTypeNode';
@@ -336,6 +337,15 @@ export class SemanticTypeResolver {
                 return this.resolveProcedureSignature(
                     (node as ProcedureReferenceTargetNode).signature, environment
                 );
+
+            case AstKind.ReferenceArrayTarget: {
+                const array = node as ReferenceArrayTargetNode;
+                const elementType = this.resolve(array.elementType, environment);
+                return elementType ? {
+                    kind: SemanticTypeKind.VirtualArray,
+                    elementType, rank: array.dimensions.rank
+                } : undefined;
+            }
 
             case AstKind.SimpleType:
                 return this.resolveSimpleType( node as SimpleTypeNode, environment );

@@ -40,7 +40,7 @@ function analyze(code: string) {
 
 const mismatch = SemanticDiagnosticCode.InvalidAssignmentValueType;
 
-test('FIXED assignments require FIT for either mismatching precision', () => {
+test('FIXED assignment widens implicitly but narrowing requires FIT', () => {
     const r = analyze(`R: PROC;
         DCL Small FIXED(15), Wide FIXED(31), F FLOAT(31);
         Wide := Small;
@@ -51,13 +51,12 @@ test('FIXED assignments require FIT for either mismatching precision', () => {
         Small := F;
     END;`);
     assert.deepEqual(r.syntax, []);
-    assert.deepEqual(r.errors.map(e => e.code), [mismatch, mismatch, mismatch]);
-    assert.match(r.errors[0].message, /erwartet FIXED\(31\), erhalten FIXED\(15\)/);
-    assert.match(r.errors[1].message, /erwartet FIXED\(15\), erhalten FIXED\(31\)/);
-    assert.match(r.errors[2].message, /erwartet FIXED\(15\), erhalten FLOAT\(31\)/);
+    assert.deepEqual(r.errors.map(e => e.code), [mismatch, mismatch]);
+    assert.match(r.errors[0].message, /erwartet FIXED\(15\), erhalten FIXED\(31\)/);
+    assert.match(r.errors[1].message, /erwartet FIXED\(15\), erhalten FLOAT\(31\)/);
 });
 
-test('FLOAT assignments require matching precision or explicit FIT', () => {
+test('FLOAT assignment widens implicitly but narrowing requires FIT', () => {
     const r = analyze(`R: PROC;
         DCL Single FLOAT, Double FLOAT(31);
         Single := Double;
@@ -66,9 +65,8 @@ test('FLOAT assignments require matching precision or explicit FIT', () => {
         Double := Single FIT Double;
     END;`);
     assert.deepEqual(r.syntax, []);
-    assert.deepEqual(r.errors.map(e => e.code), [mismatch, mismatch]);
+    assert.deepEqual(r.errors.map(e => e.code), [mismatch]);
     assert.match(r.errors[0].message, /erwartet FLOAT, erhalten FLOAT\(31\)/);
-    assert.match(r.errors[1].message, /erwartet FLOAT\(31\), erhalten FLOAT[.]/);
 });
 
 test('BIT and CHAR assignments may narrow or widen lengths', () => {

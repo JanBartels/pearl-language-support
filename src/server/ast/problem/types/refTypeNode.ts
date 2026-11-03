@@ -18,6 +18,7 @@ import { SimpleTypeNode } from "./simpleTypeNode";
 import { NamedTypeNode } from "./namedTypeNode";
 import { StructTypeNode } from "./structTypeNode";
 import { ProcedureParameterTypeNode } from "../declarations/procedureParameterTypeNode";
+import { ReferenceArrayTargetNode } from './referenceArrayTargetNode';
 
 export type RefTargetTypeNode =
     | SimpleTypeNode
@@ -27,6 +28,7 @@ export type RefTargetTypeNode =
     | SynchronizationReferenceTargetNode
     | ProcedureReferenceTargetNode
     | ProcedureParameterTypeNode
+    | ReferenceArrayTargetNode
     ;
 
 export class RefTypeNode extends AstNode {

@@ -373,8 +373,8 @@ export function characterTruncationForValueTransfer(
 
 /**
  * Assignment compatibility is distinct from parameter value transfer.
- * FIXED/FLOAT assignments demand matching precision; BIT/CHAR assignments
- * truncate or pad. The existing parameter rules are not changed here.
+ * FIXED/FLOAT assignments permit safe widening, never implicit narrowing;
+ * BIT/CHAR assignments truncate or pad. Parameter rules remain independent.
  */
 export function isAssignmentValueCompatible(
     target: SemanticType,
@@ -382,7 +382,7 @@ export function isAssignmentValueCompatible(
     lengths: SimpleTypeLengths = RTOS_UH_DEFAULT_TYPE_LENGTHS
 ): boolean | undefined {
     // RTOS-UH distinguishes precision from string length in assignments:
-    // FIXED/FLOAT require matching precisions (use FIT explicitly); BIT values
+    // FIXED/FLOAT may widen but require FIT for narrowing; BIT values
     // are truncated or zero-padded. CHAR values are truncated or blank-padded
     // by the existing scalar transfer rule. Neither rule relaxes IDENT.
     const to = canonicalizeSemanticType(target, lengths);
@@ -390,9 +390,9 @@ export function isAssignmentValueCompatible(
     const fromValue = from.kind === SemanticTypeKind.Reference
         ? canonicalizeSemanticType(from.target, lengths) : from;
     if (to.kind === SemanticTypeKind.Fixed && fromValue.kind === SemanticTypeKind.Fixed)
-        return to.precision === fromValue.precision;
+        return to.precision! >= fromValue.precision!;
     if (to.kind === SemanticTypeKind.Float && fromValue.kind === SemanticTypeKind.Float)
-        return to.precision === fromValue.precision;
+        return to.precision! >= fromValue.precision!;
     if (to.kind === SemanticTypeKind.Bit && fromValue.kind === SemanticTypeKind.Bit)
         return true;
     // RTOS-UH total assignment of arrays: preserve rank, extents and element

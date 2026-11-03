@@ -16,6 +16,9 @@ import { SimpleTypeParser } from "./simpleTypeParser";
 import { StructTypeParser } from "./structTypeParser";
 import { NamedTypeParser } from "./namedTypeParser";
 import { ProcedureParameterTypeParser } from "../declarations/procedureParameterTypeParser";
+import { VirtualDimensionListParser } from '../dimensions/virtualDimensionListParser';
+import { ReferenceArrayTargetNode } from '../../../ast/problem/types/referenceArrayTargetNode';
+import { ProblemDataTypeParser } from './problemDataTypeParser';
 
 export class RefTypeParser extends ParserBase {
 
@@ -51,6 +54,13 @@ export class RefTypeParser extends ParserBase {
 
     private parseTarget(): RefTargetTypeNode | undefined {
         this.skipTrivia();
+        if (this.isOperator('(')) {
+            const dimensions = new VirtualDimensionListParser(this.context).parse();
+            if (!dimensions) return undefined;
+            const elementType = new ProblemDataTypeParser(this.context).parse();
+            if (!elementType) return undefined;
+            return new ReferenceArrayTargetNode(dimensions, elementType);
+        }
         const task = this.acceptKeyword("TASK");
         if (task) {
             return new TaskReferenceTargetNode(this.tokenValue(task));

@@ -33,6 +33,19 @@ export class BodyParser extends ParserBase {
                 break;
             }
 
+            // An empty statement in the declaration prefix does not start the
+            // executable section. UH-PEARL accepts this, but warn about the
+            // surplus semicolon rather than reporting later declarations as
+            // misplaced. Preserve the EmptyStatement AST node for navigation.
+            if (allowDeclarations && !statementsStarted && this.isOperator(';')) {
+                const location = this.location();
+                const empty = new StatementParser(this.context).parse();
+                if (empty) nodes.push(empty);
+                this.problems.warning(location,
+                    'Überflüssiges Semikolon vor den Anweisungen.');
+                continue;
+            }
+
             if (declarations.isDeclarationStart()) {
                 if (!allowDeclarations) {
                     this.problems.error(this.location(),

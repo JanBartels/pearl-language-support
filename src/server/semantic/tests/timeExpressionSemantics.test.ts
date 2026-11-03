@@ -150,10 +150,10 @@ test('fractional seconds and unary minus on DURATION are regular expressions', (
         [SemanticTypeKind.Duration, SemanticTypeKind.Duration]);
 });
 
-test('DURATION divided by DURATION produces FLOAT(31)', () => {
+test('RTOS-UH DURATION divided by DURATION produces FLOAT(23)', () => {
     const r = analyze(`R: PROC RETURNS(FLOAT(31)); RETURN(4 SEC / 2 SEC); END;`);
     assert.deepEqual(r.syntax, []);
     assert.deepEqual(r.errors, []);
     assert.deepEqual(r.semantic.expressionTypes.get(r.returns[0].expression!),
-        { kind: SemanticTypeKind.Float, precision: 31 });
+        { kind: SemanticTypeKind.Float, precision: 23 });
 });

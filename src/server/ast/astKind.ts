@@ -75,6 +75,7 @@ export enum AstKind {
     ProcedureSpecificationParameter,
     ProcedureSignature,
     ProcedureReferenceTarget,
+    ReferenceArrayTarget,
     SpcProcedureAttribute,
 
     Block,

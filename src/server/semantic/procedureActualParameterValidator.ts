@@ -10,7 +10,7 @@ import type { Environment } from './environment';
 import { procedureAddressType } from './procedureAddressType';
 import { classifyObjectExpression, classifyObjectExpressionInfo, expressionSource } from './expressionObject';
 import type { BuiltinSignature } from './builtins/builtinSignature';
-import type { ProcedureType, SemanticType } from './semanticType';
+import type { ProcedureType, ReferenceType, VoidReferenceType, SemanticType } from './semanticType';
 import { SemanticTypeKind } from './semanticType';
 import { characterTruncationForValueTransfer, isIdentificationTypeCompatible, isNilAssignableTo, isReferenceTransferCompatible, isTypeAssignable, isValueTransferCompatible, resolveReferenceTransferType, semanticTypeEquals } from './semanticTypeComparison';
 
@@ -28,6 +28,10 @@ export interface ProcedureActualParameterValidationContext {
     ): void;
     reportInvalidIdentificationArgument(source: SourceValue<string>, target: SourceValue<string>,
         position: number, formalName?: string, reason?: 'protected'): void;
+    reportReferenceTargetProtectionLoss(
+        source: SourceValue<string>, target: SourceValue<string>, position: number): void;
+    reportMutableReferenceToCharacterLiteral(
+        source: SourceValue<string>, target: SourceValue<string>, position: number): void;
     reportCharacterTruncation(source: SourceValue<string>, targetLength: number,
         sourceLength: number, context: CharacterTransferDiagnosticContext): void;
 }
@@ -124,19 +128,40 @@ export function validateProcedureActualParameters(
                 if (object.category !== 'object' || !isReferenceType(received)) {
                     context.reportInvalidIdentificationArgument(source, target, index + 1);
                     valid = false;
-                } else if (!(expected.kind === SemanticTypeKind.VoidReference
-                    && !expected.targetInvariant
-                    ? isTypeAssignable(expected, received)
-                    : semanticTypeEquals(expected, received))) {
-                    // The generic writable VOID REF formal accepts typed REF
-                    // variables (including REF PROC aliases), but cannot
-                    // discard REF INV target protection. Typed REF IDENT and
-                    // REF INV STRUCT[] IDENT retain their existing exact rules.
-                    context.reportInvalidFunctionArgumentType(source, target, index + 1,
-                        formal.type, contextualActual);
-                    valid = false;
+                } else {
+                    // The UH compiler also accepts REF INV through the generic
+                    // writable VOID REF IDENT formal. This loses the protection
+                    // guarantee: report a warning, not a speculative error.
+                    // All typed REF IDENT formals retain exact comparison.
+                    const genericWritable = expected.kind === SemanticTypeKind.VoidReference
+                        && !expected.targetInvariant;
+                    const losesProtection = genericWritable && received.targetInvariant;
+                    const compatible = genericWritable
+                        ? isTypeAssignable(expected, received) || losesProtection
+                        : semanticTypeEquals(expected, received);
+                    if (!compatible) {
+                        context.reportInvalidFunctionArgumentType(source, target, index + 1,
+                            formal.type, contextualActual);
+                        valid = false;
+                    } else if (losesProtection) {
+                        context.reportReferenceTargetProtectionLoss(source, target, index + 1);
+                    }
                 }
             } else {
+                // UH-PEARL can pass a character literal's stable storage
+                // address to a generic REF parameter. Do not infer this for
+                // numeric constants or arbitrary computed expressions.
+                if (expected.kind === SemanticTypeKind.VoidReference
+                    && received.kind === SemanticTypeKind.Character
+                    && isCharacterLiteralExpression(expression)) {
+                    // The UH compiler allows an address of CHARACTER literal
+                    // storage in generic REF by-value parameters. A writable
+                    // formal can nevertheless let the callee modify that storage.
+                    if (!expected.targetInvariant) {
+                        context.reportMutableReferenceToCharacterLiteral(source, target, index + 1);
+                    }
+                    continue;
+                }
                 const compatible = isReferenceTransferCompatible(expected, received, object);
                 if (compatible === false) {
                     context.reportInvalidFunctionArgumentType(source, target, index + 1,
@@ -207,8 +232,17 @@ export function validateBuiltinIdentificationParameters(
     return valid;
 }
 
-function isReferenceType(type: SemanticType): boolean {
+function isReferenceType(type: SemanticType): type is ReferenceType | VoidReferenceType {
     return type.kind === SemanticTypeKind.Reference || type.kind === SemanticTypeKind.VoidReference;
+}
+
+function isCharacterLiteralExpression(expression: ExpressionNode): boolean {
+    let value: ExpressionNode | undefined = expression;
+    while (value?.kind === AstKind.ParenthesizedExpression) {
+        value = (value as ParenthesizedExpressionNode).expression;
+    }
+    return value instanceof LiteralExpressionNode
+        && /^'(?:[^']|'')*'$/.test(value.literal.value);
 }
 
 function isNilExpression(expression: ExpressionNode): boolean {

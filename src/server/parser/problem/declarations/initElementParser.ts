@@ -268,6 +268,13 @@ export class InitElementParser extends ParserBase {
         sign: SourceValue<string>,
         operand: SignedConstantExpressionOperand
     ): InitElementNode {
+        // RTOS-UH rejects an explicit leading + for FLOAT and DURATION
+        // initializers. Keep the parsed expression for source navigation and
+        // recovery, but report its syntax error at the sign itself.
+        if (sign.value === '+' && sign.location) {
+            this.problems.error(sign.location,
+                'Ein führendes + ist bei FLOAT- und DURATION-Initialwerten nicht zulässig.');
+        }
         return new InitElementNode({
             kind: 'signedConstantExpression',
             expression: new SignedConstantExpressionNode(sign, operand)

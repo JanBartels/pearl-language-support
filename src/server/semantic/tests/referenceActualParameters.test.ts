@@ -32,7 +32,8 @@ function analyze(body: string) {
     const semantic = new SemanticAnalyzer().analyze(root, context.activeBlockComments);
     return {
         syntax: problems.toArray().map(p => p.message),
-        errors: semantic.diagnostics.filter(d => d.severity === SemanticDiagnosticSeverity.Error)
+        errors: semantic.diagnostics.filter(d => d.severity === SemanticDiagnosticSeverity.Error),
+        warnings: semantic.diagnostics.filter(d => d.severity === SemanticDiagnosticSeverity.Warning)
     };
 }
 
@@ -121,17 +122,20 @@ test('REF IDENT requires a reference object, not the address of an ordinary obje
     ]);
 });
 
-test('REF STRUCT[] IDENT accepts writable typed refs but preserves INV protection', () => {
+test('REF STRUCT[] IDENT accepts INV references but warns about protection loss', () => {
     const result = analyze(`${prefix}
         P: PROC(X REF STRUCT[] IDENT); END;
         R: PROC;
             P(VoidPtr);
             P(ConstVoidPtr);
             P(Ptr);
+            P(ConstPtr);
         END;`);
     assert.deepEqual(result.syntax, []);
-    assert.deepEqual(result.errors.map(e => e.code), [
-        SemanticDiagnosticCode.InvalidCallArgumentType
+    assert.deepEqual(result.errors, []);
+    assert.deepEqual(result.warnings.map(w => w.code), [
+        SemanticDiagnosticCode.ReferenceTargetProtectionLoss,
+        SemanticDiagnosticCode.ReferenceTargetProtectionLoss
     ]);
 });
 
@@ -253,4 +257,31 @@ test('external SPC ENTRY uses shared REF compatibility rules and helpful diagnos
     assert.match(result.errors[0].message, /Aktualparameter 1 \('Arg'\)/);
     assert.match(result.errors[0].message, /REF STRUCT\[\]/);
     assert.match(result.errors[0].message, /REF INV/);
+});
+
+
+test('character literals passed through mutable generic REF produce safety warnings', () => {
+    const result = analyze(`
+        P: PROC(X REF STRUCT[]); END;
+        R: PROC;
+            P('huhu');
+            P(('hello'));
+        END;`);
+    assert.deepEqual(result.syntax, []);
+    assert.deepEqual(result.errors, []);
+    assert.deepEqual(result.warnings.map(w => w.code), [
+        SemanticDiagnosticCode.MutableReferenceToCharacterLiteral,
+        SemanticDiagnosticCode.MutableReferenceToCharacterLiteral
+    ]);
+});
+
+test('read-only generic REF formal does not warn about literal mutation', () => {
+    const result = analyze(`
+        P: PROC(X REF INV STRUCT[]); END;
+        R: PROC;
+            P('huhu');
+        END;`);
+    assert.deepEqual(result.syntax, []);
+    assert.deepEqual(result.errors, []);
+    assert.deepEqual(result.warnings, []);
 });

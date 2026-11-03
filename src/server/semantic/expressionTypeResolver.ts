@@ -19,7 +19,7 @@ import { resolveSymbol } from './symbolResolver';
 import { SymbolKind } from './symbolKind';
 import type { SemanticSymbol } from './symbol';
 import { SemanticTypeKind } from './semanticType';
-import { RTOS_UH_DEFAULT_TYPE_LENGTHS } from './semanticTypeComparison';
+import { RTOS_UH_DEFAULT_TYPE_LENGTHS, resolveReferenceTransferType } from './semanticTypeComparison';
 import type { SemanticType, ProcedureType, ArrayType, VirtualArrayType } from './semanticType';
 import { classifyObjectExpression, expressionSource } from './expressionObject';
 import { validateProcedureActualParameters, validateBuiltinIdentificationParameters } from './procedureActualParameterValidator';
@@ -41,6 +41,10 @@ export interface ExpressionTypeResolverContext {
     reportInvalidCallArity(source: SourceValue<string>, expected: number, actual: number): void;
     reportInvalidIdentificationArgument(source: SourceValue<string>, target: SourceValue<string>,
         position: number, formalName?: string, reason?: 'protected'): void;
+    reportReferenceTargetProtectionLoss(
+        source: SourceValue<string>, target: SourceValue<string>, position: number): void;
+    reportMutableReferenceToCharacterLiteral(
+        source: SourceValue<string>, target: SourceValue<string>, position: number): void;
     reportInvalidFunctionArgumentType(
         source: SourceValue<string>, functionName: SourceValue<string>, position: number,
         expected: SemanticType, actual: SemanticType
@@ -263,7 +267,13 @@ export class ExpressionTypeResolver {
         // An argument with an earlier diagnostic has no known type. Do not
         // manufacture an additional builtin error in that case.
         if (types.some(type => !type)) return undefined;
-        const match = matchBuiltinSignature(builtin, types as readonly SemanticType[]);
+        // Builtin patterns describe effective data types, not TYPE aliases.
+        // Resolve aliases at the argument boundary, including the target of
+        // a typed REF; keep the declared spelling in the AST and diagnostics.
+        const effectiveTypes = types.map(type => resolveReferenceTransferType(
+            type!, candidate => this.context.resolveUnderlyingType(candidate)));
+        if (effectiveTypes.some(type => !type)) return undefined;
+        const match = matchBuiltinSignature(builtin, effectiveTypes as readonly SemanticType[]);
         if (!match) {
             this.context.reportInvalidBuiltinArgumentType(first.identifier, builtin.name);
             return undefined;
@@ -469,7 +479,7 @@ export class ExpressionTypeResolver {
             case 'TOFIXED':
                 // RTOS-UH differs from PEARL 90 Table 6.2:
                 // BIT(lg) -> FIXED(lg - 1), accounting for the sign bit.
-                // CHAR(1) -> FIXED(7) remains unchanged.
+                // RTOS-UH produces FIXED(15) from CHAR(1), including literals.
                 // An unspecified CHAR length may depend on LENGTH; do not
                 // invent a fixed default length here.
                 if (operand.kind === SemanticTypeKind.Bit) {
@@ -481,7 +491,7 @@ export class ExpressionTypeResolver {
                 }
                 if (operand.kind === SemanticTypeKind.Character
                     && (operand.length === undefined || operand.length === 1)) {
-                    return { kind: SemanticTypeKind.Fixed, precision: 7 };
+                    return { kind: SemanticTypeKind.Fixed, precision: 15 };
                 }
                 break;
             case 'TOFLOAT':
@@ -765,7 +775,9 @@ export class ExpressionTypeResolver {
         if (op === '*' && right.kind === SemanticTypeKind.Duration && this.numeric(left))
             return { kind: SemanticTypeKind.Duration };
         if (op === '/' && left.kind === SemanticTypeKind.Duration && right.kind === SemanticTypeKind.Duration)
-            return { kind: SemanticTypeKind.Float, precision: 31 };
+            // PEARL90 leaves the precision implementation-defined; RTOS-UH
+            // evaluates this quotient with the default FLOAT precision.
+            return { kind: SemanticTypeKind.Float, precision: RTOS_UH_DEFAULT_TYPE_LENGTHS.float };
         return undefined;
     }
 }
