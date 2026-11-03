@@ -1,0 +1,19 @@
+P=MPC603;
+SC=2000;
+MODULE FalschePrioritaeten;
+PROBLEM;
+
+DCL Text CHAR(4);
+DCL Prioritaet FIXED INIT(12);
+
+Worker: TASK;
+END;
+
+Start: TASK MAIN;
+    ACTIVATE Worker PRIO Text;          ! Fehler: PRIO verlangt FIXED.
+    ACTIVATE Worker PRIO 0;             ! Fehler: ausserhalb 1..32767.
+    CONTINUE Worker PRIO 32768;         ! Fehler: ausserhalb 1..32767.
+    ACTIVATE Worker PRIO Prioritaet;    ! Gueltiger Kontrastfall.
+END;
+
+MODEND;

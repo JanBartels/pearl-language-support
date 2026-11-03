@@ -1,0 +1,16 @@
+P=MPC603;
+SC=2000;
+MODULE WhenResumeProbe;
+SYSTEM;
+    Ereignis: EV(00000002);
+PROBLEM;
+
+SPC Ereignis INTERRUPT;
+
+Start: TASK MAIN;
+    ! Hyperprozessor-WRES deutet auf Unterstuetzung von WHEN RESUME.
+    ! Die konkrete Compilerprobe ist trotzdem wertvoll.
+    WHEN Ereignis RESUME;
+END;
+
+MODEND;

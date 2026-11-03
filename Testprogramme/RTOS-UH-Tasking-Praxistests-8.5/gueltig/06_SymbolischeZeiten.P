@@ -1,0 +1,26 @@
+P=MPC603;
+SC=2000;
+MODULE SymbolischeZeiten;
+PROBLEM;
+
+DCL StartUhr CLOCK INIT(12:00:00);
+DCL EndeUhr CLOCK INIT(12:10:00);
+DCL Zyklus INV DURATION INIT(0.5 SEC);
+DCL Fenster INV DURATION INIT(1 MIN);
+DCL Anlauf INV DURATION INIT(2 SEC);
+DCL Dynamisch DURATION INIT(1 SEC);
+DCL NeuePrio FIXED INIT(25);
+
+Pruefen: TASK PRIO 30;
+END;
+
+Protokollieren: TASK PRIO 40;
+END;
+
+Start: TASK MAIN;
+    AT StartUhr ALL Zyklus UNTIL EndeUhr ACTIVATE Pruefen PRIO NeuePrio;
+    AFTER Anlauf ALL Zyklus DURING Fenster ACTIVATE Protokollieren;
+    AFTER Dynamisch RESUME;
+END;
+
+MODEND;

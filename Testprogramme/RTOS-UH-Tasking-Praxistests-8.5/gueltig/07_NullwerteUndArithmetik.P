@@ -1,0 +1,21 @@
+P=MPC603;
+SC=2000;
+MODULE Nullwerte;
+PROBLEM;
+
+Schnell: TASK;
+END;
+
+Kurz: TASK;
+END;
+
+Zeitgeber: TASK MAIN;
+    ! Laut RTOS-UH: Null bedeutet naechsten Timertick.
+    AFTER 0 SEC RESUME;
+    ALL 0 SEC ACTIVATE Schnell;
+    ALL 1 SEC DURING 0 SEC ACTIVATE Kurz;
+    AFTER (1 SEC - 1 SEC) ACTIVATE Schnell;
+    ALL 5 * 0.1 SEC ACTIVATE Kurz;
+END;
+
+MODEND;

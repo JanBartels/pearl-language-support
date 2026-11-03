@@ -1,0 +1,25 @@
+P=MPC603;
+SC=2000;
+MODULE FalscheZeittypen;
+SYSTEM;
+    Signal: EV(00000001);
+PROBLEM;
+
+SPC Signal INTERRUPT;
+DCL C CLOCK INIT(12:00:00);
+DCL D DURATION INIT(1 SEC);
+DCL F FIXED INIT(10);
+
+Worker: TASK;
+END;
+
+Start: TASK MAIN;
+    AT D ACTIVATE Worker;                  ! Fehler: AT verlangt CLOCK.
+    AFTER C ACTIVATE Worker;               ! Fehler: AFTER verlangt DURATION.
+    ALL C ACTIVATE Worker;                 ! Fehler: ALL verlangt DURATION.
+    ALL D UNTIL D ACTIVATE Worker;         ! Fehler: UNTIL verlangt CLOCK.
+    ALL D DURING C ACTIVATE Worker;        ! Fehler: DURING verlangt DURATION.
+    WHEN F ACTIVATE Worker;                ! Fehler: WHEN verlangt INTERRUPT.
+END;
+
+MODEND;

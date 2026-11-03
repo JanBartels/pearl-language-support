@@ -1,0 +1,25 @@
+P=MPC603;
+SC=2000;
+MODULE Watchdog;
+PROBLEM;
+
+DCL Zaehler FIXED INIT(0);
+DCL MaxZaehler INV FIXED INIT(10);
+
+ArbeitsTask: TASK PRIO 50;
+    Zaehler = Zaehler + 1;
+END;
+
+KontrollTask: TASK PRIO 45;
+    IF Zaehler GT MaxZaehler THEN
+        TERMINATE ArbeitsTask;
+        PREVENT ArbeitsTask;
+    FIN;
+END;
+
+Initialisierung: TASK MAIN;
+    ALL 0.5 SEC ACTIVATE ArbeitsTask;
+    ALL 1 SEC ACTIVATE KontrollTask;
+END;
+
+MODEND;

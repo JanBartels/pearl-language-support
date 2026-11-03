@@ -1,0 +1,45 @@
+## gueltig/01_Anlagenanlauf.P 0 diagnostics
+## gueltig/02_Zeitfenster.P 0 diagnostics
+## gueltig/03_Watchdog.P 0 diagnostics
+## gueltig/04_InterruptEinplanung.P 0 diagnostics
+## gueltig/05_SemaphorUndTasking.P 0 diagnostics
+## gueltig/06_SymbolischeZeiten.P 0 diagnostics
+## gueltig/07_NullwerteUndArithmetik.P 0 diagnostics
+## gueltig/08_Tasksteuerung.P 0 diagnostics
+## gueltig/09_RefTaskNavigation.P 0 diagnostics
+## gueltig/10_MakroZeitplanung.P 0 diagnostics
+## ungueltig/01_FalscheTasknamen.P 3 diagnostics
+  13: semantic.invalid-tasking-target ACTIVATE erwartet einen TASK-Namen oder eine REF TASK.
+  14: semantic.invalid-tasking-target TERMINATE erwartet einen TASK-Namen oder eine REF TASK.
+  15: semantic.unknown-identifier Unbekannter Bezeichner 'Unbekannt'.
+## ungueltig/02_FalscheZeittypen.P 6 diagnostics
+  17: semantic.invalid-tasking-time-type AT erwartet einen CLOCK-Ausdruck.
+  18: semantic.invalid-tasking-time-type AFTER erwartet einen DURATION-Ausdruck.
+  19: semantic.invalid-tasking-time-type ALL erwartet einen DURATION-Ausdruck.
+  20: semantic.invalid-tasking-time-type UNTIL erwartet einen CLOCK-Ausdruck.
+  21: semantic.invalid-tasking-time-type DURING erwartet einen DURATION-Ausdruck.
+  22: semantic.invalid-tasking-interrupt WHEN erwartet einen INTERRUPT-Namen.
+## ungueltig/03_NegativeDauern.P 4 diagnostics
+  12: semantic.negative-tasking-duration AFTER erwartet eine nichtnegative DURATION (größer oder gleich 0).
+  13: semantic.negative-tasking-duration ALL erwartet eine nichtnegative DURATION (größer oder gleich 0).
+  14: semantic.negative-tasking-duration DURING erwartet eine nichtnegative DURATION (größer oder gleich 0).
+  15: semantic.negative-tasking-duration AFTER erwartet eine nichtnegative DURATION (größer oder gleich 0).
+## ungueltig/04_FalschePrioritaeten.P 3 diagnostics
+  13: semantic.invalid-tasking-priority-type PRIO erwartet einen FIXED-Ausdruck.
+  14: semantic.invalid-task-priority Die Task-Priorität 0 liegt außerhalb des zulässigen Bereichs 1..32767.
+  15: semantic.invalid-task-priority Die Task-Priorität 32768 liegt außerhalb des zulässigen Bereichs 1..32767.
+## ungueltig/05_FalscheKombinationen.P 4 diagnostics
+  14:  RTOS-UH does not allow combining WHEN with timed or cyclic scheduling.
+  15:  RTOS-UH does not allow combining WHEN with timed or cyclic scheduling.
+  16:  Only one limit (UNTIL or DURING) is allowed after ALL.
+  18:  Cyclic start conditions (ALL/EVERY) are only allowed with ACTIVATE.
+## ungueltig/06_FalschePositionen.P 6 diagnostics
+  10:  ACTIVATE requires a task name.
+  11:  Expected ';' after ACTIVATE statement.
+  11:  Expected ACTIVATE, CONTINUE or RESUME after task start condition.
+  12:  Expected ';' after ACTIVATE statement.
+  13:  Expected ';' after RESUME statement.
+  14:  RESUME requires an AT, AFTER or WHEN start condition.
+## compilerproben/01_PRIORITY_Probe.P 0 diagnostics
+## compilerproben/02_EVERY_Probe.P 0 diagnostics
+## compilerproben/03_WHEN_RESUME_Probe.P 0 diagnostics

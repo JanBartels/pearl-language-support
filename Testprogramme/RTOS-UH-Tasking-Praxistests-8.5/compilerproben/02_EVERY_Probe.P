@@ -1,0 +1,14 @@
+P=MPC603;
+SC=2000;
+MODULE EveryProbe;
+PROBLEM;
+
+Worker: TASK;
+END;
+
+Start: TASK MAIN;
+    ! Die RTOS-UH-Akzeptanz von EVERY ist noch nicht bestaetigt.
+    EVERY 1 SEC ACTIVATE Worker;
+END;
+
+MODEND;

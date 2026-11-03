@@ -102,5 +102,12 @@ export enum AstKind {
 
     ActualParameterList,
     ActualParameter,
-    CaseIndexRange
+    CaseIndexRange,
+
+    TaskingStatement,
+    TaskingTimedStart,
+    TaskingTimeClause,
+    TaskingFrequency,
+    TaskingFrequencyLimit,
+    TaskingInterruptStart,
 }

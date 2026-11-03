@@ -1,0 +1,25 @@
+P=MPC603;
+SC=2000;
+MODULE InterruptPlanung;
+SYSTEM;
+    DatenBereit: EV(00000004);
+    Alarm: EV(00000008);
+PROBLEM;
+
+SPC DatenBereit INTERRUPT;
+SPC Alarm INTERRUPT;
+
+Auswerten: TASK PRIO 25;
+END;
+
+Warten: TASK PRIO 30;
+    SUSPEND;
+END;
+
+Steuerung: TASK MAIN;
+    ! Die Ereignisse sind ueber die EV-Masken im SYSTEM-Teil definiert.
+    WHEN DatenBereit ACTIVATE Auswerten PRIO 24;
+    WHEN Alarm CONTINUE Warten;
+END;
+
+MODEND;

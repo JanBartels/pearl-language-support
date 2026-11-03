@@ -1,0 +1,14 @@
+P=MPC603;
+SC=2000;
+MODULE PriorityProbe;
+PROBLEM;
+
+Worker: TASK;
+END;
+
+Start: TASK MAIN;
+    ! Die RTOS-UH-Akzeptanz von PRIORITY ist noch nicht bestaetigt.
+    ACTIVATE Worker PRIORITY 12;
+END;
+
+MODEND;

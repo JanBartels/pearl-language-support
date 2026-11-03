@@ -1,0 +1,18 @@
+P=MPC603;
+SC=2000;
+MODULE FalscheTasknamen;
+PROBLEM;
+
+DCL Wert FIXED;
+DCL Zeit DURATION;
+
+Worker: TASK;
+END;
+
+Start: TASK MAIN;
+    ACTIVATE Wert;         ! Fehler: FIXED ist keine TASK/REF TASK.
+    TERMINATE Zeit;       ! Fehler: DURATION ist keine TASK/REF TASK.
+    ACTIVATE Unbekannt;   ! Fehler: unbekannter Name.
+END;
+
+MODEND;

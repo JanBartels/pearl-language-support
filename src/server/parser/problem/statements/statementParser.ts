@@ -15,6 +15,7 @@ import { EmptyStatementNode } from "../../../ast/problem/statements/emptyStateme
 import { SynchronizationStatementParser } from "./synchronizationStatementParser";
 import { SemaSetStatementParser } from "./semaSetStatementParser";
 import { AssignmentParser } from "./assignmentParser";
+import { TaskingStatementParser } from "./taskingStatementParser";
 
 /** All nested statement constructs are dispatched through this common entry point. */
 export class StatementParser extends ParserBase {
@@ -44,6 +45,13 @@ export class StatementParser extends ParserBase {
 
         if (this.isKeyword("SEMASET")) {
             return new SemaSetStatementParser(this.context).parse();
+        }
+
+        if (this.isKeyword([
+            "ACTIVATE", "TERMINATE", "SUSPEND", "CONTINUE", "RESUME", "PREVENT",
+            "AT", "AFTER", "WHEN", "ALL", "EVERY", "UNTIL", "DURING"
+        ])) {
+            return new TaskingStatementParser(this.context).parse();
         }
 
         if (this.isKeyword("CALL")) {

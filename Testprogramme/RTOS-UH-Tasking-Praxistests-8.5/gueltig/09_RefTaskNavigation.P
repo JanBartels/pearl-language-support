@@ -1,0 +1,20 @@
+P=MPC603;
+SC=2000;
+MODULE RefTaskNavigation;
+PROBLEM;
+
+DCL TaskZeiger REF TASK;
+
+Hintergrund: TASK PRIO 90;
+END;
+
+Steuerung: TASK MAIN;
+    ! Reiner Uebersetzungs-/LSP-Test: TaskZeiger ist nicht initialisiert.
+    ! Nicht ausfuehren, bevor die Referenz gueltig gesetzt wird.
+    ACTIVATE TaskZeiger;
+    SUSPEND TaskZeiger;
+    CONTINUE TaskZeiger;
+    PREVENT TaskZeiger;
+END;
+
+MODEND;

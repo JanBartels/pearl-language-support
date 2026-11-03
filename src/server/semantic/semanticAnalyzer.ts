@@ -35,6 +35,8 @@ import { matchBuiltinSignature } from './builtins/builtinSignature';
 import { ProcedureParameterNameIndex } from './procedureParameterNameIndex';
 import { SynchronizationStatementNode } from '../ast/problem/statements/synchronizationStatementNode';
 import { SemaSetStatementNode } from '../ast/problem/statements/semaSetStatementNode';
+import { TaskingStatementNode } from '../ast/problem/statements/taskingStatementNode';
+import { TaskingStatementValidator } from './taskingStatementValidator';
 import { CallStatementNode } from '../ast/problem/statements/callStatementNode';
 import { RepetitionNode } from '../ast/problem/statements/repetitionNode';
 import { RepetitionExpressionClauseNode } from '../ast/problem/statements/repetitionExpressionClauseNode';
@@ -1929,6 +1931,11 @@ export class SemanticAnalyzer {
                 );
             }
             return this.analyzeChildren(node, environment, state);
+        }
+
+        if (node.kind === AstKind.TaskingStatement) {
+            if (environment) new TaskingStatementValidator().validate(node as TaskingStatementNode, environment, state);
+            return environment;
         }
 
         if (node.kind === AstKind.SemaSetStatement) {

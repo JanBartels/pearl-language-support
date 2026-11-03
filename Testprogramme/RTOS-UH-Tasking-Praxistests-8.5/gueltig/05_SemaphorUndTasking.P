@@ -1,0 +1,28 @@
+P=MPC603;
+SC=2000;
+MODULE SemaphorTasking;
+PROBLEM;
+
+DCL Zugriff SEMA PRESET(1);
+DCL Messwert FIXED INIT(0);
+
+Sensor: TASK PRIO 40;
+    REQUEST Zugriff;
+    Messwert = Messwert + 1;
+    RELEASE Zugriff;
+END;
+
+Anzeige: TASK PRIO 50;
+    REQUEST Zugriff;
+    IF Messwert GT 100 THEN
+        PREVENT Sensor;
+    FIN;
+    RELEASE Zugriff;
+END;
+
+Start: TASK MAIN;
+    ALL 0.5 SEC ACTIVATE Sensor;
+    ALL 2 SEC ACTIVATE Anzeige;
+END;
+
+MODEND;

@@ -1,0 +1,22 @@
+P=MPC603;
+SC=2000;
+MODULE Tasksteuerung;
+PROBLEM;
+
+Arbeiter: TASK PRIO 40;
+END;
+
+Wartung: TASK PRIO 50;
+END;
+
+Start: TASK MAIN;
+    ACTIVATE Arbeiter;
+    SUSPEND Arbeiter;
+    CONTINUE Arbeiter PRIO 41;
+    PREVENT Arbeiter;
+    TERMINATE Arbeiter;
+    ACTIVATE Wartung;
+    TERMINATE Wartung;
+END;
+
+MODEND;

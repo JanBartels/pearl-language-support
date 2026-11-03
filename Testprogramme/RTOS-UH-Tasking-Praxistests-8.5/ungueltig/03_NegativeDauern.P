@@ -1,0 +1,18 @@
+P=MPC603;
+SC=2000;
+MODULE NegativeDauern;
+PROBLEM;
+
+DCL Negativ INV DURATION INIT(-1 SEC);
+
+Worker: TASK;
+END;
+
+Start: TASK MAIN;
+    AFTER -1 SEC RESUME;                        ! Fehler: negative Dauer.
+    ALL 1 SEC - 2 SEC ACTIVATE Worker;          ! Fehler: negatives Intervall.
+    ALL 1 SEC DURING -1 SEC ACTIVATE Worker;    ! Fehler: negatives DURING.
+    AFTER Negativ ACTIVATE Worker;              ! Fehler: negative INV-Konstante.
+END;
+
+MODEND;

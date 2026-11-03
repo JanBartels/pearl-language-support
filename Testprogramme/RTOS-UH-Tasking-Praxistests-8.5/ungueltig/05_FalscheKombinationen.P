@@ -1,0 +1,21 @@
+P=MPC603;
+SC=2000;
+MODULE FalscheKombinationen;
+SYSTEM;
+    Alarm: EV(00000001);
+PROBLEM;
+
+SPC Alarm INTERRUPT;
+
+Worker: TASK;
+END;
+
+Start: TASK MAIN;
+    WHEN Alarm AFTER 1 SEC ACTIVATE Worker; ! Fehler: WHEN und AFTER kombiniert.
+    WHEN Alarm ALL 1 SEC ACTIVATE Worker;   ! Fehler: WHEN und ALL kombiniert.
+    ALL 1 SEC UNTIL 12:00:00 DURING 1 MIN ACTIVATE Worker;
+                                            ! Fehler: UNTIL und DURING zugleich.
+    ALL 1 SEC CONTINUE Worker;             ! Fehler: Zyklus bei CONTINUE.
+END;
+
+MODEND;

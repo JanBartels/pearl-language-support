@@ -1,0 +1,25 @@
+P=MPC603;
+SC=2000;
+MODULE Anlagenanlauf;
+PROBLEM;
+
+DCL Messungen FIXED INIT(0);
+DCL Grenzwert INV FIXED INIT(100);
+
+Erfassen: TASK PRIO 40;
+    Messungen = Messungen + 1;
+END;
+
+Ueberwachen: TASK PRIO 35;
+    IF Messungen GT Grenzwert THEN
+        PREVENT Erfassen;
+    FIN;
+END;
+
+Start: TASK MAIN;
+    ! Zwei verschiedene periodische Auftraege.
+    ALL 0.25 SEC ACTIVATE Erfassen;
+    ALL 1 SEC ACTIVATE Ueberwachen;
+END;
+
+MODEND;

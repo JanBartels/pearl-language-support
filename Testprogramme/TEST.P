@@ -32,6 +32,7 @@ SYSTEM;
 PROBLEM;
    SPC A1 DATION INOUT ALPHIC;
    SPC File DATION INOUT ALPHIC;
+   SPC MyEv INTERRUPT;
 
 #define MacroMitSemikolon "Wert";
 
@@ -332,20 +333,34 @@ CALL REFADD( myTask, 1);
 REFADD( myTask, 1);
 ACTIVATE;
 ALL 1 SEC ACTIVATE myTask;
+ALL 1 SEC ACTIVATE demo;
+WHEN MyEv ACTIVATE demo;
 ACTIVATE myTask ALL 1 SEC;
 ACTIVATE myTask 10;
 ACTIVATE myTask;
 ACTIVATE myTask PRIO 10;
+ACTIVATE demo;
+ACTIVATE demo PRIO 10;
 SUSPEND myTask;
+SUSPEND demo;
 SUSPEND;
 CONTINUE myTask;
 CONTINUE myTask PRIO 11;
+CONTINUE demo;
+CONTINUE demo PRIO 11;
+AT 12:00:00 CONTINUE demo;
+WHEN MyEv CONTINUE demo;
 AFTER 10 SEC RESUME;
+AFTER 10 SEC RESUME myTask;
 AFTER 10 SEC RESUME demo;
+WHEN MyEv ACTIVATE demo;
 TERMINATE myTask;
+TERMINATE demo;
 TERMINATE;
 PREVENT myTask;
+PREVENT demo;
 PREVENT;
+ALL 5 * 0.1 SEC ACTIVATE demo;
 WHILE ( 1==2
 AND 3 == 4 ) REPEAT
  x = 2 * x;
@@ -790,10 +805,10 @@ R83d: PROC;
     PI83d := NIL;    ! gültig
     PI83d := 42;     ! Fehler
 
-    IP83d := V83d;      ! gültig: Adresse von V
-    IP83d := Q83d;      ! gültig: Referenzwert von Q
-    IP83d := NIL;    ! gültig
-    IP83d := 42;     ! Fehler
+    IP83d := V83d;      ! ungültig, INV REF
+    IP83d := Q83d;      ! ungültig, INV REF
+    IP83d := NIL;    ! ungültig, INV REF
+    IP83d := 42;     ! ungültig, INV REF
 
 END;
 

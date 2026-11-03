@@ -1,0 +1,17 @@
+P=MPC603;
+SC=2000;
+MODULE FalschePositionen;
+PROBLEM;
+
+Worker: TASK;
+END;
+
+Start: TASK MAIN;
+    ACTIVATE;                             ! Fehler: Taskname fehlt.
+    ACTIVATE Worker ALL 1 SEC;            ! Fehler: ALL muss vor ACTIVATE stehen.
+    ACTIVATE Worker 10;                   ! Fehler: PRIO fehlt.
+    AFTER 1 SEC RESUME Worker;            ! Fehler: RESUME hat keinen Tasknamen.
+    RESUME;                               ! Fehler: Startbedingung fehlt.
+END;
+
+MODEND;

@@ -1,0 +1,20 @@
+P=MPC603;
+SC=2000;
+MODULE Zeitfenster;
+PROBLEM;
+
+Kalibrieren: TASK PRIO 30;
+END;
+
+Abtasten: TASK PRIO 40;
+END;
+
+Anlauf: TASK MAIN;
+    ! Absolute Uhrzeit mit zyklischer Wiederholung und absolutem Ende.
+    AT 8:00:00 ALL 1 SEC UNTIL 8:01:00 ACTIVATE Kalibrieren PRIO 31;
+
+    ! Relative Verzoegerung mit Wiederholung und relativer Laufzeit.
+    AFTER 2 SEC ALL 0.5 SEC DURING 1 MIN ACTIVATE Abtasten PRIO 41;
+END;
+
+MODEND;
