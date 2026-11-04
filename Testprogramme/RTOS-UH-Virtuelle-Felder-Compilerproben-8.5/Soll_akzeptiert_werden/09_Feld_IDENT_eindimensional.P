@@ -1,0 +1,15 @@
+P=MPC603;
+SC=2000;
+MODULE Virt09;
+PROBLEM;
+
+! Formaler Feldparameter A() FIXED IDENT erhaelt konkretes Feld
+
+Bearbeite: PROC(A() FIXED IDENT);
+END;
+P: PROC;
+    DCL AF(0:99) FIXED;
+    Bearbeite(AF);
+END;
+
+MODEND;

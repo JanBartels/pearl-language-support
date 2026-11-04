@@ -1,0 +1,15 @@
+P=MPC603;
+SC=2000;
+MODULE Virt11;
+PROBLEM;
+
+! Zweidimensionales konkretes Feld an REF (,)-Wertparameter
+
+Verwende: PROC(X REF (,) FIXED);
+END;
+P: PROC;
+    DCL AF(2,3) FIXED;
+    Verwende(AF);
+END;
+
+MODEND;

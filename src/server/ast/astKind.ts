@@ -104,6 +104,12 @@ export enum AstKind {
     ActualParameter,
     CaseIndexRange,
 
+    IoSegment,
+    BinaryTransferStatement,
+    BinaryTransferSFormat,
+    DationControlStatement,
+    DationControlOption,
+    InterruptStatement,
     TaskingStatement,
     TaskingTimedStart,
     TaskingTimeClause,

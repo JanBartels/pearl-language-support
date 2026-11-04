@@ -34,8 +34,8 @@ SYSTEM;
 PROBLEM;
     SPC File DATION INOUT ALPHIC;`;
 
-function analyze(text: string) {
-    const source = new FileSource('file:///created-test.p', `${system}\n${text}\nMODEND;`);
+function analyze(text: string, prefix = system) {
+    const source = new FileSource('file:///created-test.p', `${prefix}\n${text}\nMODEND;`);
     const problems = new ProblemCollection();
     const tokens = new Lexer(source, problems, logger).tokenize();
     const context = new PreprocessorContext(
@@ -129,4 +129,66 @@ DCL LocalDation DATION INOUT ALPHIC;
 DCL Valid FIXED;
 END;`);
     assert.ok(result.problems.some(issue => issue.message === "Expected 'CREATED' in DATION declaration."));
+});
+
+test('CREATED must refer to a system-DATION specification, not another user DATION', () => {
+    const result = analyze(`DCL First DATION INOUT ALPHIC CREATED(File);
+DCL Second DATION INOUT ALPHIC CREATED(First);`);
+    assert.deepEqual(result.problems.map(issue => issue.message), []);
+    assert.deepEqual(result.errors.map(issue => issue.code), [
+        SemanticDiagnosticCode.InvalidDationCreationSource
+    ]);
+    assert.equal(result.errors[0].location.source.getText(result.errors[0].location.span), 'First');
+    const secondSource = result.attributes[1].systemDation!;
+    const symbol = result.semantic.bindings.get(secondSource);
+    assert.ok(symbol && symbol.kind === SymbolKind.DataObject);
+    assert.equal(symbol.name.value, 'First', 'invalid CREATED must retain reference binding');
+});
+
+test('CREATED checks transfer class of user DATION against the specified system DATION', () => {
+    const result = analyze('DCL Binary DATION INOUT BASIC CREATED(File);');
+    assert.deepEqual(result.problems.map(issue => issue.message), []);
+    assert.deepEqual(result.errors.map(issue => issue.code), [
+        SemanticDiagnosticCode.IncompatibleDationCreation
+    ]);
+    assert.equal(result.errors[0].location.source.getText(result.errors[0].location.span), 'File');
+    assert.equal(result.errors[0].relatedLocations?.length, 1);
+});
+
+test('CREATED allows a narrower transfer direction than the system DATION', () => {
+    const result = analyze(`DCL Output DATION OUT ALPHIC CREATED(File);
+DCL Input DATION IN ALPHIC CREATED(File);`);
+    assert.deepEqual(result.problems.map(issue => issue.message), []);
+    assert.deepEqual(result.errors.map(issue => issue.code), []);
+});
+
+test('CREATED rejects input on an output-only system DATION', () => {
+    const prefix = system.replace(
+        'SPC File DATION INOUT ALPHIC;',
+        'SPC File DATION OUT ALPHIC;'
+    );
+    const result = analyze('DCL Input DATION IN ALPHIC CREATED(File);', prefix);
+    assert.deepEqual(result.problems.map(issue => issue.message), []);
+    assert.deepEqual(result.errors.map(issue => issue.code), [
+        SemanticDiagnosticCode.IncompatibleDationCreation
+    ]);
+});
+
+test('GLOBAL SPC DATION is a valid CREATED source without a local SYSTEM declaration', () => {
+    const result = analyze(`SPC External DATION INOUT ALPHIC GLOBAL;
+DCL User DATION OUT ALPHIC CREATED(External);`, 'MODULE ExternalDemo; PROBLEM;');
+    assert.deepEqual(result.problems.map(issue => issue.message), []);
+    assert.deepEqual(result.errors.map(issue => issue.code), []);
+    const symbol = result.semantic.bindings.get(result.attributes[0].systemDation!);
+    assert.ok(symbol && symbol.kind === SymbolKind.DataObject);
+    assert.equal(symbol.systemDationSpecification, true);
+});
+
+test('DATION arrays are rejected by the grammar without losing the next DCL', () => {
+    const result = analyze(`DCL Many(1:3) DATION INOUT ALPHIC CREATED(File);
+DCL Later FIXED;`);
+    assert.deepEqual(result.problems.map(issue => issue.message), [
+        'Arrays of DATION objects are not allowed.'
+    ]);
+    assert.ok([...result.semantic.bindings.values()].some(symbol => symbol.name.value === 'Later'));
 });

@@ -1,0 +1,11 @@
+MODULE RW8624;
+SYSTEM;
+    Quelle: /ED/RW86IN <-;
+PROBLEM;
+    SPC Quelle DATION IN ALPHIC;
+
+    Test: TASK MAIN;
+        DCL Zahl FIXED;
+        READ Zahl FROM Quelle BY SKIP;
+    END;
+MODEND;

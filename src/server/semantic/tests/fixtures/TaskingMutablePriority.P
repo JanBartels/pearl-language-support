@@ -1,0 +1,11 @@
+P=MPC603;
+SC=2000;
+MODULE TaskingMutablePriority;
+PROBLEM;
+DCL MutablePriority FIXED INIT(25);
+Worker: TASK;
+END;
+Runner: TASK MAIN;
+    ACTIVATE Worker PRIO MutablePriority;
+END;
+MODEND;

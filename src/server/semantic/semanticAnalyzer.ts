@@ -37,6 +37,12 @@ import { SynchronizationStatementNode } from '../ast/problem/statements/synchron
 import { SemaSetStatementNode } from '../ast/problem/statements/semaSetStatementNode';
 import { TaskingStatementNode } from '../ast/problem/statements/taskingStatementNode';
 import { TaskingStatementValidator } from './taskingStatementValidator';
+import { InterruptStatementNode } from '../ast/problem/statements/interruptStatementNode';
+import { InterruptStatementValidator } from './interruptStatementValidator';
+import { DationControlStatementNode } from '../ast/problem/statements/dationControlStatementNode';
+import { DationControlStatementValidator } from './dationControlStatementValidator';
+import { BinaryTransferStatementNode } from '../ast/problem/statements/binaryTransferStatementNode';
+import { BinaryTransferStatementValidator } from './binaryTransferStatementValidator';
 import { CallStatementNode } from '../ast/problem/statements/callStatementNode';
 import { RepetitionNode } from '../ast/problem/statements/repetitionNode';
 import { RepetitionExpressionClauseNode } from '../ast/problem/statements/repetitionExpressionClauseNode';
@@ -101,6 +107,7 @@ import {
 } from './symbol';
 import { SymbolKind } from './symbolKind';
 import { resolveSymbol } from './symbolResolver';
+import { dationCreationCompatible } from './dationCapabilities';
 import { lookupBuiltin } from './builtins/builtinCatalog';
 import {
     semanticTypeEquals, procedureSignaturesEqual, isProcedureSignatureResolved,
@@ -1265,6 +1272,22 @@ class SemanticAnalysisState implements
         });
     }
 
+    reportIncompatibleDationCreation(
+        name: SourceValue<string>,
+        system: DataObjectSymbol
+    ): void {
+        this.addDiagnostic({
+            code: SemanticDiagnosticCode.IncompatibleDationCreation,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: name.location,
+            message: `Die Eigenschaften der DATION in CREATED(${name.value}) sind mit der Deklaration nicht verträglich.`,
+            relatedLocations: [{
+                location: system.name.location,
+                message: 'Eigenschaften der spezifizierten System-DATION.'
+            }]
+        });
+    }
+
     reportUnknownIdentifier(identifier: SourceValue<string>): void {
         this.addDiagnostic({
             code: SemanticDiagnosticCode.UnknownIdentifier,
@@ -1931,6 +1954,24 @@ export class SemanticAnalyzer {
                 );
             }
             return this.analyzeChildren(node, environment, state);
+        }
+
+        if (node.kind === AstKind.BinaryTransferStatement) {
+            if (environment) new BinaryTransferStatementValidator().validate(
+                node as BinaryTransferStatementNode, environment, state);
+            return environment;
+        }
+
+        if (node.kind === AstKind.DationControlStatement) {
+            if (environment) new DationControlStatementValidator().validate(
+                node as DationControlStatementNode, environment, state);
+            return environment;
+        }
+
+        if (node.kind === AstKind.InterruptStatement) {
+            if (environment) new InterruptStatementValidator().validate(
+                node as InterruptStatementNode, environment, state);
+            return environment;
         }
 
         if (node.kind === AstKind.TaskingStatement) {
@@ -2828,8 +2869,15 @@ export class SemanticAnalyzer {
             state.reportGlobalDeclarationOutsideModule(attribute.global.keyword);
         }
 
-        // CREATED denotes a system-dation name in the existing semantic scope.
-        // Its binding is shared with Hover, Definition and Find References.
+        const direction = attribute.direction && this.dationDirection(attribute.direction.value);
+        const dationClass = attribute.dationClass && this.dationClass(attribute.dationClass.value);
+        const type = direction && dationClass
+            ? { kind: SemanticTypeKind.Dation as const, direction, dationClass }
+            : undefined;
+
+        // CREATED is a reference to an SPC system DATION, never to another
+        // user DATION. Preserve the binding even for invalid sources so
+        // Definition, Hover and Find References still point to that object.
         if (attribute.systemDation) {
             const source = resolveSymbol(environment, attribute.systemDation.value);
             if (!source) {
@@ -2837,22 +2885,20 @@ export class SemanticAnalyzer {
             } else {
                 state.bind(attribute.systemDation, source);
                 if (source.kind !== SymbolKind.DataObject
-                    || source.type.kind !== SemanticTypeKind.Dation) {
+                    || source.type.kind !== SemanticTypeKind.Dation
+                    || !source.systemDationSpecification) {
                     state.reportInvalidDationCreationSource(attribute.systemDation);
+                } else if (type && !dationCreationCompatible(type, source.type)) {
+                    state.reportIncompatibleDationCreation(attribute.systemDation, source);
                 }
             }
         }
 
-        if (!attribute.direction || !attribute.dationClass) {
-            return environment;
-        }
-        const direction = this.dationDirection(attribute.direction.value);
-        const dationClass = this.dationClass(attribute.dationClass.value);
-        if (!direction || !dationClass) return environment;
+        if (!type) return environment;
 
         return this.introduceDeclaredDataObjects(
             node.identifiers,
-            { kind: SemanticTypeKind.Dation, direction, dationClass },
+            type,
             false,
             this.globalSymbolAttribute(attribute.global),
             environment,
@@ -3565,7 +3611,8 @@ export class SemanticAnalyzer {
                 type,
                 assignmentProtected: false,
                 global: systemDeclaration ? (global ?? { kind: 'global' }) : global,
-                declarationScope: environment.scope.kind
+                declarationScope: environment.scope.kind,
+                ...(typeName === 'DATION' ? { systemDationSpecification: true } : {})
             };
 
             state.bind(identifier, symbol);

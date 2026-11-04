@@ -1,0 +1,14 @@
+MODULE RW8606;
+SYSTEM;
+    Datei: /ED/RW86DAT <->;
+PROBLEM;
+    SPC Datei DATION INOUT ALPHIC;
+
+    Test: TASK MAIN;
+        DCL A FIXED, B FLOAT;
+        CALL WRITE(Datei, A, B);
+        CALL READ(Datei, A, B);
+        WRITE(Datei, A, B);
+        READ(Datei, A, B);
+    END;
+MODEND;

@@ -1,0 +1,12 @@
+P=MPC603;
+SC=2000;
+MODULE TaskingNegativeDuration;
+PROBLEM;
+Worker: TASK;
+END;
+Runner: TASK MAIN;
+    AFTER -1 SEC RESUME;
+    ALL -1 SEC ACTIVATE Worker;
+    ALL 1 SEC DURING -1 SEC ACTIVATE Worker;
+END;
+MODEND;

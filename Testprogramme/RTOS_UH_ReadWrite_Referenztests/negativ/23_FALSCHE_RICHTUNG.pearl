@@ -1,0 +1,11 @@
+MODULE RW8623;
+SYSTEM;
+    Senke: /NIL ->;
+PROBLEM;
+    SPC Senke DATION OUT ALPHIC;
+
+    Test: TASK MAIN;
+        DCL Zahl FIXED;
+        READ Zahl FROM Senke;
+    END;
+MODEND;

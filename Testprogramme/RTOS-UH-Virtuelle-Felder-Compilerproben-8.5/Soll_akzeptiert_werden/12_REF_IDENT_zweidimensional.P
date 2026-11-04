@@ -1,0 +1,17 @@
+P=MPC603;
+SC=2000;
+MODULE Virt12;
+PROBLEM;
+
+! Zweidimensionaler REF (,) IDENT bekommt REF (,)-Variable
+
+Umhaengen: PROC(X REF (,) FIXED IDENT);
+END;
+P: PROC;
+    DCL AF(2,3) FIXED;
+    DCL RF REF (,) FIXED;
+    RF = AF;
+    Umhaengen(RF);
+END;
+
+MODEND;

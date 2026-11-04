@@ -28,6 +28,7 @@ import type { SemanticType } from './semanticType';
 import type { DataObjectSymbol, SemanticSymbol } from './symbol';
 import { SymbolKind } from './symbolKind';
 import { resolveSymbol } from './symbolResolver';
+import { validateInterruptOperand } from './interruptOperandValidator';
 
 /** The subset of the existing semantic state needed by task scheduling.
  * Keeping the contract structural prevents the validator from depending on
@@ -61,21 +62,8 @@ export class TaskingStatementValidator {
         const start = node.startCondition;
         if (start instanceof TaskingInterruptStartNode) {
             if (start.interrupt) {
-                const type = state.expressionTypeResolver.resolve(start.interrupt, environment);
-                const effective = type && state.resolveUnderlyingType(type);
-                if (effective && effective.kind !== SemanticTypeKind.Interrupt) {
-                    this.reportTaskingProblem(state, SemanticDiagnosticCode.InvalidTaskingInterrupt,
-                        start.interrupt.segments[0]?.identifier ?? start.keyword,
-                        'WHEN erwartet einen INTERRUPT-Namen.');
-                } else if (!type) {
-                    // A task name has no data-expression type, but is still a
-                    // known symbol and must not silently pass for an interrupt.
-                    const first = start.interrupt.segments[0]?.identifier;
-                    if (first && resolveSymbol(environment, first.value)) {
-                        this.reportTaskingProblem(state, SemanticDiagnosticCode.InvalidTaskingInterrupt,
-                            first, 'WHEN erwartet einen INTERRUPT-Namen.');
-                    }
-                }
+                validateInterruptOperand(start.interrupt, 'WHEN',
+                    SemanticDiagnosticCode.InvalidTaskingInterrupt, environment, state);
             }
         } else if (start instanceof TaskingTimedStartNode) {
             if (start.initial) {
@@ -86,7 +74,7 @@ export class TaskingStatementValidator {
             }
         }
 
-        if (node.priority) {
+        if (node.priority && node.keyword.value === 'ACTIVATE') {
             const type = this.taskingValueType(node.priority, environment, state);
             const source = node.priorityTokens[0] ?? node.priorityKeyword ?? node.keyword;
             if (type && type.kind !== SemanticTypeKind.Fixed) {
@@ -94,7 +82,12 @@ export class TaskingStatementValidator {
                     source, 'PRIO erwartet einen FIXED-Ausdruck.');
             } else if (type?.kind === SemanticTypeKind.Fixed) {
                 const value = state.tryEvaluateFixedExpression(node.priority, environment);
-                if (value !== undefined && (value < BigInt(1) || value > BigInt(32767))) {
+                if (value === undefined) {
+                    // RTOS-UH requires a constant priority: an ordinary FIXED
+                    // variable, even with INIT, is not a constant expression.
+                    this.reportTaskingProblem(state, SemanticDiagnosticCode.InvalidTaskPriority,
+                        source, 'PRIO erwartet einen konstanten FIXED-Ausdruck (z. B. eine INV FIXED-Konstante).');
+                } else if (value < BigInt(1) || value > BigInt(32767)) {
                     state.reportInvalidTaskPriority(source, value);
                 }
             }

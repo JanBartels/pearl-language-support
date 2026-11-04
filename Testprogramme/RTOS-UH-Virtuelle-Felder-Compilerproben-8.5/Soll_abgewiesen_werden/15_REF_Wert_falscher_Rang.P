@@ -1,0 +1,15 @@
+P=MPC603;
+SC=2000;
+MODULE Virt15;
+PROBLEM;
+
+! Negativ: 2D-Feld an REF () FIXED-Wertparameter
+
+Verwende: PROC(X REF () FIXED);
+END;
+P: PROC;
+    DCL AF(2,3) FIXED;
+    Verwende(AF);
+END;
+
+MODEND;

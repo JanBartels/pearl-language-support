@@ -132,13 +132,19 @@ export function validateProcedureActualParameters(
                     // The UH compiler also accepts REF INV through the generic
                     // writable VOID REF IDENT formal. This loses the protection
                     // guarantee: report a warning, not a speculative error.
-                    // All typed REF IDENT formals retain exact comparison.
+                    // Typed REF IDENT formals stay exact, except that a REF to a
+                    // virtual array accepts matching concrete-array references.
                     const genericWritable = expected.kind === SemanticTypeKind.VoidReference
                         && !expected.targetInvariant;
                     const losesProtection = genericWritable && received.targetInvariant;
+                    const virtualReferenceFormal = expected.kind === SemanticTypeKind.Reference
+                        && expected.target.kind === SemanticTypeKind.VirtualArray
+                        && received.kind === SemanticTypeKind.Reference;
                     const compatible = genericWritable
                         ? isTypeAssignable(expected, received) || losesProtection
-                        : semanticTypeEquals(expected, received);
+                        : virtualReferenceFormal
+                            ? isTypeAssignable(expected, received)
+                            : semanticTypeEquals(expected, received);
                     if (!compatible) {
                         context.reportInvalidFunctionArgumentType(source, target, index + 1,
                             formal.type, contextualActual);

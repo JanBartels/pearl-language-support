@@ -1,0 +1,13 @@
+MODULE RW8610;
+SYSTEM;
+    Senke: /NIL ->;
+PROBLEM;
+    SPC Senke DATION OUT ALPHIC;
+
+    Test: TASK MAIN;
+        DCL A FIXED, B FIXED;
+        A = 7;
+        B = 11;
+        WRITE (A+1), (B), A+B TO Senke;
+    END;
+MODEND;

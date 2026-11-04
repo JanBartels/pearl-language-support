@@ -65,6 +65,12 @@ export class TaskingStatementParser extends ParserBase {
         const priorityKeyword = ['ACTIVATE', 'CONTINUE'].includes(operation)
             ? this.acceptKeyword(['PRIO', 'PRIORITY'])
             : undefined;
+        if (priorityKeyword && operation === 'CONTINUE') {
+            // Consume the clause for recovery, but report RTOS-UH's actual
+            // grammar restriction at the keyword rather than at ';'.
+            this.problems.error(this.location(priorityKeyword),
+                'CONTINUE does not allow PRIO or PRIORITY.');
+        }
         const parsedPriority = priorityKeyword
             ? new StatementExpressionParser(this.context).parseUntil(
                 RECOVERY, `${this.tokenText(priorityKeyword)} task priority`)

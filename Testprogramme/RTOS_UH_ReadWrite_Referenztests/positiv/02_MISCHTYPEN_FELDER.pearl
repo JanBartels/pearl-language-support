@@ -1,0 +1,15 @@
+MODULE RW8602;
+SYSTEM;
+    Datei: /ED/RW86DAT <->;
+PROBLEM;
+    SPC Datei DATION INOUT ALPHIC;
+
+    Test: TASK MAIN;
+        DCL Zahlen(3) FIXED(31);
+        DCL Messungen(2) FLOAT;
+        DCL Zeichen CHAR(10);
+        DCL Bits BIT(16);
+        WRITE Zahlen, Messungen, Zeichen, Bits TO Datei;
+        READ Zahlen, Messungen, Zeichen, Bits FROM Datei;
+    END;
+MODEND;

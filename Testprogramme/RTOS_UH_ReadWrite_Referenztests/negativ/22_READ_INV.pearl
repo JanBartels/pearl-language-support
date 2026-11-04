@@ -1,0 +1,11 @@
+MODULE RW8622;
+SYSTEM;
+    Quelle: /ED/RW86IN <-;
+PROBLEM;
+    SPC Quelle DATION IN ALPHIC;
+
+    Test: TASK MAIN;
+        DCL Konst INV FIXED INIT(10);
+        READ Konst FROM Quelle;
+    END;
+MODEND;

@@ -1,0 +1,14 @@
+P=MPC603;
+SC=2000;
+MODULE Virt02;
+PROBLEM;
+
+! Referenz auf konkretes zweidimensionales FIXED-Feld
+
+P: PROC;
+    DCL AF(2,3) FIXED;
+    DCL RF REF (,) FIXED;
+    RF = AF;
+END;
+
+MODEND;

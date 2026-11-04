@@ -53,6 +53,9 @@ export interface DataObjectSymbol extends GlobalSymbolBase {
     readonly type: SemanticType;
 
     readonly assignmentProtected: boolean;
+
+    /** True only for an SPC DATION describing a system DATION (also for GLOBAL SPC). */
+    readonly systemDationSpecification?: boolean;
 }
 
 /** Struct components have their own declaration identity but are never scope members.

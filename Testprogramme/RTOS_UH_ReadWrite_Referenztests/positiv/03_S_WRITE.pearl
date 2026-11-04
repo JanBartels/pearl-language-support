@@ -1,0 +1,14 @@
+MODULE RW8603;
+SYSTEM;
+    Senke: /NIL ->;
+PROBLEM;
+    SPC Senke DATION OUT ALPHIC;
+
+    Test: TASK MAIN;
+        DCL A(20) CHAR(1), B(20) CHAR(1);
+        DCL LenA FIXED(31), LenB FIXED(31);
+        LenA = 5(31);
+        LenB = 8(31);
+        WRITE A, B TO Senke BY S(LenA), S(LenB);
+    END;
+MODEND;

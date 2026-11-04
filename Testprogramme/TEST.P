@@ -361,6 +361,11 @@ PREVENT myTask;
 PREVENT demo;
 PREVENT;
 ALL 5 * 0.1 SEC ACTIVATE demo;
+
+DISABLE MyEv;
+ENABLE MyEv;
+TRIGGER MyEv;
+
 WHILE ( 1==2
 AND 3 == 4 ) REPEAT
  x = 2 * x;

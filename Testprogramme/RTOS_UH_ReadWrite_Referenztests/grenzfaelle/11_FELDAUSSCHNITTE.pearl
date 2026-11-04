@@ -1,0 +1,13 @@
+MODULE RW8611;
+SYSTEM;
+    Senke: /NIL ->;
+PROBLEM;
+    SPC Senke DATION OUT ALPHIC;
+
+    Test: TASK MAIN;
+        DCL Werte(5) FIXED;
+        DCL Matrix(2,3) FIXED;
+        WRITE Werte(2:4) TO Senke;
+        WRITE Matrix(1,2:3) TO Senke;
+    END;
+MODEND;

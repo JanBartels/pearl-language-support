@@ -1,0 +1,12 @@
+P=MPC603;
+SC=2000;
+MODULE VirtualArrayReferenceInvalid;
+PROBLEM;
+P: PROC;
+    DCL AF2(2,3) FIXED;
+    DCL Wrong(100) FLOAT;
+    DCL RF REF () FIXED;
+    RF = AF2;
+    RF = Wrong;
+END;
+MODEND;

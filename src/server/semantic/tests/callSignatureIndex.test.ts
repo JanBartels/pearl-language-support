@@ -118,6 +118,17 @@ test('builtin procedures expose original variants, including repeated parameters
     assert.equal(sig.signature.repeatedParameter?.name, 'Objekt');
 });
 
+test('READ compatibility calls retain their builtin signature', () => {
+    const result = analyze('', 'READ(Thing, 1, 2);');
+    assert.deepEqual(result.problems, []);
+    assert.equal(result.calls.length, 1);
+    const sig = result.signatures.get(result.calls[0])?.[0];
+    assert.ok(sig && sig.kind === 'builtin');
+    assert.equal(sig.builtin.name, 'READ');
+    assert.deepEqual(sig.signature.parameters.map(p => p.name), ['Station', 'Objekt']);
+    assert.equal(sig.signature.repeatedParameter?.name, 'Objekt');
+});
+
 test('unresolved and noncallable names have no signature; no extra diagnostics', () => {
     const result = analyze('DCL X FIXED;', 'CALL Missing; X(1);');
     assert.equal(result.calls.length, 2);

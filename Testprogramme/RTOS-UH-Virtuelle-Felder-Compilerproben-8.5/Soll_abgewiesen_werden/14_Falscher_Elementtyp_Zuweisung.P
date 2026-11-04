@@ -1,0 +1,14 @@
+P=MPC603;
+SC=2000;
+MODULE Virt14;
+PROBLEM;
+
+! Negativ: FLOAT-Feld in REF () FIXED
+
+P: PROC;
+    DCL AF(100) FLOAT;
+    DCL RF REF () FIXED;
+    RF = AF;
+END;
+
+MODEND;

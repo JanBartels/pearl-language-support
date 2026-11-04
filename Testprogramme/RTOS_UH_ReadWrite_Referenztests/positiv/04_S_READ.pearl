@@ -1,0 +1,13 @@
+MODULE RW8604;
+SYSTEM;
+    Quelle: /ED/RW86IN <-;
+PROBLEM;
+    SPC Quelle DATION IN ALPHIC;
+
+    Test: TASK MAIN;
+        DCL Puffer(100) CHAR(1);
+        DCL Laenge FIXED(31);
+        Laenge = 50(31);
+        READ Puffer FROM Quelle BY S(Laenge);
+    END;
+MODEND;

@@ -1,0 +1,14 @@
+MODULE RW8600;
+SYSTEM;
+    Senke: /NIL ->;
+PROBLEM;
+    SPC Senke DATION OUT ALPHIC;
+
+    Test: TASK MAIN;
+        DCL Zahl FIXED(31), Messwert FLOAT, Text CHAR(8);
+        Zahl = 123(31);
+        Messwert = 1.25;
+        Text = 'ABCDEFGH';
+        WRITE Zahl, Messwert, Text TO Senke;
+    END;
+MODEND;

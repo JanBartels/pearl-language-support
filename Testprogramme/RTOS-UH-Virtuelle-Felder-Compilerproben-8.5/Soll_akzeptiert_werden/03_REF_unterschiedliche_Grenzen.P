@@ -1,0 +1,16 @@
+P=MPC603;
+SC=2000;
+MODULE Virt03;
+PROBLEM;
+
+! Gleicher Rang, unterschiedliche konkrete Grenzen
+
+P: PROC;
+    DCL A(0:9) FIXED;
+    DCL B(-4:7) FIXED;
+    DCL RF REF () FIXED;
+    RF = A;
+    RF = B;
+END;
+
+MODEND;

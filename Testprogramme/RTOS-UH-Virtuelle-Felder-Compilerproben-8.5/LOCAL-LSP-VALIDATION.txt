@@ -1,0 +1,29 @@
+Parser-/Semantik-Pruefung mit lokalem Stand von Roadmap 8.5:
+
+OK  01_REF_eindimensional.P: syntax=0 semErrors=0 warnings=0
+OK  02_REF_zweidimensional.P: syntax=0 semErrors=0 warnings=0
+OK  03_REF_unterschiedliche_Grenzen.P: syntax=0 semErrors=0 warnings=0
+OK  04_REF_CHAR_Feld.P: syntax=0 semErrors=0 warnings=0
+OK  05_REF_an_REF_zuweisen.P: syntax=0 semErrors=0 warnings=0
+OK  06_REF_Wert_mit_Feld.P: syntax=0 semErrors=0 warnings=0
+OK  07_REF_Wert_mit_REF.P: syntax=0 semErrors=0 warnings=0
+OK  08_REF_IDENT_mit_REF.P: syntax=0 semErrors=0 warnings=0
+OK  09_Feld_IDENT_eindimensional.P: syntax=0 semErrors=0 warnings=0
+OK  10_Feld_IDENT_zweidimensional.P: syntax=0 semErrors=0 warnings=0
+OK  11_REF_Wert_zweidimensional.P: syntax=0 semErrors=0 warnings=0
+OK  12_REF_IDENT_zweidimensional.P: syntax=0 semErrors=0 warnings=0
+OK  13_Falscher_Rang_Zuweisung.P: syntax=0 semErrors=1 warnings=0
+  errors: Zuweisung: erwartet REF VIRTUAL ARRAY(rank 1) OF FIXED, erhalten ARRAY(1:2, 1:3) OF FIXED.
+OK  14_Falscher_Elementtyp_Zuweisung.P: syntax=0 semErrors=1 warnings=0
+  errors: Zuweisung: erwartet REF VIRTUAL ARRAY(rank 1) OF FIXED, erhalten ARRAY(1:100) OF FLOAT.
+OK  15_REF_Wert_falscher_Rang.P: syntax=0 semErrors=1 warnings=0
+  errors: Aktualparameter 1 ('X') von 'Verwende': erwartet REF VIRTUAL ARRAY(rank 1) OF FIXED, erhalten ARRAY(1:2, 1:3) OF FIXED.
+OK  16_REF_Wert_falscher_Typ.P: syntax=0 semErrors=1 warnings=0
+  errors: Aktualparameter 1 ('X') von 'Verwende': erwartet REF VIRTUAL ARRAY(rank 1) OF FIXED, erhalten ARRAY(1:100) OF CHAR(4).
+OK  17_REF_IDENT_mit_Feld.P: syntax=0 semErrors=1 warnings=0
+  errors: Aktualparameter 1 ('X') von 'Umhaengen' muss ein identifizierbares Objekt (IDENT) sein.
+OK  18_REF_IDENT_falscher_Rang.P: syntax=0 semErrors=1 warnings=0
+  errors: Aktualparameter 1 ('X') von 'Umhaengen': erwartet REF VIRTUAL ARRAY(rank 1) OF FIXED, erhalten REF VIRTUAL ARRAY(rank 2) OF FIXED.
+OK  19_Feld_IDENT_falscher_Rang.P: syntax=0 semErrors=1 warnings=0
+  errors: Aktualparameter 1 ('A') von 'Bearbeite': erwartet VIRTUAL ARRAY(rank 1) OF FIXED, erhalten ARRAY(1:2, 1:3) OF FIXED.
+Unexpected cases: 0

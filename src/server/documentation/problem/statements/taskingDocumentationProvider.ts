@@ -16,7 +16,7 @@ const operations: Record<string, string> = {
     ACTIVATE: 'Aktiviert eine Task, sofort oder zu einer angegebenen Startbedingung. Ein Taskname ist erforderlich.',
     TERMINATE: 'Beendet die bezeichnete Task, ohne Tasknamen die aktuell laufende Task.',
     SUSPEND: 'Suspendiert die bezeichnete Task, ohne Tasknamen die aktuell laufende Task.',
-    CONTINUE: 'Setzt eine Task fort; ohne Tasknamen die aktuelle Task. Eine einfache Startbedingung und PRIO sind optional.',
+    CONTINUE: 'Setzt eine Task fort; ohne Tasknamen die aktuelle Task. Eine einfache Startbedingung ist optional; eine PRIO-Angabe ist bei CONTINUE nicht zulässig.',
     RESUME: 'Suspendiert die aktuelle Task bis zur angegebenen AT-, AFTER- oder WHEN-Bedingung.',
     PREVENT: 'Hebt die Einplanung einer Task auf, ohne Tasknamen die der aktuellen Task.'
 };
@@ -29,7 +29,7 @@ export class TaskingStatementDocumentationProvider extends DocumentationProvider
             return description ? `# ${operation}\n\n${description}` : undefined;
         }
         if (lookup.element === node.priorityKeyword) {
-            return '# PRIO\n\nOptionale Priorität für ACTIVATE oder CONTINUE. Erwartet einen FIXED-Ausdruck; bekannte konstante Werte müssen zwischen 1 und 32767 liegen.';
+            return '# PRIO\n\nOptionale Priorität nur für ACTIVATE. Erwartet einen konstanten FIXED-Ausdruck (1 bis 32767), z. B. eine INV FIXED-Konstante.';
         }
         return undefined;
     }
@@ -64,7 +64,7 @@ export class TaskingFrequencyLimitDocumentationProvider extends DocumentationPro
     override getDocumentation(node: TaskingFrequencyLimitNode, lookup: AstLookupResult): string | undefined {
         if (lookup.element !== node.keyword) return undefined;
         return node.keyword.value.toUpperCase() === 'UNTIL'
-            ? '# UNTIL\n\nBegrenzt eine zyklische Einplanung bis zu einem CLOCK-Ausdruck. Nur zusammen mit ALL.'
-            : '# DURING\n\nBegrenzt eine zyklische Einplanung auf eine nichtnegative DURATION. Nur zusammen mit ALL; 0 SEC ist zulässig.';
+            ? '# UNTIL\n\nBegrenzt eine zyklische Einplanung bis zu einem CLOCK-Ausdruck. Nur zusammen mit ALL/EVERY.'
+            : '# DURING\n\nBegrenzt eine zyklische Einplanung auf eine nichtnegative DURATION. Nur zusammen mit ALL/EVERY; 0 SEC ist zulässig.';
     }
 }

@@ -30,7 +30,7 @@ const program = `P=MPC603; SC=2000; MODULE M;
 SYSTEM; Alarm: EV(00000001);
 PROBLEM;
 SPC Alarm INTERRUPT;
-DCL Tick DURATION, Clk CLOCK, Priority FIXED, Handle REF TASK;
+DCL Tick DURATION, Clk CLOCK, Priority INV FIXED INIT(25), Handle REF TASK;
 Worker: TASK; END;
 Main: TASK MAIN;
     AT Clk ALL Tick UNTIL Clk ACTIVATE Worker PRIO Priority;

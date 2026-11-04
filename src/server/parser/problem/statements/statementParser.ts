@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { AstNode } from "../../../ast/astNode";
+import { TokenKind, type Token } from "../../../lexer/token";
 import { ParserBase } from "../../parserBase";
 import { BlockParser } from "./blockParser";
 import { RepetitionParser } from "./repetitionParser";
@@ -16,6 +17,9 @@ import { SynchronizationStatementParser } from "./synchronizationStatementParser
 import { SemaSetStatementParser } from "./semaSetStatementParser";
 import { AssignmentParser } from "./assignmentParser";
 import { TaskingStatementParser } from "./taskingStatementParser";
+import { InterruptStatementParser } from "./interruptStatementParser";
+import { DationControlStatementParser } from "./dationControlStatementParser";
+import { BinaryTransferStatementParser } from "./binaryTransferStatementParser";
 
 /** All nested statement constructs are dispatched through this common entry point. */
 export class StatementParser extends ParserBase {
@@ -41,6 +45,27 @@ export class StatementParser extends ParserBase {
 
         if (this.isKeyword(["REQUEST", "RELEASE", "ENTER", "LEAVE", "RESERVE", "FREE"])) {
             return new SynchronizationStatementParser(this.context).parse();
+        }
+
+        if (this.isKeyword(["ENABLE", "DISABLE", "TRIGGER"])) {
+            return new InterruptStatementParser(this.context).parse();
+        }
+
+        if (this.isKeyword(["READ", "WRITE"])) {
+            // RTOS-UH also exposes READ(...) and WRITE(...) as compatibility
+            // procedures (5.7.5). Their identifier-led calls must keep the
+            // ordinary call AST and signature resolution. A parenthesized
+            // first expression followed by FROM/TO is a transfer, however.
+            if (this.isBinaryTransferCompatibilityCall()) {
+                const identifier = this.acceptIdentifier()!;
+                return new IdentifierStatementTailParser(this.context)
+                    .parseAfterIdentifier(identifier);
+            }
+            return new BinaryTransferStatementParser(this.context).parse();
+        }
+
+        if (this.isKeyword(["OPEN", "CLOSE"])) {
+            return new DationControlStatementParser(this.context).parse();
         }
 
         if (this.isKeyword("SEMASET")) {
@@ -97,6 +122,44 @@ export class StatementParser extends ParserBase {
 
         this.skipUnsupportedStatement();
         return undefined;
+    }
+
+    /** Distinguish the old READ(...)/WRITE(...) calls from transfer syntax.
+     *
+     * The lexer intentionally keeps these names usable as identifiers because
+     * they are also builtins. Only the complete leading parenthesized argument
+     * list decides the ambiguity: a trailing ';' is an implicit call, while
+     * FROM/TO (or another expression-list item) belongs to READ/WRITE.
+     * This is a read-only lookahead; it emits no speculative diagnostics.
+     */
+    private isBinaryTransferCompatibilityCall(): boolean {
+        const stream = this.context.stream;
+        let offset = 1;
+        const peek = (): Token => stream.peek(offset);
+        const isTrivia = (token: Token): boolean =>
+            token.kind === TokenKind.Newline || token.kind === TokenKind.Comment;
+
+        while (isTrivia(peek())) offset++;
+        if (!this.isOperator('(', peek())) return false;
+
+        let depth = 0;
+        while (true) {
+            const token = peek();
+            if (token.kind === TokenKind.EOF) return true; // incomplete call
+            if (this.isOperator('(', token)) depth++;
+            else if (this.isOperator(')', token)) {
+                depth--;
+                if (depth === 0) {
+                    offset++;
+                    while (isTrivia(peek())) offset++;
+                    const next = peek();
+                    return this.isOperator(';', next)
+                        || next.kind === TokenKind.EOF
+                        || this.isKeyword(['END', 'MODEND', 'FIN', 'ELSE', 'ALT', 'OUT'], next);
+                }
+            }
+            offset++;
+        }
     }
 
     private skipUnsupportedStatement(): void {

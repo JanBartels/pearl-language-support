@@ -1,0 +1,12 @@
+MODULE RSTCLOSE;
+SYSTEM;
+    TestDation: /NIL ->;
+PROBLEM;
+    SPC TestDation DATION OUT ALPHIC;
+
+    TestTask: TASK MAIN;
+        DCL CloseStatus FIXED;
+        OPEN TestDation;
+        CLOSE TestDation BY RST(CloseStatus);
+    END;
+MODEND;

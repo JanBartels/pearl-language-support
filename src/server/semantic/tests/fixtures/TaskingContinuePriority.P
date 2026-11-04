@@ -1,0 +1,11 @@
+P=MPC603;
+SC=2000;
+MODULE TaskingContinuePriority;
+PROBLEM;
+Worker: TASK;
+END;
+Runner: TASK MAIN;
+    CONTINUE Worker PRIO 41;
+    ACTIVATE Worker PRIORITY 25;
+END;
+MODEND;

@@ -1,0 +1,15 @@
+P=MPC603;
+SC=2000;
+MODULE Virt06;
+PROBLEM;
+
+! REF-Wertparameter erhaelt konkretes Feld (keine IDENT-Uebergabe)
+
+Verwende: PROC(X REF () FIXED);
+END;
+P: PROC;
+    DCL AF(100) FIXED;
+    Verwende(AF);
+END;
+
+MODEND;

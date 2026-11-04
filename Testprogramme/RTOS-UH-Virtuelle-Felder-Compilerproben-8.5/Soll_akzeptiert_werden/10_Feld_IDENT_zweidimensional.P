@@ -1,0 +1,15 @@
+P=MPC603;
+SC=2000;
+MODULE Virt10;
+PROBLEM;
+
+! Formaler Feldparameter A(,) FIXED IDENT erhaelt 2D-Feld
+
+Bearbeite: PROC(A(,) FIXED IDENT);
+END;
+P: PROC;
+    DCL AF(-2:2,1:3) FIXED;
+    Bearbeite(AF);
+END;
+
+MODEND;

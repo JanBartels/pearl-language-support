@@ -180,6 +180,27 @@ export function isIdentificationTypeCompatible(
     return semanticTypeEquals(formal, actual, lengths);
 }
 
+/** A virtual array reference describes rank and element type, not bounds.
+ * This is intentionally directional: REF () FIXED may refer to FIXED(100),
+ * but a reference with concrete bounds is not established by a virtual one.
+ * Neither dimensions nor target INV protection are silently discarded.
+ */
+function isReferenceTargetCompatible(
+    destination: SemanticType,
+    source: SemanticType,
+    lengths: SimpleTypeLengths
+): boolean {
+    if (destination.kind === SemanticTypeKind.VirtualArray) {
+        if (source.kind !== SemanticTypeKind.Array
+            && source.kind !== SemanticTypeKind.VirtualArray) return false;
+        const rank = source.kind === SemanticTypeKind.Array
+            ? source.dimensions.length : source.rank;
+        return destination.rank === rank
+            && semanticTypeEquals(destination.elementType, source.elementType, lengths);
+    }
+    return semanticTypeEquals(destination, source, lengths);
+}
+
 /**
  * Type compatibility for assigning an already typed REF value. This is
  * deliberately directional: a typed reference can be stored in a VOID REF,
@@ -204,8 +225,8 @@ export function isTypeAssignable(
     // A read-only reference can point to a writable object, but never vice versa.
     if (target.kind === SemanticTypeKind.Reference
         && source.kind === SemanticTypeKind.Reference) {
-        return target.targetInvariant && !source.targetInvariant
-            && semanticTypeEquals(target.target, source.target, lengths);
+        return (target.targetInvariant || !source.targetInvariant)
+            && isReferenceTargetCompatible(target.target, source.target, lengths);
     }
 
     // VOID references accept arbitrary referenced types while preserving INV.

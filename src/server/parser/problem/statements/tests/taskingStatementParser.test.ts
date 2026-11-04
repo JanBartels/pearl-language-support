@@ -118,7 +118,7 @@ test('ALL, UNTIL, DURING and combinations with AT/AFTER create structured subtre
 test('WHEN scheduling, including WHEN RESUME, remains separate from time scheduling', () => {
     const result = parse(`
         WHEN Alarm ACTIVATE Worker;
-        WHEN Alarm CONTINUE Worker PRIO 5;
+        WHEN Alarm CONTINUE Worker;
         WHEN Alarm RESUME;
     `);
     assert.deepEqual(result.messages, []);
@@ -130,17 +130,31 @@ test('WHEN scheduling, including WHEN RESUME, remains separate from time schedul
 
 test('CONTINUE supports missing task name and simple AT/AFTER/WHEN conditions', () => {
     const result = parse(`
-        CONTINUE PRIO 5;
+        CONTINUE;
         AT 12:00:00 CONTINUE;
         AFTER 2 SEC CONTINUE Worker;
-        WHEN Alarm CONTINUE PRIO 4;
+        WHEN Alarm CONTINUE;
     `);
     assert.deepEqual(result.messages, []);
     assert.equal(result.statements.length, 4);
     assert.equal(result.statements[0].task, undefined);
-    assert.ok(result.statements[0].priority);
     assert.equal(result.statements[1].task, undefined);
-    assert.ok(result.statements[3].priority);
+    assert.equal(result.statements[3].task, undefined);
+});
+
+test('RTOS-UH rejects CONTINUE PRIO and PRIORITY without losing the next statement', () => {
+    const result = parse(`
+        CONTINUE Worker PRIO 41;
+        WHEN Alarm CONTINUE PRIORITY 12;
+        ACTIVATE Worker PRIORITY 14;
+    `);
+    assert.deepEqual(result.messages, [
+        'CONTINUE does not allow PRIO or PRIORITY.',
+        'CONTINUE does not allow PRIO or PRIORITY.'
+    ]);
+    assert.deepEqual(result.statements.map(s => s.keyword.value),
+        ['CONTINUE', 'CONTINUE', 'ACTIVATE']);
+    assert.equal(result.statements[2].priorityKeyword?.value, 'PRIORITY');
 });
 
 test('RESUME requires a simple AT, AFTER or WHEN condition', () => {
@@ -218,7 +232,7 @@ test('tasking parses correctly inside IF, BEGIN and the task body', () => {
     assert.equal(result.nodes.filter(n => n instanceof ReturnStatementNode).length, 1);
 });
 
-test('PRIORITY and EVERY report aliases are retained as written pending RTOS-UH verification', () => {
+test('PRIORITY and EVERY aliases are supported by the RTOS-UH compiler', () => {
     const result = parse(`EVERY 2 SEC ACTIVATE Worker PRIORITY 9;`);
     assert.deepEqual(result.messages, []);
     assert.equal((result.statements[0].startCondition as TaskingTimedStartNode).frequency?.keyword.value, 'EVERY');

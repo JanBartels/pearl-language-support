@@ -1,0 +1,15 @@
+P=MPC603;
+SC=2000;
+MODULE Virt16;
+PROBLEM;
+
+! Negativ: CHAR(4)-Feld an REF () FIXED-Wertparameter
+
+Verwende: PROC(X REF () FIXED);
+END;
+P: PROC;
+    DCL AF(100) CHAR(4);
+    Verwende(AF);
+END;
+
+MODEND;

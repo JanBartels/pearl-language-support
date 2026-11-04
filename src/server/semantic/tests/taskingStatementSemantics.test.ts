@@ -71,7 +71,7 @@ test('all six operations resolve TASK names and allow the optional current task'
 });
 
 test('TIME, DURATION and interrupt clauses use the existing expression resolver', () => {
-    const r = analyze(`AT C ALL D UNTIL C ACTIVATE Worker PRIO F;
+    const r = analyze(`AT C ALL D UNTIL C ACTIVATE Worker PRIO 12;
         AFTER D ALL D DURING D ACTIVATE Worker;
         WHEN Alarm ACTIVATE Worker;
         WHEN Alarm CONTINUE Worker;
@@ -149,18 +149,38 @@ test('positive mixed clauses and valid real-time expressions stay clean', () => 
     assert.deepEqual(r.codes, []);
 });
 
-test('priority expression must be FIXED and known values within 1..32767', () => {
+test('priority expression must be constant FIXED and within 1..32767', () => {
     const r = analyze(`ACTIVATE Worker PRIO T;
-        CONTINUE Worker PRIO 0;
+        ACTIVATE Worker PRIO 0;
         ACTIVATE Worker PRIO 32768;
-        CONTINUE Worker PRIO 1 + 2;
+        ACTIVATE Worker PRIORITY 1 + 2;
         ACTIVATE Worker PRIO F;`);
     assert.deepEqual(r.syntax, []);
     assert.deepEqual(r.codes, [
         SemanticDiagnosticCode.InvalidTaskingPriorityType,
         SemanticDiagnosticCode.InvalidTaskPriority,
+        SemanticDiagnosticCode.InvalidTaskPriority,
         SemanticDiagnosticCode.InvalidTaskPriority
     ]);
+});
+
+test('PRIO and PRIORITY accept INV FIXED constants but not mutable FIXED objects', () => {
+    const r = analyze(`ACTIVATE Worker PRIO Constant;
+        ACTIVATE Worker PRIORITY Constant + 1;
+        ACTIVATE Worker PRIO Mutable;
+        ACTIVATE Worker PRIORITY Mutable + 1;`,
+        'DCL Constant INV FIXED INIT(25); DCL Mutable FIXED INIT(25);');
+    assert.deepEqual(r.syntax, []);
+    assert.deepEqual(r.codes, [
+        SemanticDiagnosticCode.InvalidTaskPriority,
+        SemanticDiagnosticCode.InvalidTaskPriority
+    ]);
+});
+
+test('EVERY and WHEN RESUME are accepted RTOS-UH forms', () => {
+    const r = analyze('EVERY 0 SEC ACTIVATE Worker; WHEN Alarm RESUME;');
+    assert.deepEqual(r.syntax, []);
+    assert.deepEqual(r.codes, []);
 });
 
 test('TASK references can be used as task operands', () => {

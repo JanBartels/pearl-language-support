@@ -1,0 +1,24 @@
+MODULE RW8690;
+SYSTEM;
+    Datei: /ED/RW86TST <->;
+    Konsole: /TY ->;
+PROBLEM;
+    SPC Datei DATION INOUT ALPHIC;
+    SPC Konsole DATION OUT ALPHIC;
+
+    Test: TASK MAIN;
+        DCL Vorher FIXED(31), Nachher FIXED(31);
+        Vorher = 123456(31);
+        OPEN Datei;
+        CALL REWIND(Datei);
+        WRITE Vorher TO Datei;
+        CALL REWIND(Datei);
+        READ Nachher FROM Datei;
+        IF Vorher EQ Nachher THEN
+            PUT 'READ/WRITE OK' TO Konsole BY A,SKIP;
+        ELSE
+            PUT 'READ/WRITE FEHLER' TO Konsole BY A,SKIP;
+        FIN;
+        CLOSE Datei;
+    END;
+MODEND;

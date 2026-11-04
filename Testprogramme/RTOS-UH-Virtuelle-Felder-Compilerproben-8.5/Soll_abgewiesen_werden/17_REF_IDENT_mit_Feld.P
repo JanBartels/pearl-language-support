@@ -1,0 +1,15 @@
+P=MPC603;
+SC=2000;
+MODULE Virt17;
+PROBLEM;
+
+! Negativ: REF IDENT bekommt konkretes Feld statt REF-Variable
+
+Umhaengen: PROC(X REF () FIXED IDENT);
+END;
+P: PROC;
+    DCL AF(100) FIXED;
+    Umhaengen(AF);
+END;
+
+MODEND;

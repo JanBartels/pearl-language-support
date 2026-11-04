@@ -34,8 +34,7 @@ const RECOVERY_BOUNDARIES = [
  *   (AT Clock | AFTER Duration) [ALL Duration [UNTIL Clock | DURING Duration]]
  *   ALL Duration [UNTIL Clock | DURING Duration]
  *
- * PRIORITY and EVERY are retained as report spellings; their actual RTOS-UH
- * acceptance is pending a compiler probe.
+ * PRIORITY and EVERY are also accepted by the RTOS-UH compiler.
  */
 export class TaskingStartConditionParser extends ParserBase {
     override parse(): TaskingStartConditionNode | undefined {

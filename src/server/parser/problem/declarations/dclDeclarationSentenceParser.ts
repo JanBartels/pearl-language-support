@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import { ParserBase } from "../../parserBase";
+import { AstKind } from "../../../ast/astKind";
 
 import { DclDeclarationSentenceNode } from "../../../ast/problem/declarations/dclDeclarationSentenceNode";
 
@@ -23,7 +24,8 @@ export class DclDeclarationSentenceParser extends ParserBase {
             return undefined;
         }
 
-        const dimension = new DimensionAttributeParser(
+        const dimensionLocation = this.location();
+        let dimension = new DimensionAttributeParser(
             this.context
         ).parse();
 
@@ -46,6 +48,14 @@ export class DclDeclarationSentenceParser extends ParserBase {
             ]);
 
             return undefined;
+        }
+
+        if (dimension && attribute.kind === AstKind.DclDationAttribute) {
+            this.problems.error(
+                dimensionLocation,
+                'Arrays of DATION objects are not allowed.'
+            );
+            dimension = undefined;
         }
 
         return new DclDeclarationSentenceNode(

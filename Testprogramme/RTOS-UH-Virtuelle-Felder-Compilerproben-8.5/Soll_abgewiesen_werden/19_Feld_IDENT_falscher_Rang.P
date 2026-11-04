@@ -1,0 +1,15 @@
+P=MPC603;
+SC=2000;
+MODULE Virt19;
+PROBLEM;
+
+! Negativ: 2D-Feld an eindimensionalen Feld-IDENT-Parameter
+
+Bearbeite: PROC(A() FIXED IDENT);
+END;
+P: PROC;
+    DCL AF(2,3) FIXED;
+    Bearbeite(AF);
+END;
+
+MODEND;

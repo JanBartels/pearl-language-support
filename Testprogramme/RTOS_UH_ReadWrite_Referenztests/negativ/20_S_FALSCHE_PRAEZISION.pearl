@@ -1,0 +1,11 @@
+MODULE RW8620;
+SYSTEM;
+    Senke: /NIL ->;
+PROBLEM;
+    SPC Senke DATION OUT ALPHIC;
+
+    Test: TASK MAIN;
+        DCL Zahl FIXED(31), Laenge FIXED(15);
+        WRITE Zahl TO Senke BY S(Laenge);
+    END;
+MODEND;

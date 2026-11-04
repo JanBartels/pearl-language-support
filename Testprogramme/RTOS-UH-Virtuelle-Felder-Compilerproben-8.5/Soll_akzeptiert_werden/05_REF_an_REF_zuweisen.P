@@ -1,0 +1,16 @@
+P=MPC603;
+SC=2000;
+MODULE Virt05;
+PROBLEM;
+
+! Zwei Referenzvariablen desselben virtuellen Feldtyps
+
+P: PROC;
+    DCL AF(100) FIXED;
+    DCL R1 REF () FIXED;
+    DCL R2 REF () FIXED;
+    R1 = AF;
+    R2 = R1;
+END;
+
+MODEND;

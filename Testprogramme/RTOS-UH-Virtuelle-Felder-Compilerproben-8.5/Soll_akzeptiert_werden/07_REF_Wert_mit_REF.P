@@ -1,0 +1,17 @@
+P=MPC603;
+SC=2000;
+MODULE Virt07;
+PROBLEM;
+
+! REF-Wertparameter erhaelt bestehende virtuelle Referenz
+
+Verwende: PROC(X REF () FIXED);
+END;
+P: PROC;
+    DCL AF(100) FIXED;
+    DCL RF REF () FIXED;
+    RF = AF;
+    Verwende(RF);
+END;
+
+MODEND;

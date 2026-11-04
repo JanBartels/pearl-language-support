@@ -1,0 +1,11 @@
+MODULE RSTBASE;
+SYSTEM;
+    TestDation: /NIL ->;
+PROBLEM;
+    SPC TestDation DATION OUT ALPHIC;
+
+    TestTask: TASK MAIN;
+        OPEN TestDation;
+        CLOSE TestDation;
+    END;
+MODEND;

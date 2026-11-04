@@ -1,0 +1,17 @@
+P=MPC603;
+SC=2000;
+MODULE VirtualArrayReference;
+PROBLEM;
+UseField: PROC(A REF () FIXED);
+END;
+P: PROC;
+    DCL AF(100) FIXED;
+    DCL RF REF () FIXED;
+    DCL AF2(2,3) FIXED;
+    DCL RF2 REF (,) FIXED;
+    RF = AF;
+    RF2 = AF2;
+    UseField(AF);
+    UseField(RF);
+END;
+MODEND;

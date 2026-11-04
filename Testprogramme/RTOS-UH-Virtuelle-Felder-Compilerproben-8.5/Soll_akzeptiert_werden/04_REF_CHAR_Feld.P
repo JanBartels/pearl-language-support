@@ -1,0 +1,14 @@
+P=MPC603;
+SC=2000;
+MODULE Virt04;
+PROBLEM;
+
+! Referenz auf Feld von CHAR(4)-Elementen
+
+P: PROC;
+    DCL Texte(1:8) CHAR(4);
+    DCL RT REF () CHAR(4);
+    RT = Texte;
+END;
+
+MODEND;
