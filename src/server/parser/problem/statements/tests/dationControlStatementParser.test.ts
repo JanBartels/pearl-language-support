@@ -41,12 +41,12 @@ function parse(body: string) {
 }
 
 test('OPEN and CLOSE preserve their option syntax and provide keyword hover', () => {
-    const r = parse("OPEN Disk BY IDF(Name), OLD, EXCLUSIVE, RST(Status); CLOSE Disk BY RST(Status), PRM;");
+    const r = parse("OPEN Disk BY IDF(Name), OLD, EXCLUSIVE; CLOSE Disk BY PRM;");
     assert.deepEqual(r.syntax, []);
     assert.deepEqual(r.statements.map(s => s.keyword.value), ['OPEN', 'CLOSE']);
     assert.deepEqual(r.statements[0].options.map(o => o.keyword.value),
-        ['IDF', 'OLD', 'EXCLUSIVE', 'RST']);
-    assert.deepEqual(r.statements[1].options.map(o => o.keyword.value), ['RST', 'PRM']);
+        ['IDF', 'OLD', 'EXCLUSIVE']);
+    assert.deepEqual(r.statements[1].options.map(o => o.keyword.value), ['PRM']);
     for (const statement of r.statements) {
         const loc = statement.keyword.location!;
         const hit = r.ast.lookupSourceValue({ uri: loc.source.uri, offset: loc.span.start });
@@ -82,10 +82,10 @@ test('missing arguments and delimiters do not swallow following statements', () 
 });
 
 test('unknown BY option recovers at comma and preserves the next option', () => {
-    const r = parse('OPEN Disk BY UNKNOWN, RST(Status); CLOSE Disk;');
+    const r = parse('OPEN Disk BY UNKNOWN, IDF(Name); CLOSE Disk;');
     assert.ok(r.syntax.some(m => /Expected OPEN\/CLOSE BY option/.test(m)));
     assert.equal(r.statements.length, 2);
-    assert.deepEqual(r.statements[0].options.map(o => o.keyword.value), ['RST']);
+    assert.deepEqual(r.statements[0].options.map(o => o.keyword.value), ['IDF']);
 });
 
 test('CLOSE-only CAN/PRM are retained for targeted diagnostics and keyword hover', () => {
@@ -102,4 +102,18 @@ test('CLOSE-only CAN/PRM are retained for targeted diagnostics and keyword hover
                 new RegExp(`^# ${option.keyword.value}`));
         }
     }
+});
+
+
+test('original RTOS-UH compiler rejects RST in both OPEN and CLOSE, recovering at the next option', () => {
+    const r = parse(`OPEN Disk BY RST(Status), IDF(Name), OLD;
+        CLOSE Disk BY PRM, RST(Status);
+        OPEN Disk BY RST(Status);
+        CLOSE Disk BY RST(Status);
+        OPEN Disk; CLOSE Disk;`);
+    assert.equal(r.statements.length, 6);
+    assert.equal(r.syntax.filter(m => m.includes('does not support RST')).length, 4);
+    assert.deepEqual(r.statements.map(s => s.options.map(o => o.keyword.value)),
+        [['IDF', 'OLD'], ['PRM'], [], [], [], []]);
+    assert.ok(r.statements.every(s => s.semicolon));
 });

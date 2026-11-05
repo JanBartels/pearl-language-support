@@ -11,7 +11,7 @@ import { DationControlDocumentationProvider } from '../../../documentation/probl
 import type { ExpressionNode } from '../expressions/expressionNode';
 
 export type DationControlOptionKind =
-    'IDF' | 'RST' | 'NEW' | 'OLD' | 'ANY' | 'EXCLUSIVE' | 'CAN' | 'PRM';
+    'IDF' | 'NEW' | 'OLD' | 'ANY' | 'EXCLUSIVE' | 'CAN' | 'PRM';
 
 /** One OPEN/CLOSE BY option, preserving its argument and punctuation. */
 export class DationControlOptionNode extends AstNode {

@@ -34,9 +34,20 @@ export class BinaryTransferStatementParser extends ParserBase {
         if (!this.isKeyword(direction) && !this.isOperator(';') && !this.isKeyword(BOUNDARIES)) {
             while (!this.eof()) {
                 const segmentParser = new IoSegmentParser(this.context);
-                const value = segmentParser.isSegment() ? segmentParser.parse()
+                const segment = segmentParser.isSegment();
+                // RTOS-UH 5.7.5 documents complete ARRAY transfers, not
+                // last-dimension slices. The original compiler rejects
+                // WRITE Values(2:4) and WRITE Matrix(1,2:3) (reference test 11).
+                // Still parse the invalid segment for recovery and symbol lookup;
+                // IoSegment remains available for future formatted I/O.
+                const rejectedSegment = segment ? segmentParser.parse() : undefined;
+                const value = segment ? rejectedSegment
                     : read ? new NameExpressionParser(this.context).parse()
                     : new ExpressionParser(this.context).parse();
+                if (rejectedSegment) {
+                    this.problems.error(rejectedSegment.opening.location ?? this.location(),
+                        'RTOS-UH READ/WRITE does not support array segments; transfer the complete array.');
+                }
                 if (!value) {
                     this.problems.error(this.location(), `Expected ${read ? 'variable' : 'expression'} in ${this.tokenText(keyword)} list.`);
                     this.synchronize([',', direction, ';', ...BOUNDARIES]);

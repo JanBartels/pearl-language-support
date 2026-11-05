@@ -62,8 +62,8 @@ function analyze(body: string, declarations = '') {
         codes: semantic.diagnostics.map(d => d.code) };
 }
 
-test('OPEN/CLOSE including IDF and RST bind their names and appear in Find References', () => {
-    const r = analyze('OPEN Disk BY IDF(FileName), NEW, EXCLUSIVE, RST(ErrorStatus); CLOSE Disk BY PRM;');
+test('OPEN/CLOSE including IDF bind their names and appear in Find References', () => {
+    const r = analyze('OPEN Disk BY IDF(FileName), NEW, EXCLUSIVE; CLOSE Disk BY PRM;');
     assert.deepEqual(r.syntax, []);
     assert.deepEqual(r.codes, []);
     assert.equal(r.nodes.length, 2);
@@ -75,23 +75,17 @@ test('OPEN/CLOSE including IDF and RST bind their names and appear in Find Refer
     assert.ok(group.references.includes(diskClose));
     assert.equal(group.references.length, 2);
     const idfName = r.nodes[0].options[0].argument!;
-    const rstName = r.nodes[0].options[3].argument!;
     assert.ok(idfName instanceof NameExpressionNode);
     assert.ok(r.occurrences.all.some(g => g.declaration.value === 'FileName'
         && g.references.includes(idfName.segments[0].identifier)));
-    assert.ok(rstName instanceof NameExpressionNode);
-    assert.ok(r.occurrences.all.some(g => g.declaration.value === 'ErrorStatus'
-        && g.references.includes(rstName.segments[0].identifier)));
 });
 
-test('wrong DATION, IDF and RST types are diagnosed independently', () => {
-    const r = analyze('OPEN Value BY IDF(Value), RST(BadStatus); CLOSE Disk BY RST(Protected);');
+test('wrong DATION and IDF types are diagnosed independently', () => {
+    const r = analyze('OPEN Value BY IDF(Value); CLOSE Disk BY PRM;');
     assert.deepEqual(r.syntax, []);
     assert.deepEqual(r.codes, [
         SemanticDiagnosticCode.InvalidDationControlTarget,
-        SemanticDiagnosticCode.InvalidDationControlIdf,
-        SemanticDiagnosticCode.InvalidDationControlRst,
-        SemanticDiagnosticCode.InvalidDationControlRst
+        SemanticDiagnosticCode.InvalidDationControlIdf
     ]);
 });
 
@@ -109,10 +103,9 @@ test('wrong OPEN/CLOSE option and missing IDF cause their own diagnostics', () =
 });
 
 test('unknown symbols produce only shared UnknownIdentifier diagnostics', () => {
-    const r = analyze('OPEN Unknown BY IDF(MissingName), RST(MissingStatus);');
+    const r = analyze('OPEN Unknown BY IDF(MissingName);');
     assert.deepEqual(r.syntax, []);
     assert.deepEqual(r.codes, [
-        SemanticDiagnosticCode.UnknownIdentifier,
         SemanticDiagnosticCode.UnknownIdentifier,
         SemanticDiagnosticCode.UnknownIdentifier
     ]);
@@ -120,7 +113,7 @@ test('unknown symbols produce only shared UnknownIdentifier diagnostics', () => 
 
 
 test('real AST hover, go-to-definition binding and LSP findReferences work together', () => {
-    const r = analyze('OPEN Disk BY IDF(FileName), RST(ErrorStatus); CLOSE Disk BY CAN;');
+    const r = analyze('OPEN Disk BY IDF(FileName); CLOSE Disk BY CAN;');
     assert.deepEqual(r.syntax, []);
     assert.deepEqual(r.codes, []);
     const statement = r.nodes[0];
@@ -199,4 +192,13 @@ test('RTOS-UH: valid OPEN file modes and CLOSE CAN/PRM produce no diagnostics', 
     assert.deepEqual(r.syntax, []);
     assert.deepEqual(r.codes, []);
     assert.equal(r.nodes.length, 6);
+});
+
+
+test('RTOS-UH OPEN/CLOSE RST is a syntax error, without spurious symbol diagnostics', () => {
+    const r = analyze('OPEN Disk BY RST(ErrorStatus); CLOSE Disk BY RST(ErrorStatus); OPEN Disk; CLOSE Disk;');
+    assert.equal(r.syntax.filter(m => m.includes('does not support RST')).length, 2);
+    assert.deepEqual(r.codes, []);
+    assert.equal(r.nodes.length, 4);
+    assert.deepEqual(r.nodes.map(node => node.options.length), [0, 0, 0, 0]);
 });

@@ -7,7 +7,7 @@ import type { DationControlOptionNode } from '../../../ast/problem/statements/da
 import { DocumentationProvider } from '../../documentationProvider';
 
 const help: Readonly<Record<string, string>> = {
-    OPEN: 'Öffnet eine DATION. Mit BY können Dateiname, Existenzbedingungen, exklusiver Zugriff und Fehlerstatus angegeben werden.',
+    OPEN: 'Öffnet eine DATION. Mit BY können Dateiname, Existenzbedingungen und exklusiver Zugriff angegeben werden.',
     CLOSE: 'Schließt eine DATION. BY PRM erhält, BY CAN löscht die zugehörige Datei.',
     BY: 'Leitet die Optionen der OPEN- oder CLOSE-Anweisung ein.',
     IDF: 'IDF(CHARACTER-Ausdruck) legt den Dateinamen beziehungsweise die Pathlist der DATION fest.',
@@ -16,8 +16,7 @@ const help: Readonly<Record<string, string>> = {
     ANY: 'Die Datei wird geöffnet oder neu angelegt.',
     EXCLUSIVE: 'Öffnet die Datei für exklusiven Zugriff der aufrufenden Task (nach NEW, OLD oder ANY).',
     CAN: 'Schließt die DATION und löscht die zugehörige Datei.',
-    PRM: 'Schließt die DATION unter Erhaltung der Datei.',
-    RST: 'RST(FIXED-Variable) stellt den Fehlerstatus der I/O-Operation bereit.'
+    PRM: 'Schließt die DATION unter Erhaltung der Datei.'
 };
 
 /** Shared keyword documentation; referenced operands use their existing symbol hover. */

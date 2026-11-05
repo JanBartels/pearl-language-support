@@ -32,11 +32,34 @@ export class RefTypeParser extends ParserBase {
             return undefined;
         }
 
-        // INV here protects the referenced object, not the REF variable.
-        // REF [INV] TargetType (PEARL 90, section 5.9).
+        // INV protects the referenced object, not the REF variable.
+        // With virtual dimensions, the target qualifier follows the rank:
+        // REF (,) INV FIXED (PEARL 90, section 5.9).
+        // Keep the already supported REF INV ... spelling as well.
         this.skipTrivia();
-        const inv = this.acceptKeyword("INV");
-        const target = this.parseTarget();
+        let inv = this.acceptKeyword("INV");
+        this.skipTrivia();
+
+        let target: RefTargetTypeNode | undefined;
+        if (this.isOperator('(')) {
+            const dimensions = new VirtualDimensionListParser(this.context).parse();
+            this.skipTrivia();
+            const arrayInv = this.acceptKeyword("INV");
+            if (arrayInv) {
+                if (inv) {
+                    this.problems.error(this.location(arrayInv),
+                        "Duplicate 'INV' qualifier in REF type.");
+                } else {
+                    inv = arrayInv;
+                }
+            }
+            const elementType = new ProblemDataTypeParser(this.context).parse();
+            if (dimensions && elementType) {
+                target = new ReferenceArrayTargetNode(dimensions, elementType);
+            }
+        } else {
+            target = this.parseTarget();
+        }
 
         if (!target) {
 
@@ -54,13 +77,6 @@ export class RefTypeParser extends ParserBase {
 
     private parseTarget(): RefTargetTypeNode | undefined {
         this.skipTrivia();
-        if (this.isOperator('(')) {
-            const dimensions = new VirtualDimensionListParser(this.context).parse();
-            if (!dimensions) return undefined;
-            const elementType = new ProblemDataTypeParser(this.context).parse();
-            if (!elementType) return undefined;
-            return new ReferenceArrayTargetNode(dimensions, elementType);
-        }
         const task = this.acceptKeyword("TASK");
         if (task) {
             return new TaskReferenceTargetNode(this.tokenValue(task));

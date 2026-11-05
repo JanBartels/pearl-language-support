@@ -154,36 +154,36 @@ test('READ/WRITE bind object, DATION and S status names in Find References', () 
     assert.equal(locations.length, 2);
 });
 
-test('I/O segments bind arrays and reject scalar destinations', () => {
+test('rejected READ/WRITE segments still allow semantic recovery and name resolution', () => {
     const r = analyze(`READ Values(1:3) FROM Disk;
         WRITE Values(2:3) TO Disk;
         READ Protected(1:2) FROM Disk;
         WRITE Value(1:2) TO Disk;`);
-    assert.deepEqual(r.syntax, []);
+    assert.equal(r.syntax.filter(m => m.includes('does not support array segments')).length, 4);
     assert.ok(r.codes.includes(SemanticDiagnosticCode.InvalidIoSegment));
 });
 
 
-test('segment dimension and FIXED index types are checked separately', () => {
+test('even invalid segments retain independent semantic checks for IDE recovery', () => {
     const r = analyze(`
         READ Matrix(1, 2:3) FROM Disk;
         WRITE Matrix(1:2) TO Disk;
         READ Matrix(FloatValue, 1:2) FROM Disk;
     `);
-    assert.deepEqual(r.syntax, []);
+    assert.equal(r.syntax.filter(m => m.includes('does not support array segments')).length, 3);
     assert.deepEqual(r.codes, [
         SemanticDiagnosticCode.InvalidIoSegment,
         SemanticDiagnosticCode.InvalidIoSegment
     ]);
 });
 
-test('constant segment bounds are diagnosed; dynamic bounds remain unresolved', () => {
+test('rejected segments preserve constant-bound validation during recovery', () => {
     const r = analyze(`
         READ Values(1:4) FROM Disk;
         WRITE Values(3:2) TO Disk;
         READ Values(1:Value) FROM Disk;
     `);
-    assert.deepEqual(r.syntax, []);
+    assert.equal(r.syntax.filter(m => m.includes('does not support array segments')).length, 3);
     assert.deepEqual(r.codes, [
         SemanticDiagnosticCode.InvalidIoSegment,
         SemanticDiagnosticCode.InvalidIoSegment
@@ -191,9 +191,9 @@ test('constant segment bounds are diagnosed; dynamic bounds remain unresolved', 
 });
 
 
-test('segment names are ordinary symbol references for navigation', () => {
+test('names inside rejected segments remain available for navigation', () => {
     const r = analyze('READ Values(1:3) FROM Disk; WRITE Values(1:2) TO Disk;');
-    assert.deepEqual(r.syntax, []);
+    assert.equal(r.syntax.filter(m => m.includes('does not support array segments')).length, 2);
     assert.deepEqual(r.codes, []);
     const first = r.nodes[0].objects[0] as import('../../ast/problem/statements/ioSegmentNode').IoSegmentNode;
     const second = r.nodes[1].objects[0] as import('../../ast/problem/statements/ioSegmentNode').IoSegmentNode;

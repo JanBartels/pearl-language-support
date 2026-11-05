@@ -12,7 +12,9 @@ import type { NameExpressionNode } from '../expressions/nameExpressionNode';
 
 /** A PEARL I/O array segment: array([index, ...] low : high).
  * A dedicated AST node prevents a segment from becoming a function call or
- * an ordinary indexed expression. Shared by binary and formatted I/O.
+ * an ordinary indexed expression. In RTOS-UH READ/WRITE this node is only
+ * retained for recovery (segments are rejected by the original compiler);
+ * it remains available to the future formatted-I/O parser.
  */
 export class IoSegmentNode extends ExpressionBase {
     constructor(

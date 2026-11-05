@@ -6,6 +6,7 @@ import { test } from 'node:test';
 
 import { AstNode } from '../../../../ast/astNode';
 import { RefTypeNode } from '../../../../ast/problem/types/refTypeNode';
+import { ReferenceArrayTargetNode } from '../../../../ast/problem/types/referenceArrayTargetNode';
 import { ProblemDataAttributeNode } from '../../../../ast/problem/declarations/problemDataAttributeNode';
 import { ProblemCollection } from '../../../../core/problemCollection';
 import { Lexer } from '../../../../lexer/lexer';
@@ -18,6 +19,8 @@ import { PreprocessorConditionalBlockCollection } from '../../../../preproc/prep
 import { PreprocessorConditionalBlockStack } from '../../../../preproc/preprocessorConditionalBlockStack';
 import { SemanticAnalyzer } from '../../../../semantic/semanticAnalyzer';
 import { SemanticDiagnosticSeverity } from '../../../../semantic/semanticDiagnostic';
+import { SemanticTypeKind } from '../../../../semantic/semanticType';
+import { SymbolKind } from '../../../../semantic/symbolKind';
 import { FileSource } from '../../../../source/fileSource';
 import type { DocumentRegistry } from '../../../../utility/documentRegistry';
 import type { Logger } from '../../../../utility/logging/logger';
@@ -25,7 +28,7 @@ import type { Logger } from '../../../../utility/logging/logger';
 const logger: Logger = { info() {}, warn() {}, error() {} };
 
 function parse(code: string) {
-    const source = new FileSource('file:///ref-inv-test.pearl',
+    const source = new FileSource('file:///ref-inv-test.P',
         `MODULE RefInvTest; PROBLEM; ${code} MODEND;`);
     const problems = new ProblemCollection();
     const tokens = new Lexer(source, problems, logger).tokenize();
@@ -94,4 +97,55 @@ test('SPC reference parameters accept target INV', () => {
 test('a missing target after REF INV still produces a parser diagnostic', () => {
     const result = parse('DCL RIS REF INV;');
     assert.ok(result.problems.some(p => p.message === "Expected referenced type after 'REF'."));
+});
+
+
+test('REF () INV FIXED and REF (,) INV FLOAT preserve the post-dimension qualifier', () => {
+    const result = parse('DCL P REF () INV FIXED, Q REF (,) INV FLOAT;');
+    assert.deepEqual(result.problems.toArray().map(p => p.message), []);
+    assert.equal(result.refs.length, 2);
+    assert.ok(result.refs[0].target instanceof ReferenceArrayTargetNode);
+    assert.equal(result.refs[0].target.dimensions.rank, 1);
+    assert.equal(result.refs[0].targetInv?.value, 'INV');
+    assert.ok(result.refs[1].target instanceof ReferenceArrayTargetNode);
+    assert.equal(result.refs[1].target.dimensions.rank, 2);
+    assert.equal(result.refs[1].targetInv?.value, 'INV');
+    assert.equal(result.attributes[0]?.inv, undefined);
+
+    const invOffset = result.source.text.indexOf('() INV') + '() '.length;
+    const lookup = result.ast.lookupSourceValue({ uri: result.source.uri, offset: invOffset });
+    assert.equal(lookup?.node, result.refs[0]);
+    assert.equal(lookup?.element, result.refs[0].targetInv);
+
+    const semantic = new SemanticAnalyzer().analyze(result.ast);
+    assert.deepEqual(semantic.diagnostics
+        .filter(d => d.severity === SemanticDiagnosticSeverity.Error)
+        .map(d => d.message), []);
+    const objects = [...semantic.bindings.values()].filter(s => s.kind === SymbolKind.DataObject);
+    for (const name of ['P', 'Q']) {
+        const object = objects.find(s => s.name.value === name);
+        assert.ok(object && object.kind === SymbolKind.DataObject);
+        assert.equal(object.type.kind, SemanticTypeKind.Reference);
+        if (object.type.kind === SemanticTypeKind.Reference) {
+            assert.equal(object.type.targetInvariant, true);
+            assert.equal(object.type.target.kind, SemanticTypeKind.VirtualArray);
+        }
+    }
+});
+
+test('REF virtual dimensions accept INV as a target qualifier in procedure parameters', () => {
+    const result = parse('SPC Fetch ENTRY(REF () INV FIXED) GLOBAL;');
+    assert.deepEqual(result.problems.toArray().map(p => p.message), []);
+    assert.equal(result.refs[0]?.targetInv?.value, 'INV');
+    assert.ok(result.refs[0]?.target instanceof ReferenceArrayTargetNode);
+});
+
+test('REF () INV still requires an element type', () => {
+    const result = parse('DCL P REF () INV;');
+    assert.ok(result.problems.some(p => p.message === "Expected referenced type after 'REF'."));
+});
+
+test('duplicate INV around virtual dimensions remains a syntax error', () => {
+    const result = parse('DCL P REF INV () INV FIXED;');
+    assert.ok(result.problems.some(p => p.message === "Duplicate 'INV' qualifier in REF type."));
 });

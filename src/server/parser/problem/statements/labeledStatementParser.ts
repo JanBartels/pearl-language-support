@@ -29,7 +29,14 @@ export class LabeledStatementParser extends ParserBase {
         const separator = this.tokenValue(colon);
         this.skipTrivia();
 
-        if (this.eof() || this.isKeyword(['END', 'MODEND', 'FIN', 'ELSE', 'ALT', 'OUT'])) {
+        // A label may stand immediately before the next CASE alternative.
+        // ALT/OUT belong to CaseStatementParser, not to the labeled statement.
+        // Retain the label but do not consume the branch delimiter.
+        if (this.isKeyword(['ALT', 'OUT'])) {
+            return new LabeledStatementNode([label], [separator], undefined);
+        }
+
+        if (this.eof() || this.isKeyword(['END', 'MODEND', 'FIN', 'ELSE'])) {
             this.problems.error(this.location(), 'Expected statement after label.');
             return new LabeledStatementNode([label], [separator], undefined);
         }

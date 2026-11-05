@@ -87,7 +87,6 @@ export enum SemanticDiagnosticCode {
     DuplicateDationControlOption = 'semantic.duplicate-dation-control-option',
     ConflictingDationControlOptions = 'semantic.conflicting-dation-control-options',
     InvalidDationControlIdf = 'semantic.invalid-dation-control-idf',
-    InvalidDationControlRst = 'semantic.invalid-dation-control-rst',
     InvalidDationCreationSource = 'semantic.invalid-dation-creation-source',
     IncompatibleDationCreation = 'semantic.incompatible-dation-creation',
     GlobalDeclarationOutsideModule = 'semantic.global-declaration-outside-module',

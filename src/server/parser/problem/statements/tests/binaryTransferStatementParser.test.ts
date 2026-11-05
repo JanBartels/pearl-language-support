@@ -95,9 +95,9 @@ test('READ/WRITE BY rejects unsupported positioning formats, without swallowing 
     assert.ok(r.syntax.some(m => m.includes('expects S(')));
 });
 
-test('READ/WRITE retain last-dimension segments as dedicated AST nodes', () => {
+test('RTOS-UH rejects I/O segments but retains them for local recovery', () => {
     const r = parse('READ Values(1:3) FROM Disk; WRITE Values(2:3), Values(1) TO Disk;');
-    assert.deepEqual(r.syntax, []);
+    assert.equal(r.syntax.filter(m => m.includes('does not support array segments')).length, 2);
     assert.deepEqual(r.statements.map(s => s.objects.length), [1, 2]);
     assert.equal(r.statements[0].objects[0].kind.toString(), r.statements[1].objects[0].kind.toString());
     assert.equal(r.statements[0].objects[0].dumpLabel(), 'IoSegment');
@@ -105,9 +105,9 @@ test('READ/WRITE retain last-dimension segments as dedicated AST nodes', () => {
 });
 
 
-test('multidimensional segments use a range only in the last dimension', () => {
+test('RTOS-UH rejects multidimensional segments, retaining their AST for navigation', () => {
     const r = parse('READ Matrix(1, 2:3) FROM Disk; WRITE Matrix(2, 1:3) TO Disk;');
-    assert.deepEqual(r.syntax, []);
+    assert.equal(r.syntax.filter(m => m.includes('does not support array segments')).length, 2);
     assert.equal(r.statements[0].objects[0].dumpLabel(), 'IoSegment');
     assert.equal(r.statements[1].objects[0].dumpLabel(), 'IoSegment');
 });
@@ -136,4 +136,17 @@ test('READ/WRITE compatibility calls remain ordinary calls alongside binary tran
     assert.deepEqual(r.statements.map(statement => statement.keyword.value),
         ['READ', 'WRITE', 'WRITE']);
     assert.deepEqual(r.statements.map(statement => statement.objects.length), [1, 1, 2]);
+});
+
+
+test('original compiler reference case 11 rejects both WRITE slices but continues with valid transfers', () => {
+    const r = parse(`WRITE Values(2:3) TO Disk;
+        WRITE Matrix(1, 2:3) TO Disk;
+        WRITE Values TO Disk;
+        WRITE (A+1), B TO Disk;`);
+    assert.equal(r.syntax.filter(m => m.includes('does not support array segments')).length, 2);
+    assert.equal(r.statements.length, 4);
+    assert.deepEqual(r.statements.map(s => s.objects[0]?.dumpLabel()),
+        ['IoSegment', 'IoSegment', 'NameExpression', 'ParenthesizedExpression']);
+    assert.ok(r.statements.every(s => s.semicolon));
 });

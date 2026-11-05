@@ -6,7 +6,6 @@ import type { DationControlStatementNode } from '../ast/problem/statements/datio
 import type { DationControlOptionNode } from '../ast/problem/statements/dationControlOptionNode';
 import type { Environment } from './environment';
 import type { ExpressionTypeResolver } from './expressionTypeResolver';
-import { classifyObjectExpressionInfo } from './expressionObject';
 import { expressionSource } from './expressionObject';
 import { SemanticDiagnosticCode, SemanticDiagnosticSeverity } from './semanticDiagnostic';
 import type { SemanticDiagnostic } from './semanticDiagnostic';
@@ -45,8 +44,8 @@ export class DationControlStatementValidator {
         for (const option of node.options) {
             const kind = option.keyword.value;
             const allowed = name === 'OPEN'
-                ? ['IDF', 'RST', 'NEW', 'OLD', 'ANY', 'EXCLUSIVE'].includes(kind)
-                : ['RST', 'CAN', 'PRM'].includes(kind);
+                ? ['IDF', 'NEW', 'OLD', 'ANY', 'EXCLUSIVE'].includes(kind)
+                : ['CAN', 'PRM'].includes(kind);
             if (!allowed) {
                 this.report(state, SemanticDiagnosticCode.InvalidDationControlOption,
                     option.keyword, `${kind} ist keine gültige Option für ${name}.`);
@@ -71,7 +70,6 @@ export class DationControlStatementValidator {
                 closeMode ??= option;
             }
             if (kind === 'IDF') this.checkIdf(option, env, state);
-            if (kind === 'RST') this.checkRst(option, env, state);
         }
 
         // The nested RTOS-UH option [,(NEW|OLD|ANY)[,EXCLUSIVE]]
@@ -102,22 +100,6 @@ export class DationControlStatementValidator {
             this.report(state, SemanticDiagnosticCode.InvalidDationControlIdf,
                 expressionSource(option.argument) ?? option.keyword,
                 'IDF(...) erwartet einen CHARACTER-Ausdruck.');
-        }
-    }
-
-    private checkRst(option: DationControlOptionNode, env: Environment,
-        state: DationControlValidationContext): void {
-        if (!option.argument) return;
-        const type = state.expressionTypeResolver.resolve(option.argument, env);
-        const actual = type && state.resolveUnderlyingType(type);
-        if (!actual) return;
-        const info = classifyObjectExpressionInfo(option.argument, env,
-            t => state.resolveUnderlyingType(t));
-        if (actual.kind !== SemanticTypeKind.Fixed || info.category !== 'object'
-            || info.assignmentProtected !== false) {
-            this.report(state, SemanticDiagnosticCode.InvalidDationControlRst,
-                expressionSource(option.argument) ?? option.keyword,
-                'RST(...) erwartet eine beschreibbare FIXED-Variable.');
         }
     }
 
