@@ -5,6 +5,7 @@ import { AstKind } from '../ast/astKind';
 import type { AstNode } from '../ast/astNode';
 import type { SourceValue } from '../core/sourceValue';
 import type { ShellCommandNode } from '../ast/module/shellCommandNode';
+import type { FormatReferenceNode } from '../ast/problem/statements/formatReferenceNode';
 import type { InitElementNode } from '../ast/problem/declarations/initElementNode';
 import type { DclDationAttributeNode } from '../ast/problem/declarations/dclDationAttributeNode';
 import type { ConstantFixedFactorNode } from '../ast/problem/expressions/constantFixedFactorNode';
@@ -52,6 +53,10 @@ export class SymbolReferenceCollector {
             switch (node.kind) {
                 case AstKind.NameSegment:
                     add(node, (node as NameSegmentNode).identifier, SymbolReferenceKind.Read);
+                    break;
+
+                case AstKind.FormatReference:
+                    add(node, (node as FormatReferenceNode).identifier, SymbolReferenceKind.Format);
                     break;
 
                 case AstKind.NamedType:

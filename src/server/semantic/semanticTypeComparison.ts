@@ -183,12 +183,13 @@ export function isIdentificationTypeCompatible(
 /** A virtual array reference describes rank and element type, not bounds.
  * This is intentionally directional: REF () FIXED may refer to FIXED(100),
  * but a reference with concrete bounds is not established by a virtual one.
- * Neither dimensions nor target INV protection are silently discarded.
+ * Used for both reference assignment and INIT address targets; target INV
+ * protection is checked separately at the reference boundary.
  */
-function isReferenceTargetCompatible(
+export function isReferenceTargetCompatible(
     destination: SemanticType,
     source: SemanticType,
-    lengths: SimpleTypeLengths
+    lengths: SimpleTypeLengths = RTOS_UH_DEFAULT_TYPE_LENGTHS
 ): boolean {
     if (destination.kind === SemanticTypeKind.VirtualArray) {
         if (source.kind !== SemanticTypeKind.Array

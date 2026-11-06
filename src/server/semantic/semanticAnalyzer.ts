@@ -42,6 +42,9 @@ import { InterruptStatementValidator } from './interruptStatementValidator';
 import { DationControlStatementNode } from '../ast/problem/statements/dationControlStatementNode';
 import { DationControlStatementValidator } from './dationControlStatementValidator';
 import { BinaryTransferStatementNode } from '../ast/problem/statements/binaryTransferStatementNode';
+import { FormattedIoStatementNode } from '../ast/problem/statements/formattedIoStatementNode';
+import { FormatDeclarationNode } from '../ast/problem/declarations/formatDeclarationNode';
+import { FormattedIoStatementValidator } from './formattedIoStatementValidator';
 import { BinaryTransferStatementValidator } from './binaryTransferStatementValidator';
 import { CallStatementNode } from '../ast/problem/statements/callStatementNode';
 import { RepetitionNode } from '../ast/problem/statements/repetitionNode';
@@ -97,6 +100,7 @@ import {
 } from './semanticType';
 import {
     DataObjectSymbol,
+    FormatSymbol,
     GlobalSymbolAttribute,
     LoopControlVariableSymbol,
     ParameterSymbol,
@@ -112,7 +116,7 @@ import { lookupBuiltin } from './builtins/builtinCatalog';
 import {
     semanticTypeEquals, procedureSignaturesEqual, isProcedureSignatureResolved,
     isValueTransferCompatible, isAssignmentValueCompatible, characterTruncationForValueTransfer,
-    isNilAssignableTo, isReferenceTransferCompatible,
+    isNilAssignableTo, isReferenceTransferCompatible, isReferenceTargetCompatible,
     resolveReferenceTransferType
 } from './semanticTypeComparison';
 import type { BuiltinDefinition } from './builtins/builtinSignature';
@@ -219,6 +223,7 @@ class SemanticAnalysisState implements
     readonly typeSymbols = new Map<TypeDeclarationNode, TypeSymbol>();
     readonly taskSymbols = new Map<TaskDeclarationNode, TaskSymbol>();
     readonly procedureSymbols = new Map<ProcedureDeclarationNode, ProcedureSymbol>();
+    readonly formatSymbols = new Map<SourceValue<string>, FormatSymbol>();
     readonly localSpecificationRelations = new Map<SourceValue<string>, LocalSpecificationRelation>();
     readonly parameterSymbols = new Map<SourceValue<string>, ParameterSymbol>();
     readonly loopControlSymbols = new Map<RepetitionNode, LoopControlVariableSymbol>();
@@ -233,6 +238,31 @@ class SemanticAnalysisState implements
     readonly initializationResolver = new InitializationResolver(this);
     readonly timeConstantEvaluator = new TimeConstantEvaluator(this);
     readonly expressionTypeResolver = new ExpressionTypeResolver(this);
+
+    /** Resolve R(name) in indexed lexical scopes (including forward declarations). */
+    resolveFormatReference(name: SourceValue<string>, env: Environment): void {
+        let scope: Scope | undefined = env.scope;
+        while (scope) {
+            const declaration = this.declarationIndex.lookupInScope(scope, name.value);
+            if (declaration) {
+                const format = declaration.kind === SymbolKind.Format
+                    ? this.formatSymbols.get(declaration.name) : undefined;
+                if (format) this.bind(name, format);
+                else this.reportFormatReference(name, 'R(...) erwartet eine FORMAT-Deklaration.');
+                return;
+            }
+            scope = scope.parent;
+        }
+        this.reportFormatReference(name, `Unbekannte FORMAT-Deklaration '${name.value}'.`);
+    }
+
+    private reportFormatReference(name: SourceValue<string>, message: string): void {
+        if (name.location) this.diagnostics.push({
+            code: SemanticDiagnosticCode.InvalidFormatReference,
+            severity: SemanticDiagnosticSeverity.Error,
+            location: name.location, message
+        });
+    }
 
     createContext(): SemanticContext {
         return new SemanticContext(
@@ -973,7 +1003,10 @@ class SemanticAnalysisState implements
             return undefined;
         }
 
-        if (expectedTargetType && !semanticTypeEquals(expectedTargetType, symbol.type)) {
+        // INIT names designate addressable objects, not REF values. Use the
+        // same directional target compatibility as REF assignment: a virtual
+        // field target matches arrays by rank and element type, not bounds.
+        if (expectedTargetType && !isReferenceTargetCompatible(expectedTargetType, symbol.type)) {
             this.reportInvalidInitialization(identifier, 'REF');
             return undefined;
         }
@@ -1624,6 +1657,20 @@ export class SemanticAnalyzer {
             this.indexLoopControlVariable(node as RepetitionNode, scope, state);
         }
 
+        if (node.kind === AstKind.FormatDeclaration) {
+            if (!scope) throw new Error('FORMAT declaration outside semantic scope.');
+            const format = node as FormatDeclarationNode;
+            const existing = state.declarationIndex.index(scope,
+                { kind: SymbolKind.Format, name: format.name });
+            if (existing) state.reportDuplicateDeclaration(format.name, existing);
+            else {
+                const symbol: FormatSymbol = { kind: SymbolKind.Format, name: format.name,
+                    definition: format.name };
+                state.formatSymbols.set(format.name, symbol);
+                (scope as MutableScope).symbols.push(symbol);
+            }
+        }
+
         if (node.kind === AstKind.TypeDeclaration) {
             if (!scope) {
                 throw new Error('TYPE declaration outside semantic scope.');
@@ -1954,6 +2001,23 @@ export class SemanticAnalyzer {
                 );
             }
             return this.analyzeChildren(node, environment, state);
+        }
+
+        if (node.kind === AstKind.FormatDeclaration) {
+            if (environment) {
+                const declaration = node as FormatDeclarationNode;
+                const symbol = state.formatSymbols.get(declaration.name);
+                if (symbol) state.bind(declaration.name, symbol);
+                if (declaration.formats) new FormattedIoStatementValidator().validateFormats(
+                    declaration.formats, environment, state);
+            }
+            return environment;
+        }
+
+        if (node.kind === AstKind.FormattedIoStatement) {
+            if (environment) new FormattedIoStatementValidator().validateStatement(
+                node as FormattedIoStatementNode, environment, state);
+            return environment;
         }
 
         if (node.kind === AstKind.BinaryTransferStatement) {

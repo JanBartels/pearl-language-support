@@ -19,6 +19,8 @@ export enum SymbolKind {
 
     LoopControlVariable,
 
+    Format,
+
     Label,
 
     StructComponent

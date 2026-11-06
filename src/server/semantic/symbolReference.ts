@@ -19,6 +19,7 @@ export enum SymbolReferenceKind {
     Write = 'write',
     Call = 'call',
     Type = 'type',
+    Format = 'format',
     JumpTarget = 'jumpTarget',
     Initialization = 'initialization',
     DationCreationSource = 'dationCreationSource',

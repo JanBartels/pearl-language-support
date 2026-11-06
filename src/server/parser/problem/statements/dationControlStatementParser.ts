@@ -12,7 +12,7 @@ const OPTIONS = ['IDF', 'NEW', 'OLD', 'ANY', 'EXCLUSIVE', 'CAN', 'PRM'] as const
 const BOUNDARIES = [
     'END', 'MODEND', 'FIN', 'ELSE', 'ALT', 'OUT', 'BEGIN', 'IF', 'CASE',
     'FOR', 'WHILE', 'REPEAT', 'RETURN', 'CALL', 'GOTO', 'OPEN', 'CLOSE',
-    'READ', 'WRITE',
+    'READ', 'WRITE', 'GET', 'PUT', 'CONVERT',
     'REQUEST', 'RELEASE', 'ENTER', 'LEAVE', 'RESERVE', 'FREE',
     'SEMASET', 'ACTIVATE', 'TERMINATE', 'SUSPEND', 'CONTINUE',
     'RESUME', 'PREVENT', 'ENABLE', 'DISABLE', 'TRIGGER'

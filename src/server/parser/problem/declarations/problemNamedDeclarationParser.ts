@@ -7,6 +7,7 @@ import { ParserBase } from "../../parserBase";
 
 import { TaskDeclarationTailParser } from "./taskDeclarationTailParser";
 import { ProcedureDeclarationTailParser } from "./procedureDeclarationTailParser";
+import { FormatDeclarationTailParser } from "./formatDeclarationTailParser";
 
 export class ProblemNamedDeclarationParser extends ParserBase {
 
@@ -20,13 +21,21 @@ export class ProblemNamedDeclarationParser extends ParserBase {
 
         const name = this.tokenValue(identifier);
 
-        if (!this.expectColon("Expected ':' after declaration name.")) {
+        this.skipTrivia();
+        const colon = this.acceptOperator(":");
+        if (!colon) {
+            this.problems.error(this.location(), "Expected ':' after declaration name.");
             this.synchronize([
                 ";",
                 "MODEND"
             ]);
             this.acceptSemicolon();
             return undefined;
+        }
+
+        this.skipTrivia();
+        if (this.isKeyword("FORMAT")) {
+            return new FormatDeclarationTailParser(this.context).parseTail(name, this.tokenValue(colon));
         }
 
         if (this.isKeyword("TASK")) {

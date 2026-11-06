@@ -1,0 +1,14 @@
+MODULE IO864103;
+SYSTEM;
+    Ausgabe: /NIL ->;
+PROBLEM;
+    SPC Ausgabe DATION OUT ALPHIC;
+
+    Test: TASK MAIN;
+        DCL Zahl1 FIXED(15), Zahl2 FIXED(15);
+        DCL Abstand FIXED(15);
+        DCL Text CHAR(20);
+        PUT Zahl1,Zahl2 TO Ausgabe BY (2)(X(Abstand),F(7)),SKIP;
+        PUT Text TO Ausgabe BY A(LEN(Text)),SKIP;
+    END;
+MODEND;

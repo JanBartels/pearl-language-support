@@ -1,0 +1,10 @@
+MODULE IO864102;
+SYSTEM;
+PROBLEM;
+    Test: TASK MAIN;
+        DCL Zahl FIXED(15), Fehler FIXED(15);
+        DCL StringAus CHAR(40), StringEin CHAR(20);
+        CONVERT 'Index =', Zahl TO StringAus BY A,F(4);
+        CONVERT Zahl FROM StringEin BY RST(Fehler),F(4);
+    END;
+MODEND;

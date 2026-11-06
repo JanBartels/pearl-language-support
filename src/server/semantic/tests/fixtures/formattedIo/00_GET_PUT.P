@@ -1,0 +1,18 @@
+MODULE IO864100;
+SYSTEM;
+    Eingabe: /NIL <-;
+    Ausgabe: /NIL ->;
+PROBLEM;
+    SPC Eingabe DATION IN ALPHIC;
+    SPC Ausgabe DATION OUT ALPHIC;
+
+    Test: TASK MAIN;
+        DCL VarFixed31 FIXED(31), VarBit BIT(8), FixedErr1 FIXED(15);
+        DCL VarChar20 CHAR(20);
+
+        GET VarFixed31, VarBit FROM Eingabe
+            BY SKIP,RST(FixedErr1),F(3),X,B;
+        PUT VarChar20 TO Ausgabe
+            BY A(LEN(VarChar20)),SKIP;
+    END;
+MODEND;

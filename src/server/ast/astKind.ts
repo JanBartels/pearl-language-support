@@ -106,6 +106,11 @@ export enum AstKind {
 
     IoSegment,
     BinaryTransferStatement,
+    FormattedIoStatement,
+    FormatList,
+    FormatItem,
+    FormatReference,
+    FormatDeclaration,
     BinaryTransferSFormat,
     DationControlStatement,
     DationControlOption,

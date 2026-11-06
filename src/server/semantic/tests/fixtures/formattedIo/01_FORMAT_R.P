@@ -1,0 +1,12 @@
+MODULE IO864101;
+SYSTEM;
+    Ausgabe: /NIL ->;
+PROBLEM;
+    SPC Ausgabe DATION OUT ALPHIC;
+    Ftab: FORMAT (X(2),F(8,3),(3)(X(2),E(10,3)));
+
+    Test: TASK MAIN;
+        DCL Zahl FIXED(15), F1 FLOAT, F2 FLOAT, F3 FLOAT;
+        PUT Zahl,F1,F2,F3 TO Ausgabe BY R(Ftab);
+    END;
+MODEND;

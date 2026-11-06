@@ -108,6 +108,10 @@ export interface LoopControlVariableSymbol extends SymbolBase {
     readonly type: FixedType;
 }
 
+export interface FormatSymbol extends SymbolBase {
+    readonly kind: SymbolKind.Format;
+}
+
 export interface LabelSymbol extends SymbolBase {
 
     readonly kind: SymbolKind.Label;
@@ -123,5 +127,6 @@ export type SemanticSymbol =
     | ProcedureSymbol
     | TaskSymbol
     | LoopControlVariableSymbol
+    | FormatSymbol
     | LabelSymbol
     ;

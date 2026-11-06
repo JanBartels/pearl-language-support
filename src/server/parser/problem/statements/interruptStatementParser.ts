@@ -11,7 +11,7 @@ const RECOVERY = [
     'RETURN', 'CALL', 'GOTO', 'REQUEST', 'RELEASE', 'ENTER', 'LEAVE',
     'RESERVE', 'FREE', 'SEMASET', 'ACTIVATE', 'TERMINATE', 'SUSPEND',
     'CONTINUE', 'RESUME', 'PREVENT', 'ENABLE', 'DISABLE', 'TRIGGER',
-    'READ', 'WRITE'
+    'READ', 'WRITE', 'GET', 'PUT', 'CONVERT'
 ] as const;
 
 /** RTOS-UH interrupt control: (ENABLE | DISABLE | TRIGGER) Name ';'. */

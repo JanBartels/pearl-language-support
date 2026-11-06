@@ -6,6 +6,8 @@ import { ParserBase } from "../../parserBase";
 import { TypeDeclarationParser } from "../declarations/typeDeclarationParser";
 import { DclDeclarationParser } from "../declarations/dclDeclarationParser";
 import { SpcDeclarationParser } from "../specifications/spcDeclarationParser";
+import { FormatDeclarationTailParser } from "../declarations/formatDeclarationTailParser";
+import { TokenKind } from "../../../lexer/token";
 
 /**
  * The common declaration/identification prefix of TASK, BEGIN and REPEAT bodies.
@@ -15,6 +17,14 @@ export class DeclarationListParser extends ParserBase {
 
     override parse(): AstNode | undefined {
         this.skipTrivia();
+
+        if (this.isFormatDeclarationStart()) {
+            const identifier = this.acceptIdentifier()!;
+            this.skipTrivia();
+            const colon = this.acceptOperator(":");
+            return new FormatDeclarationTailParser(this.context).parseTail(this.tokenValue(identifier),
+                colon ? this.tokenValue(colon) : undefined);
+        }
 
         if (this.isKeyword("TYPE")) {
             return new TypeDeclarationParser(this.context).parse();
@@ -31,8 +41,21 @@ export class DeclarationListParser extends ParserBase {
         return undefined;
     }
 
+    private isFormatDeclarationStart(): boolean {
+        if (!this.isIdentifier()) return false;
+        let offset = 1;
+        const peek = () => this.context.stream.peek(offset);
+        const skip = () => { while ([TokenKind.Newline, TokenKind.Comment].includes(peek().kind)) offset++; };
+        skip();
+        if (!this.isOperator(':', peek())) return false;
+        offset++;
+        skip();
+        return this.isKeyword('FORMAT', peek());
+    }
+
     isDeclarationStart(): boolean {
         this.skipTrivia();
-        return this.isKeyword(["TYPE", "DCL", "DECLARE", "SPC", "SPECIFY"]);
+        return this.isKeyword(["TYPE", "DCL", "DECLARE", "SPC", "SPECIFY"])
+            || this.isFormatDeclarationStart();
     }
 }

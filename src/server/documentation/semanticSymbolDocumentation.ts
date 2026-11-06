@@ -55,6 +55,9 @@ export function appendSemanticSymbolDocumentation(
             return `${documentation}\n\n**Symbol:** loop control variable`
                 + `\n\n**Type:** \`${formatSemanticType(symbol.type)}\``;
 
+        case SymbolKind.Format:
+            return `${documentation}\n\n**Symbol:** FORMAT declaration`;
+
         case SymbolKind.Label:
             return `${documentation}\n\n**Symbol:** label`;
     }
