@@ -1,0 +1,17 @@
+MODULE TKS07;
+SYSTEM;
+    Eingang:  BU(0240FFFC) <-;
+    Ausgang: BU(0240FFF8) ->;
+    Beide:   BU(0240FFF4) <->;
+PROBLEM;
+    SPC Eingang DATION IN BASIC;
+    SPC Ausgang DATION OUT BASIC;
+    SPC Beide DATION INOUT BASIC;
+
+    Probe: TASK;
+        DCL Konst INV FIXED(15) INIT(12);
+
+        ! Erwartung: TAKE braucht ein beschreibbares Ziel.
+        TAKE Konst FROM Eingang;
+    END;
+MODEND;

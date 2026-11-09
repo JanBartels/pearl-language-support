@@ -1,0 +1,34 @@
+MODULE TKS00;
+SYSTEM;
+    Eingang:  BU(0240FFFC) <-;
+    Ausgang: BU(0240FFF8) ->;
+    Beide:   BU(0240FFF4) <->;
+PROBLEM;
+    SPC Eingang DATION IN BASIC;
+    SPC Ausgang DATION OUT BASIC;
+    SPC Beide DATION INOUT BASIC;
+
+    Probe: TASK;
+        DCL Wort BIT(16);
+        DCL Kurz FIXED(15);
+        DCL Lang FIXED(31);
+        DCL Gleit FLOAT;
+        DCL Zeichen CHAR(4);
+
+        ! RTOS-UH Kapitel 6.2: TAKE/SEND an BASIC-DATIONs.
+        TAKE Wort FROM Eingang;
+        SEND '008F'B4 TO Ausgang;
+        TAKE Wort FROM Beide;
+        SEND Wort TO Beide;
+        ! Einfache Datentypen mit Zugriffscode 2 (16-Bit-Port).
+        TAKE Kurz FROM Eingang;
+        TAKE Lang FROM Eingang;
+        TAKE Gleit FROM Eingang;
+        TAKE Zeichen FROM Eingang;
+        SEND Kurz TO Ausgang;
+        SEND Lang TO Ausgang;
+        SEND Gleit TO Ausgang;
+        SEND Zeichen TO Ausgang;
+        SEND Kurz + 1 TO Ausgang;
+    END;
+MODEND;

@@ -1,0 +1,14 @@
+MODULE TKS05;
+SYSTEM;
+    Textstation: /NIL <->;
+PROBLEM;
+    SPC Textstation DATION INOUT ALPHIC;
+
+    Probe: TASK;
+        DCL Wort BIT(16);
+
+        ! Erwartung: BASIC zwingend, ALPHIC ist ungeeignet.
+        TAKE Wort FROM Textstation;
+        SEND Wort TO Textstation;
+    END;
+MODEND;

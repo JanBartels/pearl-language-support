@@ -1,0 +1,18 @@
+MODULE TKS04;
+SYSTEM;
+    Eingang:  BU(0240FFFC) <-;
+    Ausgang: BU(0240FFF8) ->;
+    Beide:   BU(0240FFF4) <->;
+PROBLEM;
+    SPC Eingang DATION IN BASIC;
+    SPC Ausgang DATION OUT BASIC;
+    SPC Beide DATION INOUT BASIC;
+
+    Probe: TASK;
+
+        ! Sprachreport gestattet optionale Datenobjekte.
+        ! Ob RTOS-UH diese Formen akzeptiert, ist offen.
+        TAKE FROM Eingang;
+        SEND TO Ausgang;
+    END;
+MODEND;

@@ -1,0 +1,18 @@
+MODULE TKS06;
+SYSTEM;
+    Eingang:  BU(0240FFFC) <-;
+    Ausgang: BU(0240FFF8) ->;
+    Beide:   BU(0240FFF4) <->;
+PROBLEM;
+    SPC Eingang DATION IN BASIC;
+    SPC Ausgang DATION OUT BASIC;
+    SPC Beide DATION INOUT BASIC;
+
+    Probe: TASK;
+        DCL Wort BIT(16);
+
+        ! Erwartung: DATION-Richtung wird geprueft.
+        TAKE Wort FROM Ausgang;
+        SEND Wort TO Eingang;
+    END;
+MODEND;

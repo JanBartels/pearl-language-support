@@ -1,0 +1,19 @@
+MODULE TKS02;
+SYSTEM;
+    Eingang:  BU(0240FFFC) <-;
+    Ausgang: BU(0240FFF8) ->;
+    Beide:   BU(0240FFF4) <->;
+PROBLEM;
+    SPC Eingang DATION IN BASIC;
+    SPC Ausgang DATION OUT BASIC;
+    SPC Beide DATION INOUT BASIC;
+
+    Probe: TASK;
+        DCL Wort BIT(16);
+        DCL Anzahl FIXED(31);
+
+        ! Fraglich: S als BY-Option bei TAKE/SEND.
+        TAKE Wort FROM Eingang BY S(Anzahl);
+        SEND Wort TO Ausgang BY S(Anzahl);
+    END;
+MODEND;

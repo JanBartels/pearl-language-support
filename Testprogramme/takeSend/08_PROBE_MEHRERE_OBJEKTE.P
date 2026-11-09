@@ -1,0 +1,20 @@
+MODULE TKS08;
+SYSTEM;
+    Eingang:  BU(0240FFFC) <-;
+    Ausgang: BU(0240FFF8) ->;
+    Beide:   BU(0240FFF4) <->;
+PROBLEM;
+    SPC Eingang DATION IN BASIC;
+    SPC Ausgang DATION OUT BASIC;
+    SPC Beide DATION INOUT BASIC;
+
+    Probe: TASK;
+        DCL A BIT(16);
+        DCL B BIT(16);
+
+        ! Fraglich: mehr als ein Objekt pro TAKE/SEND.
+        ! Der PEARL-Sprachreport sieht nur ein optionales Objekt vor.
+        TAKE A,B FROM Eingang;
+        SEND A,B TO Ausgang;
+    END;
+MODEND;

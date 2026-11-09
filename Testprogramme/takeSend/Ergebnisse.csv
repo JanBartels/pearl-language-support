@@ -1,0 +1,10 @@
+Datei;Gruppe;Testgegenstand;Erwartung;Compilerergebnis;Compilerdiagnose
+00_GRUNDFORMEN_UND_TYPEN.P;Positiv;Grundform, IN/OUT/INOUT, skalare Typen, SEND-Ausdruck;"Uebersetzung erwartet; pro Hardwarezugriffscode kann Typunterstuetzung abweichen";;
+01_PROBE_BY_RST.P;Offen;TAKE/SEND BY RST(Fehler);Syntax/Unterstuetzung bei RTOS-UH noch ungeprueft;;
+02_PROBE_BY_S.P;Offen;TAKE/SEND BY S(Anzahl);Syntax/Unterstuetzung bei RTOS-UH noch ungeprueft;;
+03_PROBE_BY_CONTROL.P;Offen;TAKE/SEND BY CONTROL(1);Syntax/Unterstuetzung bei RTOS-UH noch ungeprueft;;
+04_PROBE_OHNE_DATUM.P;Offen;TAKE/SEND ohne Datenoperand;"Sprachreport erlaubt optionalen Operand; RTOS-UH ungeprueft";;
+05_NEGATIV_ALPHIC.P;Negativ;TAKE/SEND mit ALPHIC-DATION;Typfehler erwartet;;
+06_NEGATIV_RICHTUNG.P;Negativ;Falsche IN/OUT-Richtung;Semantikfehler erwartet;;
+07_NEGATIV_TAKE_INV.P;Negativ;TAKE auf INV FIXED(15);Semantikfehler erwartet;;
+08_PROBE_MEHRERE_OBJEKTE.P;Negativ;TAKE/SEND mit zwei Operanden;Syntaxfehler erwartet;;
