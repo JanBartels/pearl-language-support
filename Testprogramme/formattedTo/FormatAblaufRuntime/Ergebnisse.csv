@@ -1,0 +1,15 @@
+Kennung;CONVERT-Zeile;Beobachtete Ausgabe;RST-Wert;Laufzeitmeldung;Hinweis
+01_T_STATT_E;35;;;;Fehler erwartet: T trifft auf FLOAT.
+02_F_STATT_B;43;;;;Fehler erwartet: dritter Durchlauf F trifft auf BIT.
+03_EXPLIZIT_OK;51;;;;Gutfall, drei Datenformate.
+04_LIST_UND_F;59;;;;Fehler erwartet: impliziter Ruecksprung trifft F auf BIT.
+05_LIST_REPEAT;67;;;;Gutfall, aber statische Warnung wegen impliziter Wiederholung.
+06_OHNE_BY;75;;;;"Gutfall ohne BY; Default-Konvertierung untersuchen; kein RST moeglich."
+07_B4_KURZ_ZWEIMAL;83;;;;Erwartete Ziffernfolge noch offen: 1234 oder 5678 bei B4(4)?
+08_B4_LANG_ZWEIMAL;91;;;;Erwartete Ziffernfolge noch offen: 1234 oder 5678 bei B4(4)?
+09_B4_REFERENZ_32;99;;;;Referenz: volle Ausgabe von 32 BIT.
+10_B4_REFERENZ_16;107;;;;Referenz: B4(4) mit passender 16-BIT-Quelle.
+11_IMPLIZIT_START;115;;;;Gutfall mit implizitem Ruecksprung an den Anfang.
+12_VERSCHACHTELT;123;;;;Gutfall mit verschachtelten Gruppen.
+13_R_FORMAT;131;;;;Gutfall mit benannter Formatdeklaration.
+14_3X_OPTIONAL;141;;;;"OPTIONAL: nur Steuerformate; keine Datenverarbeitung, Risiko Endlosschleife."

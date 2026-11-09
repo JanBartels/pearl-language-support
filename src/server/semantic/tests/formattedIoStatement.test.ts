@@ -42,10 +42,11 @@ test('RST rejects INV FIXED at either precision and non-FIXED targets', () => {
 });
 
 
-test('widths and format/data pairing are deliberately deferred to 8.6.4.2', () => {
+test('format argument widths are deferred; data/format mismatches are now diagnosed', () => {
     const result = analyzeFormattedIo('PUT A, B TO Disk BY F(1),SKIP,B(100),X(2);');
     assert.deepEqual(result.syntax, []);
-    assert.deepEqual(result.diagnostics, []);
+    assert.deepEqual(result.diagnostics.map(d => d.code),
+        [SemanticDiagnosticCode.IncompatibleFormattedIoFormat]);
 });
 
 test('R refers to a FORMAT declaration even when declaration follows the use', () => {

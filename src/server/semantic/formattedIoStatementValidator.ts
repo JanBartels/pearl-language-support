@@ -2,8 +2,10 @@
 // Copyright (C) 2026 Jan Bartels
 
 import type { SourceValue } from '../core/sourceValue';
+import { FormattedIoFormatCompatibility } from './formattedIoFormatCompatibility';
 import type { FormattedIoStatementNode } from '../ast/problem/statements/formattedIoStatementNode';
 import type { FormatListNode } from '../ast/problem/statements/formatListNode';
+import type { FormatReferenceNode } from '../ast/problem/statements/formatReferenceNode';
 import type { FormatItemNode } from '../ast/problem/statements/formatItemNode';
 import type { ExpressionNode } from '../ast/problem/expressions/expressionNode';
 import type { Environment } from './environment';
@@ -19,20 +21,25 @@ import { SemanticTypeKind } from './semanticType';
 
 export interface FormattedIoValidationContext extends IoSegmentValidationContext {
     resolveFormatReference(name: SourceValue<string>, environment: Environment): void;
+    lookupFormatList(reference: FormatReferenceNode, environment: Environment): FormatListNode | undefined;
+    tryEvaluateFormatRepeat(expression: ExpressionNode, environment: Environment): bigint | undefined;
 }
 
-/** Only syntax-independent ground semantics. No format/data pairing or cursor
- * execution and no static width/format-argument evaluation in 8.6.4.1.
+/** Foundational formatted-I/O checks. Format/data pairing is delegated to
+ * FormattedIoFormatCompatibility; widths remain a separate concern.
  */
 export class FormattedIoStatementValidator {
     validateStatement(node: FormattedIoStatementNode, env: Environment,
         state: FormattedIoValidationContext): void {
+        const diagnosticsBefore = state.diagnostics.length;
         const name = node.keyword.value;
         const input = name === 'GET' || (name === 'CONVERT' && node.directionKeyword?.value === 'FROM');
+        const objectTypes: (SemanticType | undefined)[] = [];
         for (const object of node.objects) {
-            if (object instanceof IoSegmentNode) {
-                validateIoSegment(object, env, state);
-            } else state.expressionTypeResolver.resolve(object, env);
+            const objectType = object instanceof IoSegmentNode
+                ? validateIoSegment(object, env, state)
+                : state.expressionTypeResolver.resolve(object, env);
+            objectTypes.push(objectType);
             if (!input) continue;
             const target = object instanceof IoSegmentNode ? object.array : object;
             const info = classifyObjectExpressionInfo(target, env,
@@ -72,7 +79,14 @@ export class FormattedIoStatementValidator {
                 }
             }
         }
-        if (node.formats) this.validateFormats(node.formats, env, state);
+        if (node.formats) {
+            this.validateFormats(node.formats, env, state);
+            // Avoid cascading format/data diagnostics when the statement itself
+            // already has invalid operands, indices or format references.
+            if (state.diagnostics.length === diagnosticsBefore) {
+                new FormattedIoFormatCompatibility().validate(node, objectTypes, env, state);
+            }
+        }
     }
 
     validateFormats(formats: FormatListNode, env: Environment,

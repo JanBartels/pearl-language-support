@@ -1,0 +1,12 @@
+MODULE ARIO03;
+SYSTEM;
+PROBLEM;
+    Test: TASK MAIN;
+        DCL Feld(1:3) FIXED(15) INIT(11,22,33);
+        DCL Text CHAR(80);
+
+        ! Explorativ: Der RTOS-UH-Sprachumfang belegt dies nicht.
+        CONVERT Feld TO Text BY (3)F(5);
+        CONVERT Feld FROM Text BY (3)F(5);
+    END;
+MODEND;

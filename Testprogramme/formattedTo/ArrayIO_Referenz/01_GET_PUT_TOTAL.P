@@ -1,0 +1,19 @@
+MODULE ARIO01;
+SYSTEM;
+    Eingabe: /NIL <-;
+    Ausgabe: /NIL ->;
+PROBLEM;
+    SPC Eingabe DATION IN ALPHIC;
+    SPC Ausgabe DATION OUT ALPHIC;
+
+    Test: TASK MAIN;
+        DCL Feld(1:3) FIXED(15) INIT(11,22,33);
+        DCL Matrix(2,3) FIXED(15);
+
+        ! Laut RTOS-UH, Tabelle 5.2: Keine Total-E/A fuer ARRAYS.
+        PUT Feld TO Ausgabe BY (3)F(5),SKIP;
+        GET Feld FROM Eingabe BY (3)F(5);
+        PUT Matrix TO Ausgabe BY (6)F(5),SKIP;
+        GET Matrix FROM Eingabe BY (6)F(5);
+    END;
+MODEND;

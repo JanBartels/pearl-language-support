@@ -43,6 +43,8 @@ import { DationControlStatementNode } from '../ast/problem/statements/dationCont
 import { DationControlStatementValidator } from './dationControlStatementValidator';
 import { BinaryTransferStatementNode } from '../ast/problem/statements/binaryTransferStatementNode';
 import { FormattedIoStatementNode } from '../ast/problem/statements/formattedIoStatementNode';
+import type { FormatListNode } from '../ast/problem/statements/formatListNode';
+import type { FormatReferenceNode } from '../ast/problem/statements/formatReferenceNode';
 import { FormatDeclarationNode } from '../ast/problem/declarations/formatDeclarationNode';
 import { FormattedIoStatementValidator } from './formattedIoStatementValidator';
 import { BinaryTransferStatementValidator } from './binaryTransferStatementValidator';
@@ -224,6 +226,7 @@ class SemanticAnalysisState implements
     readonly taskSymbols = new Map<TaskDeclarationNode, TaskSymbol>();
     readonly procedureSymbols = new Map<ProcedureDeclarationNode, ProcedureSymbol>();
     readonly formatSymbols = new Map<SourceValue<string>, FormatSymbol>();
+    readonly formatListsByName = new Map<SourceValue<string>, FormatListNode | undefined>();
     readonly localSpecificationRelations = new Map<SourceValue<string>, LocalSpecificationRelation>();
     readonly parameterSymbols = new Map<SourceValue<string>, ParameterSymbol>();
     readonly loopControlSymbols = new Map<RepetitionNode, LoopControlVariableSymbol>();
@@ -254,6 +257,41 @@ class SemanticAnalysisState implements
             scope = scope.parent;
         }
         this.reportFormatReference(name, `Unbekannte FORMAT-Deklaration '${name.value}'.`);
+    }
+
+    /** Resolve R(...) in the lexical scope of the actual AST reference.
+     * A FORMAT declaration can be used in another task's scope, and can
+     * itself contain R(...) references. The call site must not shadow them. */
+    lookupFormatList(reference: FormatReferenceNode, env: Environment): FormatListNode | undefined {
+        let scope: Scope | undefined = this.indexedEnvironmentFor(reference, env).scope;
+        while (scope) {
+            const declaration = this.declarationIndex.lookupInScope(scope, reference.identifier.value);
+            if (declaration) return declaration.kind === SymbolKind.Format
+                ? this.formatListsByName.get(declaration.name) : undefined;
+            scope = scope.parent;
+        }
+        return undefined;
+    }
+
+    /** The repeat operand in R(FORMAT) belongs to the declaration's scope,
+     * not to the environment of the statement currently using that format. */
+    tryEvaluateFormatRepeat(expression: ExpressionNode, env: Environment): bigint | undefined {
+        return this.tryEvaluateFixedExpression(expression, this.indexedEnvironmentFor(expression, env));
+    }
+
+    private indexedEnvironmentFor(node: AstNode, fallback: Environment): Environment {
+        let current: AstNode | undefined = node;
+        while (current) {
+            const scope = this.scopes.get(current);
+            if (scope) return this.indexedEnvironmentFromScope(scope);
+            current = current.parent;
+        }
+        return fallback;
+    }
+
+    private indexedEnvironmentFromScope(scope: Scope): Environment {
+        return { scope, introducedSymbols: scope.symbols, previous: undefined,
+            outer: scope.parent ? this.indexedEnvironmentFromScope(scope.parent) : undefined };
     }
 
     private reportFormatReference(name: SourceValue<string>, message: string): void {
@@ -1667,6 +1705,7 @@ export class SemanticAnalyzer {
                 const symbol: FormatSymbol = { kind: SymbolKind.Format, name: format.name,
                     definition: format.name };
                 state.formatSymbols.set(format.name, symbol);
+                state.formatListsByName.set(format.name, format.formats);
                 (scope as MutableScope).symbols.push(symbol);
             }
         }

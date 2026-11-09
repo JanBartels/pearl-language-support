@@ -1,0 +1,23 @@
+MODULE ARIO00;
+SYSTEM;
+    Eingabe: /NIL <-;
+    Ausgabe: /NIL ->;
+    Binaer:  /NIL <->;
+PROBLEM;
+    SPC Eingabe DATION IN ALPHIC;
+    SPC Ausgabe DATION OUT ALPHIC;
+    SPC Binaer DATION INOUT ALPHIC;
+
+    Test: TASK MAIN;
+        DCL Feld(1:3) FIXED(15) INIT(11,22,33);
+        DCL Matrix(2,3) FIXED(15);
+
+        ! Kontrolle: Einzelne Feldelemente bei GET/PUT.
+        PUT Feld(1),Feld(2),Feld(3) TO Ausgabe BY (3)F(5),SKIP;
+        GET Feld(1),Feld(2),Feld(3) FROM Eingabe BY (3)F(5);
+
+        ! RTOS-UH 5.7.5: Ganze Felder bei binaerem READ/WRITE.
+        WRITE Feld,Matrix TO Binaer;
+        READ Feld,Matrix FROM Binaer;
+    END;
+MODEND;

@@ -1,0 +1,148 @@
+MODE=NOLSTOP;
+MODULE FMTABL;
+SYSTEM;
+    Konsole: /TY ->;
+PROBLEM;
+    SPC Konsole DATION OUT ALPHIC;
+    Ftab: FORMAT ((2)(F(7),X),B4(2));
+
+    Test: TASK MAIN;
+        DCL Fehler FIXED(15);
+        DCL Puffer CHAR(56);
+        DCL Zahl FIXED(31);
+        DCL Kurz FIXED(15);
+        DCL Gleit FLOAT;
+        DCL Bits BIT(8);
+        DCL Bit32 BIT(32);
+        DCL Bit16 BIT(16);
+        DCL NurX BIT(1);
+
+        Zahl = 12345;
+        Kurz = 12;
+        Gleit = 12.5;
+        Bits = 'A5'B4;
+        Bit32 = '12345678'B4;
+        Bit16 = '1234'B4;
+        NurX = '1'B1;
+
+        /*+M*/;
+        PUT 'BEGIN FORMAT-ABLAUF' TO Konsole BY A,SKIP;
+
+        ! Fehler erwartet: T trifft auf FLOAT.
+        PUT '01_T_STATT_E' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................................';
+        CONVERT Zahl,Kurz,Gleit TO Puffer BY RST(Fehler),F(7),LIST,T(30,3),SKIP;
+        PUT 'OUT=[',Puffer,']' TO Konsole BY A,A(56),A,SKIP;
+        PUT 'RST=',Fehler TO Konsole BY A,F(7),SKIP;
+
+        ! Fehler erwartet: dritter Durchlauf F trifft auf BIT.
+        PUT '02_F_STATT_B' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................................';
+        CONVERT Zahl,Kurz,Bits TO Puffer BY RST(Fehler),(3)(F(7),SKIP);
+        PUT 'OUT=[',Puffer,']' TO Konsole BY A,A(56),A,SKIP;
+        PUT 'RST=',Fehler TO Konsole BY A,F(7),SKIP;
+
+        ! Gutfall, drei Datenformate.
+        PUT '03_EXPLIZIT_OK' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................................';
+        CONVERT Zahl,Kurz,Bits TO Puffer BY RST(Fehler),(2)(F(7),X),B4,SKIP;
+        PUT 'OUT=[',Puffer,']' TO Konsole BY A,A(56),A,SKIP;
+        PUT 'RST=',Fehler TO Konsole BY A,F(7),SKIP;
+
+        ! Fehler erwartet: impliziter Ruecksprung trifft F auf BIT.
+        PUT '04_LIST_UND_F' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................................';
+        CONVERT Zahl,Kurz,Bits TO Puffer BY RST(Fehler),LIST,X,(1)(F(7),X);
+        PUT 'OUT=[',Puffer,']' TO Konsole BY A,A(56),A,SKIP;
+        PUT 'RST=',Fehler TO Konsole BY A,F(7),SKIP;
+
+        ! Gutfall, aber statische Warnung wegen impliziter Wiederholung.
+        PUT '05_LIST_REPEAT' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................................';
+        CONVERT Zahl,Kurz,Bits TO Puffer BY RST(Fehler),F(7),X,(1)(LIST,X);
+        PUT 'OUT=[',Puffer,']' TO Konsole BY A,A(56),A,SKIP;
+        PUT 'RST=',Fehler TO Konsole BY A,F(7),SKIP;
+
+        ! Gutfall ohne BY; Default-Konvertierung untersuchen; kein RST moeglich.
+        PUT '06_OHNE_BY' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................................';
+        CONVERT Zahl,Kurz,Bits TO Puffer;
+        PUT 'OUT=[',Puffer,']' TO Konsole BY A,A(56),A,SKIP;
+        PUT 'RST=',Fehler TO Konsole BY A,F(7),SKIP;
+
+        ! Erwartete Ziffernfolge noch offen: 1234 oder 5678 bei B4(4)?
+        PUT '07_B4_KURZ_ZWEIMAL' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................................';
+        CONVERT Bit32,Bit32,Bit32 TO Puffer BY RST(Fehler),(2)(B4(4),X),B4(8),SKIP;
+        PUT 'OUT=[',Puffer,']' TO Konsole BY A,A(56),A,SKIP;
+        PUT 'RST=',Fehler TO Konsole BY A,F(7),SKIP;
+
+        ! Erwartete Ziffernfolge noch offen: 1234 oder 5678 bei B4(4)?
+        PUT '08_B4_LANG_ZWEIMAL' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................................';
+        CONVERT Bit32,Bit32,Bit32 TO Puffer BY RST(Fehler),B4(4),X,(2)(B4(8),X),SKIP;
+        PUT 'OUT=[',Puffer,']' TO Konsole BY A,A(56),A,SKIP;
+        PUT 'RST=',Fehler TO Konsole BY A,F(7),SKIP;
+
+        ! Referenz: volle Ausgabe von 32 BIT.
+        PUT '09_B4_REFERENZ_32' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................................';
+        CONVERT Bit32 TO Puffer BY RST(Fehler),B4(8);
+        PUT 'OUT=[',Puffer,']' TO Konsole BY A,A(56),A,SKIP;
+        PUT 'RST=',Fehler TO Konsole BY A,F(7),SKIP;
+
+        ! Referenz: B4(4) mit passender 16-BIT-Quelle.
+        PUT '10_B4_REFERENZ_16' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................................';
+        CONVERT Bit16 TO Puffer BY RST(Fehler),B4(4);
+        PUT 'OUT=[',Puffer,']' TO Konsole BY A,A(56),A,SKIP;
+        PUT 'RST=',Fehler TO Konsole BY A,F(7),SKIP;
+
+        ! Gutfall mit implizitem Ruecksprung an den Anfang.
+        PUT '11_IMPLIZIT_START' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................................';
+        CONVERT Zahl,Kurz,Zahl TO Puffer BY RST(Fehler),F(7),X;
+        PUT 'OUT=[',Puffer,']' TO Konsole BY A,A(56),A,SKIP;
+        PUT 'RST=',Fehler TO Konsole BY A,F(7),SKIP;
+
+        ! Gutfall mit verschachtelten Gruppen.
+        PUT '12_VERSCHACHTELT' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................................';
+        CONVERT Zahl,Kurz,Bits TO Puffer BY RST(Fehler),(1)(F(7),X,(1)(F(7),X)),B4(2),SKIP;
+        PUT 'OUT=[',Puffer,']' TO Konsole BY A,A(56),A,SKIP;
+        PUT 'RST=',Fehler TO Konsole BY A,F(7),SKIP;
+
+        ! Gutfall mit benannter Formatdeklaration.
+        PUT '13_R_FORMAT' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................................';
+        CONVERT Zahl,Kurz,Bits TO Puffer BY RST(Fehler),R(Ftab),SKIP;
+        PUT 'OUT=[',Puffer,']' TO Konsole BY A,A(56),A,SKIP;
+        PUT 'RST=',Fehler TO Konsole BY A,F(7),SKIP;
+
+        ! OPTIONAL: nur Steuerformate; keine Datenverarbeitung, Risiko Endlosschleife.
+        ! Standardmaessig abgeschaltet. Nur gezielt im Testsystem aktivieren!
+        IF NurX THEN
+            PUT '14_3X_OPTIONAL' TO Konsole BY A,SKIP;
+            Fehler = -999;
+            Puffer = '........................................................';
+            CONVERT Zahl,Kurz,Bits TO Puffer BY RST(Fehler),(3)X;
+            PUT 'OUT=[',Puffer,']' TO Konsole BY A,A(56),A,SKIP;
+            PUT 'RST=',Fehler TO Konsole BY A,F(7),SKIP;
+        FIN;
+
+        PUT 'ENDE FORMAT-ABLAUF' TO Konsole BY A,SKIP;
+    END;
+MODEND;
