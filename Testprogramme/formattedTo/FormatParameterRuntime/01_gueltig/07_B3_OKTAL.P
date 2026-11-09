@@ -1,0 +1,19 @@
+MODULE R07A;
+SYSTEM;
+    Konsole: /TY ->;
+PROBLEM;
+    SPC Konsole DATION OUT ALPHIC;
+
+    Test: TASK MAIN;
+        DCL Fehler FIXED(15);
+        DCL Puffer CHAR(80);
+        DCL Wert BIT(8);
+
+        PUT '07_B3_OKTAL' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = 'UNVERAENDERT';
+        Wert = '10100101'B1;
+        CONVERT Wert TO Puffer BY RST(Fehler),B3(3);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(32),A,F(7),SKIP;
+    END;
+MODEND;

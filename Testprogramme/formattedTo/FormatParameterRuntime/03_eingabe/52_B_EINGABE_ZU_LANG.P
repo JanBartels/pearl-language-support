@@ -1,0 +1,19 @@
+MODULE R52C;
+SYSTEM;
+    Konsole: /TY ->;
+PROBLEM;
+    SPC Konsole DATION OUT ALPHIC;
+
+    Test: TASK MAIN;
+        DCL Fehler FIXED(15);
+        DCL Puffer CHAR(80);
+        DCL Wert BIT(8);
+
+        PUT '52_B_EINGABE_ZU_LANG' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = 'UNVERAENDERT';
+        
+        CONVERT Wert FROM '101010101' BY RST(Fehler),B(9);
+        PUT 'WERT=',Wert,' RST=',Fehler TO Konsole BY A,B(8),A,F(7),SKIP;
+    END;
+MODEND;

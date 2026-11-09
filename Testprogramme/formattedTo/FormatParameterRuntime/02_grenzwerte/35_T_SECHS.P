@@ -1,0 +1,19 @@
+MODULE R35B;
+SYSTEM;
+    Konsole: /TY ->;
+PROBLEM;
+    SPC Konsole DATION OUT ALPHIC;
+
+    Test: TASK MAIN;
+        DCL Fehler FIXED(15);
+        DCL Puffer CHAR(80);
+        DCL Wert CLOCK;
+
+        PUT '35_T_SECHS' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = 'UNVERAENDERT';
+        Wert = 12:34:56.123;
+        CONVERT Wert TO Puffer BY RST(Fehler),T(20,6);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(32),A,F(7),SKIP;
+    END;
+MODEND;

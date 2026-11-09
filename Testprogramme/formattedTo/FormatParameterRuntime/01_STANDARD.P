@@ -1,0 +1,314 @@
+MODE=NOLSTOP;
+MODULE FMTSTD;
+SYSTEM;
+    Konsole: /TY ->;
+PROBLEM;
+    SPC Konsole DATION OUT ALPHIC;
+
+    Test: TASK MAIN;
+        DCL Fehler FIXED(15);
+        DCL Puffer CHAR(80);
+        DCL Breite FIXED(15);
+        DCL Zahl FIXED(31);
+        DCL Kurz FIXED(15);
+        DCL Gleit FLOAT;
+        DCL Text CHAR(5);
+        DCL Bits BIT(8);
+        DCL Uhr CLOCK;
+        DCL Dauer DURATION;
+
+        /*+M*/;
+        ! Markers ab hier fuer alle Test-Anweisungen aktiv.
+        PUT 'BEGIN FMTSTD' TO Konsole BY A,SKIP;
+
+        ! --- Zahl ---
+        PUT '00_F_GANZZAHL' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Zahl = 12345;
+        CONVERT Zahl TO Puffer BY RST(Fehler),F(7);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        ! --- Gleit ---
+        PUT '01_F_NACHKOMMA' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Gleit = 12.5;
+        CONVERT Gleit TO Puffer BY RST(Fehler),F(10,2);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        PUT '02_F_SKALIERUNG' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Gleit = 12.5;
+        CONVERT Gleit TO Puffer BY RST(Fehler),F(12,3,1);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        PUT '03_E_STANDARD' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Gleit = 12.5;
+        CONVERT Gleit TO Puffer BY RST(Fehler),E(23,16);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        ! --- Text ---
+        PUT '04_A_OHNE_ARG' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Text = 'Hallo';
+        CONVERT Text TO Puffer BY RST(Fehler),A;
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        PUT '05_A_DYNAMISCH' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Text = 'Hallo';
+        CONVERT Text TO Puffer BY RST(Fehler),A(LEN(Text));
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        ! --- Bits ---
+        PUT '06_B_BINAER' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Bits = '10100101'B1;
+        CONVERT Bits TO Puffer BY RST(Fehler),B(8);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        PUT '07_B3_OKTAL' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Bits = '10100101'B1;
+        CONVERT Bits TO Puffer BY RST(Fehler),B3(3);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        PUT '08_B4_HEX' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Bits = '10100101'B1;
+        CONVERT Bits TO Puffer BY RST(Fehler),B4(2);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        ! --- Uhr ---
+        PUT '09_T_MINIMUM' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Uhr = 12:34:56;
+        CONVERT Uhr TO Puffer BY RST(Fehler),T(8,0);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        PUT '10_T_DREI' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Uhr = 12:34:56.123;
+        CONVERT Uhr TO Puffer BY RST(Fehler),T(13,3);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        ! --- Dauer ---
+        PUT '11_D_MINIMUM' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Dauer = 12 HRS 34 MIN 56 SEC;
+        CONVERT Dauer TO Puffer BY RST(Fehler),D(20,0);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        PUT '12_D_DREI' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Dauer = 12 HRS 34 MIN 56.123 SEC;
+        CONVERT Dauer TO Puffer BY RST(Fehler),D(25,3);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        ! --- Zahl ---
+        PUT '13_F_VARIABLE' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Zahl = 12345;
+        Breite = 7;
+        CONVERT Zahl TO Puffer BY RST(Fehler),F(Breite);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        PUT '20_F_NULL' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Zahl = 12345;
+        CONVERT Zahl TO Puffer BY RST(Fehler),F(0);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        PUT '21_F_ZU_KURZ' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Zahl = 12345;
+        CONVERT Zahl TO Puffer BY RST(Fehler),F(2);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        ! --- Gleit ---
+        PUT '22_F_DEZIMAL_UEBERLAUF' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Gleit = 12.5;
+        CONVERT Gleit TO Puffer BY RST(Fehler),F(4,5);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        PUT '23_E_NULL' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Gleit = 12.5;
+        CONVERT Gleit TO Puffer BY RST(Fehler),E(0,0);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        PUT '24_E_ZU_KURZ' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Gleit = 12.5;
+        CONVERT Gleit TO Puffer BY RST(Fehler),E(6,3);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        PUT '25_E_VIELE_STELLEN' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Gleit = 12.5;
+        CONVERT Gleit TO Puffer BY RST(Fehler),E(10,9);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        PUT '26_E_SIGNIFIKANZ' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Gleit = 12.5;
+        CONVERT Gleit TO Puffer BY RST(Fehler),E(23,16,30);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        ! --- Text ---
+        PUT '27_A_NULL' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Text = 'Hallo';
+        CONVERT Text TO Puffer BY RST(Fehler),A(0);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        ! --- Bits ---
+        PUT '28_B_NULL' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Bits = '10100101'B1;
+        CONVERT Bits TO Puffer BY RST(Fehler),B(0);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        PUT '29_B4_NULL' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Bits = '10100101'B1;
+        CONVERT Bits TO Puffer BY RST(Fehler),B4(0);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        PUT '30_B4_ZU_KURZ' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Bits = '10100101'B1;
+        CONVERT Bits TO Puffer BY RST(Fehler),B4(1);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        ! --- Uhr ---
+        PUT '31_T_ZU_KURZ' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Uhr = 12:34:56;
+        CONVERT Uhr TO Puffer BY RST(Fehler),T(7,0);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        PUT '32_T_NULL' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Uhr = 12:34:56;
+        CONVERT Uhr TO Puffer BY RST(Fehler),T(0,0);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        PUT '33_T_VIER' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Uhr = 12:34:56.123;
+        CONVERT Uhr TO Puffer BY RST(Fehler),T(14,4);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        PUT '35_T_SECHS' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Uhr = 12:34:56.123;
+        CONVERT Uhr TO Puffer BY RST(Fehler),T(20,6);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        ! --- Dauer ---
+        PUT '36_D_ZU_KURZ' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Dauer = 12 HRS 34 MIN 56 SEC;
+        CONVERT Dauer TO Puffer BY RST(Fehler),D(19,0);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        PUT '37_D_NULL' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Dauer = 12 HRS 34 MIN 56 SEC;
+        CONVERT Dauer TO Puffer BY RST(Fehler),D(0,0);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        PUT '38_D_VIER' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Dauer = 12 HRS 34 MIN 56.123 SEC;
+        CONVERT Dauer TO Puffer BY RST(Fehler),D(27,4);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        ! --- Zahl ---
+        PUT '40_X_NULL' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Zahl = 12345;
+        CONVERT Zahl TO Puffer BY RST(Fehler),X(0),F(7);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        PUT '41_F_VARIABLE_NULL' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Zahl = 12345;
+        Breite = 0;
+        CONVERT Zahl TO Puffer BY RST(Fehler),F(Breite);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        ! --- Uhr ---
+        PUT '42_T_FUENF_STANDARD' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Uhr = 12:34:56.123;
+        CONVERT Uhr TO Puffer BY RST(Fehler),T(16,5);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        ! --- Dauer ---
+        PUT '43_D_FUENF_STANDARD' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Dauer = 12 HRS 34 MIN 56.123 SEC;
+        CONVERT Dauer TO Puffer BY RST(Fehler),D(30,5);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        ! --- Eingabe ---
+        PUT '50_F_EINGABE_OK' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Zahl = 0;
+        CONVERT Zahl FROM '12345' BY RST(Fehler),F(5);
+        PUT 'WERT=',Zahl,' RST=',Fehler TO Konsole BY A,F(12),A,F(7),SKIP;
+
+        PUT '51_F_EINGABE_ZU_GROSS' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Kurz = 0;
+        CONVERT Kurz FROM '123456' BY RST(Fehler),F(6);
+        PUT 'WERT=',Kurz,' RST=',Fehler TO Konsole BY A,F(12),A,F(7),SKIP;
+
+        PUT '52_B_EINGABE_ZU_LANG' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Bits = '00000000'B1;
+        CONVERT Bits FROM '101010101' BY RST(Fehler),B(9);
+        PUT 'WERT=',Bits,' RST=',Fehler TO Konsole BY A,B(8),A,F(7),SKIP;
+
+        PUT 'ENDE FMTSTD' TO Konsole BY A,SKIP;
+    END;
+MODEND;

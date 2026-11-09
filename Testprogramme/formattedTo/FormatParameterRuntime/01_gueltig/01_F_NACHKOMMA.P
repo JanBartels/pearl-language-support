@@ -1,0 +1,19 @@
+MODULE R01A;
+SYSTEM;
+    Konsole: /TY ->;
+PROBLEM;
+    SPC Konsole DATION OUT ALPHIC;
+
+    Test: TASK MAIN;
+        DCL Fehler FIXED(15);
+        DCL Puffer CHAR(80);
+        DCL Wert FLOAT;
+
+        PUT '01_F_NACHKOMMA' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = 'UNVERAENDERT';
+        Wert = 12.5;
+        CONVERT Wert TO Puffer BY RST(Fehler),F(10,2);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(32),A,F(7),SKIP;
+    END;
+MODEND;

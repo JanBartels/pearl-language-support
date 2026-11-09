@@ -1,0 +1,19 @@
+MODULE R00A;
+SYSTEM;
+    Konsole: /TY ->;
+PROBLEM;
+    SPC Konsole DATION OUT ALPHIC;
+
+    Test: TASK MAIN;
+        DCL Fehler FIXED(15);
+        DCL Puffer CHAR(80);
+        DCL Wert FIXED(31);
+
+        PUT '00_F_GANZZAHL' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = 'UNVERAENDERT';
+        Wert = 12345;
+        CONVERT Wert TO Puffer BY RST(Fehler),F(7);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(32),A,F(7),SKIP;
+    END;
+MODEND;

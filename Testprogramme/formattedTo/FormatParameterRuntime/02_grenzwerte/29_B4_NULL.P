@@ -1,0 +1,19 @@
+MODULE R29B;
+SYSTEM;
+    Konsole: /TY ->;
+PROBLEM;
+    SPC Konsole DATION OUT ALPHIC;
+
+    Test: TASK MAIN;
+        DCL Fehler FIXED(15);
+        DCL Puffer CHAR(80);
+        DCL Wert BIT(8);
+
+        PUT '29_B4_NULL' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = 'UNVERAENDERT';
+        Wert = '10100101'B1;
+        CONVERT Wert TO Puffer BY RST(Fehler),B4(0);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(32),A,F(7),SKIP;
+    END;
+MODEND;

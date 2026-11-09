@@ -1,0 +1,43 @@
+MODE=NOLSTOP;
+MODE=CLOCK50;
+MODULE FMTCLK;
+SYSTEM;
+    Konsole: /TY ->;
+PROBLEM;
+    SPC Konsole DATION OUT ALPHIC;
+
+    Test: TASK MAIN;
+        DCL Fehler FIXED(15);
+        DCL Puffer CHAR(80);
+        DCL Breite FIXED(15);
+        DCL Zahl FIXED(31);
+        DCL Kurz FIXED(15);
+        DCL Gleit FLOAT;
+        DCL Text CHAR(5);
+        DCL Bits BIT(8);
+        DCL Uhr CLOCK;
+        DCL Dauer DURATION;
+
+        /*+M*/;
+        ! Markers ab hier fuer alle Test-Anweisungen aktiv.
+        PUT 'BEGIN FMTCLK' TO Konsole BY A,SKIP;
+
+        ! --- Uhr ---
+        PUT '34_T_FUENF_CLOCK50' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Uhr = 12:34:56.12345;
+        CONVERT Uhr TO Puffer BY RST(Fehler),T(16,5);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        ! --- Dauer ---
+        PUT '39_D_FUENF' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = '........................................';
+        Dauer = 12 HRS 34 MIN 56.12345 SEC;
+        CONVERT Dauer TO Puffer BY RST(Fehler),D(30,5);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(40),A,F(7),SKIP;
+
+        PUT 'ENDE FMTCLK' TO Konsole BY A,SKIP;
+    END;
+MODEND;

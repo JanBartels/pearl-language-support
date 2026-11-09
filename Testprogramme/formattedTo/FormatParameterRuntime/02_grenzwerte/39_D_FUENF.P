@@ -1,0 +1,20 @@
+MODE=CLOCK50;
+MODULE R39B;
+SYSTEM;
+    Konsole: /TY ->;
+PROBLEM;
+    SPC Konsole DATION OUT ALPHIC;
+
+    Test: TASK MAIN;
+        DCL Fehler FIXED(15);
+        DCL Puffer CHAR(80);
+        DCL Wert DURATION;
+
+        PUT '39_D_FUENF' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = 'UNVERAENDERT';
+        Wert = 12 HRS 34 MIN 56.123 SEC;
+        CONVERT Wert TO Puffer BY RST(Fehler),D(30,5);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(32),A,F(7),SKIP;
+    END;
+MODEND;

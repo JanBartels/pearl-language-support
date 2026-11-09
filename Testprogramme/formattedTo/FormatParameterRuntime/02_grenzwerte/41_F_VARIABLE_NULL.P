@@ -1,0 +1,21 @@
+MODULE R41B;
+SYSTEM;
+    Konsole: /TY ->;
+PROBLEM;
+    SPC Konsole DATION OUT ALPHIC;
+
+    Test: TASK MAIN;
+        DCL Fehler FIXED(15);
+        DCL Puffer CHAR(80);
+        DCL Wert FIXED(31);
+        DCL Breite FIXED(15);
+
+        PUT '41_F_VARIABLE_NULL' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = 'UNVERAENDERT';
+        Wert = 12345;
+        Breite = 0;
+        CONVERT Wert TO Puffer BY RST(Fehler),F(Breite);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(32),A,F(7),SKIP;
+    END;
+MODEND;

@@ -1,0 +1,21 @@
+MODULE R27B;
+SYSTEM;
+    Konsole: /TY ->;
+PROBLEM;
+    SPC Konsole DATION OUT ALPHIC;
+
+    Test: TASK MAIN;
+        DCL Fehler FIXED(15);
+        DCL Puffer CHAR(80);
+        DCL Wert CHAR(5);
+        DCL Text CHAR(5);
+
+        PUT '27_A_NULL' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = 'UNVERAENDERT';
+        Wert = 'Hallo';
+        Text = 'Hallo';
+        CONVERT Wert TO Puffer BY RST(Fehler),A(0);
+        PUT 'OUT=[',Puffer,'] RST=',Fehler TO Konsole BY A,A(32),A,F(7),SKIP;
+    END;
+MODEND;

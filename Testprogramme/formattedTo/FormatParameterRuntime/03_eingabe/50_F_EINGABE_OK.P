@@ -1,0 +1,19 @@
+MODULE R50C;
+SYSTEM;
+    Konsole: /TY ->;
+PROBLEM;
+    SPC Konsole DATION OUT ALPHIC;
+
+    Test: TASK MAIN;
+        DCL Fehler FIXED(15);
+        DCL Puffer CHAR(80);
+        DCL Wert FIXED(31);
+
+        PUT '50_F_EINGABE_OK' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = 'UNVERAENDERT';
+        
+        CONVERT Wert FROM '12345' BY RST(Fehler),F(5);
+        PUT 'WERT=',Wert,' RST=',Fehler TO Konsole BY A,F(12),A,F(7),SKIP;
+    END;
+MODEND;

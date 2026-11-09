@@ -1,0 +1,19 @@
+MODULE R51C;
+SYSTEM;
+    Konsole: /TY ->;
+PROBLEM;
+    SPC Konsole DATION OUT ALPHIC;
+
+    Test: TASK MAIN;
+        DCL Fehler FIXED(15);
+        DCL Puffer CHAR(80);
+        DCL Wert FIXED(15);
+
+        PUT '51_F_EINGABE_ZU_GROSS' TO Konsole BY A,SKIP;
+        Fehler = -999;
+        Puffer = 'UNVERAENDERT';
+        
+        CONVERT Wert FROM '123456' BY RST(Fehler),F(6);
+        PUT 'WERT=',Wert,' RST=',Fehler TO Konsole BY A,F(12),A,F(7),SKIP;
+    END;
+MODEND;
