@@ -13,6 +13,7 @@ const help: Readonly<Record<string,string>> = {
     E: 'FIXED- oder FLOAT-Konvertierung mit Exponent: E(Breite[,Nachkommastellen[,Signifikanz]]).',
     A: 'Zeichenkettenformat A[(Länge)]. Ohne Länge wird die Zeichenkettenlänge verwendet.',
     B: 'Binäres BIT-Format B[(Länge)].',
+    B1: 'Binäres BIT-Format B1[(Länge)], identisch mit B[(Länge)].',
     B3: 'Oktales BIT-Format B3[(Länge)].',
     B4: 'Hexadezimales BIT-Format B4[(Länge)].',
     T: 'CLOCK-Format T(Breite[,Nachkommastellen]).',

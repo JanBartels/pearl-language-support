@@ -1,0 +1,13 @@
+MODULE IO864104;
+SYSTEM;
+    Ausgabe: /NIL ->;
+PROBLEM;
+    SPC Ausgabe DATION OUT ALPHIC;
+
+    Test: TASK MAIN;
+        DCL Err1 FIXED(15);
+        DCL Err2 FIXED;
+        DCL B32 BIT(32);
+        PUT B32,B32.BIT(1),B32.BIT(1) TO Ausgabe BY RST(Err1),RST(Err2),B1(32),B,B1,SKIP;
+    END;
+MODEND;

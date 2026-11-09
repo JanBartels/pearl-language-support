@@ -93,11 +93,11 @@ export class FormattedIoStatementValidator {
         const actual = type && state.resolveUnderlyingType(type);
         const info = classifyObjectExpressionInfo(variable, env,
             t => state.resolveUnderlyingType(t));
-        if (actual && (actual.kind !== SemanticTypeKind.Fixed || actual.precision !== 15
+        if (actual && (actual.kind !== SemanticTypeKind.Fixed
                 || info.category !== 'object' || info.assignmentProtected !== false)) {
             this.report(state, SemanticDiagnosticCode.InvalidFormatReportVariable,
                 expressionSource(variable) ?? item.keyword,
-                'RST(...) erwartet eine beschreibbare FIXED(15)-Variable.');
+                'RST(...) erwartet eine beschreibbare FIXED-Variable.');
         }
     }
 

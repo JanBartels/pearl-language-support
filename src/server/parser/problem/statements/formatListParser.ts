@@ -13,7 +13,7 @@ import { NameExpressionParser } from '../expressions/nameExpressionParser';
 
 /** Formats actually documented in RTOS-UH 5.5.7-5.5.9; no unimplemented
  * PEARL-90 positioning formats are silently treated as supported. */
-const FORMAT_NAMES = ['F', 'E', 'A', 'B', 'B3', 'B4', 'T', 'D', 'LIST',
+const FORMAT_NAMES = ['F', 'E', 'A', 'B', 'B1', 'B3', 'B4', 'T', 'D', 'LIST',
     'R', 'RST', 'X', 'SKIP', 'PAGE'] as const;
 const IO_BOUNDARIES = [
     'END', 'MODEND', 'FIN', 'ELSE', 'ALT', 'OUT', 'BEGIN', 'IF', 'CASE',
@@ -149,7 +149,7 @@ export class FormatListParser extends ParserBase {
             : name === 'R' || name === 'RST' || name === 'S' ? [1, 1]
             : name === 'LIST' ? [0, 0] : [0, 1];
         if (open && (name === 'LIST' ||
-            (count === 0 && ['A', 'B', 'B3', 'B4', 'X', 'SKIP', 'PAGE'].includes(name)))) {
+            (count === 0 && ['A', 'B', 'B1', 'B3', 'B4', 'X', 'SKIP', 'PAGE'].includes(name)))) {
             this.problems.error(this.location(keyword),
                 `${name} does not permit an empty argument list.`);
         }

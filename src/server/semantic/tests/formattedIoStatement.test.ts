@@ -17,13 +17,22 @@ test('GET/PUT/CONVERT basic semantic validation accepts valid operands', () => {
     assert.deepEqual(result.diagnostics, []);
 });
 
-test('RST requires mutable FIXED(15), excluding INV, FLOAT and FIXED(31)', () => {
+test('RST accepts writable FIXED with default, 15-bit and 31-bit precision', () => {
     const result = analyzeFormattedIo(`
         GET A FROM Disk BY RST(FixedErr1), F(5);
+        PUT A TO Disk BY RST(Error31), F(5);
+        CONVERT A TO VarChar20 BY RST(A), F(5);
+    `);
+    assert.deepEqual(result.syntax, []);
+    assert.deepEqual(result.diagnostics, []);
+});
+
+test('RST rejects INV FIXED at either precision and non-FIXED targets', () => {
+    const result = analyzeFormattedIo(`
         PUT A TO Disk BY RST(InvErr), F(5);
         PUT A TO Disk BY RST(BadErr), F(5);
-        PUT A TO Disk BY RST(Error31), F(5);
-    `);
+        PUT A TO Disk BY RST(InvError31), F(5);
+    `, 'DCL InvError31 INV FIXED(31) INIT(0);');
     assert.deepEqual(result.syntax, []);
     assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.code), [
         SemanticDiagnosticCode.InvalidFormatReportVariable,
@@ -31,6 +40,7 @@ test('RST requires mutable FIXED(15), excluding INV, FLOAT and FIXED(31)', () =>
         SemanticDiagnosticCode.InvalidFormatReportVariable
     ]);
 });
+
 
 test('widths and format/data pairing are deliberately deferred to 8.6.4.2', () => {
     const result = analyzeFormattedIo('PUT A, B TO Disk BY F(1),SKIP,B(100),X(2);');

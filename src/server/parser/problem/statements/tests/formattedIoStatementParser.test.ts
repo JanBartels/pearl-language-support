@@ -65,3 +65,24 @@ test('missing PUT semicolon recovers at the next GET statement', () => {
     assert.equal(result.statements.length, 2);
     assert.ok(result.syntax.some(message => message.includes("Expected ';' after PUT")));
 });
+
+test('B1 is accepted as a binary format alias and preserves its source spelling', () => {
+    const result = parseFormattedIo(`
+        GET VarBit FROM Disk BY B1;
+        PUT VarBit TO Disk BY B1(8), B(8), B3(3), B4(2);
+        CONVERT VarBit TO VarChar20 BY B1(8);
+        PUT VarBit TO Disk BY (2)B1(8);
+    `);
+    assert.deepEqual(result.syntax, []);
+    assert.deepEqual(result.statements.map(statement =>
+        statement.formats?.items.map(format => format.keyword?.value)), [
+            ['B1'], ['B1', 'B', 'B3', 'B4'], ['B1'], ['B1']
+        ]);
+    assert.equal(result.statements[1].formats!.items[0].argumentsList.length, 1);
+    assert.ok(result.statements[3].formats!.items[0].repeatCount);
+});
+
+test('B1 rejects an empty parameter list just like B', () => {
+    const result = parseFormattedIo('PUT VarBit TO Disk BY B1(), B();');
+    assert.ok(result.syntax.filter(message => message.includes('empty argument list')).length >= 2);
+});

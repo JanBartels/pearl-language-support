@@ -39,3 +39,13 @@ test('R reference and named FORMAT declaration have resolvable documentation', (
     assert.match(documentationFor(result, reference) ?? '', /^# Later/);
     assert.match(documentationFor(result, result.declarations[0].name) ?? '', /^# Later/);
 });
+
+test('B1 format keyword provides the same binary-format semantics as B in hover', () => {
+    const result = analyzeFormattedIo('PUT VarBit TO Disk BY B1(8), B(8);');
+    assert.deepEqual(result.syntax, []);
+    assert.deepEqual(result.diagnostics, []);
+    const formats = result.statements[0].formats!.items;
+    assert.match(documentationFor(result, formats[0].keyword!) ?? '', /^# B1\n/);
+    assert.match(documentationFor(result, formats[0].keyword!) ?? '', /identisch mit B/);
+    assert.match(documentationFor(result, formats[1].keyword!) ?? '', /^# B\n/);
+});
