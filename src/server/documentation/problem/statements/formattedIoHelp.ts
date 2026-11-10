@@ -2,9 +2,9 @@
 // Copyright (C) 2026 Jan Bartels
 
 const help: Readonly<Record<string,string>> = {
-    GET: 'Liest Daten aus einer ALPHIC-DATION gemäß der Formatliste. Datenliste und Formatliste werden in einer eigenen semantischen Analyse abgeglichen.',
-    PUT: 'Schreibt Daten auf eine ALPHIC-DATION gemäß der Formatliste.',
-    CONVERT: 'Konvertiert Daten zwischen PEARL-Objekten und einer Zeichenkette; TO schreibt die Zeichenkette, FROM liest daraus.',
+    GET: 'Liest einzelne Datenobjekte aus einer ALPHIC-DATION gemäß der Formatliste. RTOS-UH unterstützt hier keine ganzen Felder oder Feld-Ausschnitte; einzelne Feldelemente sind erlaubt.',
+    PUT: 'Schreibt einzelne Datenobjekte auf eine ALPHIC-DATION gemäß der Formatliste. RTOS-UH unterstützt hier keine ganzen Felder oder Feld-Ausschnitte; einzelne Feldelemente sind erlaubt.',
+    CONVERT: 'Konvertiert einzelne Datenobjekte zwischen PEARL-Objekten und einer Zeichenkette; TO schreibt die Zeichenkette, FROM liest daraus. Vollständige Felder und Feld-Ausschnitte sind unter RTOS-UH nicht unterstützt.',
     FROM: 'Quelle der formatierten Eingabe: DATION bei GET oder Zeichenkettenausdruck bei CONVERT.',
     TO: 'Ziel der formatierten Ausgabe: DATION bei PUT oder beschreibbare Zeichenkettenvariable bei CONVERT.',
     BY: 'Leitet die Formatliste ein. Die Formate steuern die Reihenfolge der Datentransfers.',

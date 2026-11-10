@@ -19,6 +19,8 @@ PROBLEM;
         DCL Uhr CLOCK;
         DCL Dauer DURATION;
         DCL Bit32 BIT(32);
+        DCL RX REF FIXED;
+        DCL IX INV FIXED INIT(7);
 
         /*+M*/
         ! Markers ab hier fuer alle Test-Anweisungen aktiv.
@@ -35,6 +37,7 @@ PROBLEM;
         CONVERT Zahl,Kurz,Bits TO Puffer BY F(7),X,(1)(LIST,X);     ! Gutfall mit Warnung
         CONVERT Zahl,Kurz,Bits TO Puffer BY (3)X;                   ! ??? 
         CONVERT Zahl,Kurz,Bits TO Puffer;                           ! Gutfall
+        CONVERT RX,IX TO Puffer BY (2)F(7);                         ! Gutfall
 
         Bit32 = '12345678'B4;
         CONVERT Bit32,Bit32,Bit32 TO Puffer BY (2)(B4(4),X),B4(8),SKIP;     ! 1234 1234 12345678

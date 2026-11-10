@@ -36,10 +36,31 @@ export class FormattedIoStatementValidator {
         const input = name === 'GET' || (name === 'CONVERT' && node.directionKeyword?.value === 'FROM');
         const objectTypes: (SemanticType | undefined)[] = [];
         for (const object of node.objects) {
+            const diagnosticsBeforeObject = state.diagnostics.length;
             const objectType = object instanceof IoSegmentNode
                 ? validateIoSegment(object, env, state)
                 : state.expressionTypeResolver.resolve(object, env);
             objectTypes.push(objectType);
+            // RTOS-UH 5.1, table 5.2: formatted I/O has neither total
+            // ARRAY transfers nor I/O slices. The PEARL language report
+            // allows them, so keep the AST representation and diagnose the
+            // implementation restriction here rather than in the parser.
+            if (object instanceof IoSegmentNode && state.diagnostics.length === diagnosticsBeforeObject) {
+                this.report(state, SemanticDiagnosticCode.InvalidIoSegment,
+                    expressionSource(object.array) ?? object.colon ?? node.keyword,
+                    `${name} unterstützt unter RTOS-UH keine Feld-Ausschnitte.`);
+            } else {
+                const underlying = objectType && state.resolveUnderlyingType(objectType);
+                const actual = underlying?.kind === SemanticTypeKind.Reference
+                    ? state.resolveUnderlyingType(underlying.target) : underlying;
+                if (actual?.kind === SemanticTypeKind.Array
+                    || actual?.kind === SemanticTypeKind.VirtualArray) {
+                    this.report(state, SemanticDiagnosticCode.InvalidFormattedIoData,
+                        expressionSource(object) ?? node.keyword,
+                        `${name} unterstützt unter RTOS-UH keine vollständigen Felder; `
+                            + 'verwende einzelne Feldelemente.');
+                }
+            }
             if (!input) continue;
             const target = object instanceof IoSegmentNode ? object.array : object;
             const info = classifyObjectExpressionInfo(target, env,

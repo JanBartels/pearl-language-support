@@ -8,6 +8,7 @@ import { analyzeFormattedIo } from '../../validation/tests/formattedIoTestFixtur
 
 const mismatch = SemanticDiagnosticCode.IncompatibleFormattedIoFormat;
 const repeated = SemanticDiagnosticCode.ImplicitFormatListRepetition;
+const excess = SemanticDiagnosticCode.ExcessFormattedIoFormats;
 
 function diagnostics(source: string, prelude = '', tail = '') {
     const analysis = analyzeFormattedIo(source, prelude, tail);
@@ -48,13 +49,13 @@ test('explicit repetition and nested groups do not produce implicit-repeat warni
 
 test('short list is legal but triggers one implicit-repeat warning', () => {
     const results = diagnostics('PUT A,VarBit,B TO Disk BY F(5),B;');
-    assert.deepEqual(results.map(d => d.code), [repeated]);
+    assert.deepEqual(results.map(d => d.code), [repeated, excess]);
     assert.equal(results[0].severity, SemanticDiagnosticSeverity.Warning);
 });
 
 test('implicit repeat still validates the type reached after wrap-around', () => {
     const results = diagnostics('PUT A,VarBit,VarChar20 TO Disk BY F(5),B;');
-    assert.deepEqual(results.map(d => d.code), [repeated, mismatch]);
+    assert.deepEqual(results.map(d => d.code), [repeated, mismatch, excess]);
     assert.match(results[1].message, /VarChar20/);
 });
 
@@ -73,10 +74,12 @@ test('FORMAT R reference, including forward declaration, participates in executi
     assert.deepEqual(results.map(d => d.code), [mismatch]);
 });
 
-test('array elements consume individual formats with known element count', () => {
-    assert.deepEqual(diagnostics('PUT Array TO Disk BY (3)F(4);'), []);
-    assert.deepEqual(diagnostics('PUT Array TO Disk BY F(4);').map(d => d.code), [repeated]);
-    assert.deepEqual(diagnostics('GET Array(1:3) FROM Disk BY (3)F(4);'), []);
+test('RTOS-UH rejects whole fields and formatted I/O slices', () => {
+    const code = SemanticDiagnosticCode.InvalidFormattedIoData;
+    const slice = SemanticDiagnosticCode.InvalidIoSegment;
+    assert.deepEqual(diagnostics('PUT Array TO Disk BY (3)F(4);').map(d => d.code), [code]);
+    assert.deepEqual(diagnostics('GET Array FROM Disk BY (3)F(4);').map(d => d.code), [code]);
+    assert.deepEqual(diagnostics('GET Array(1:3) FROM Disk BY (3)F(4);').map(d => d.code), [slice]);
 });
 
 test('unknown repetition count prevents speculative pairing diagnostics', () => {
@@ -94,8 +97,8 @@ test('invalid operands do not cause cascading format-execution warnings', () => 
 });
 
 
-test('named constant repetition factors are evaluated without expanding syntax trees', () => {
-    assert.deepEqual(diagnostics('PUT Array TO Disk BY (Count)F(4);',
+test('named constant repetition factors are evaluated with scalar data objects', () => {
+    assert.deepEqual(diagnostics('PUT A,A,A TO Disk BY (Count)F(4);',
         'DCL Count INV FIXED INIT(3);'), []);
 });
 
@@ -106,10 +109,10 @@ test('CLOCK and DURATION use T and D, not numeric formats', () => {
         'DCL Uhr CLOCK;').map(d => d.code), [mismatch]);
 });
 
-test('unknown virtual-array lengths do not trigger invented repetitions', () => {
+test('virtual fields are not treated as formatted scalar data', () => {
     const results = diagnostics('PUT Virtual TO Disk BY F(5);',
         'DCL Virtual REF () INV FIXED;');
-    assert.deepEqual(results, []);
+    assert.deepEqual(results.map(d => d.code), [SemanticDiagnosticCode.InvalidFormattedIoData]);
 });
 
 test('real-world regression: two RST controls and B1/B select three BIT values', () => {
@@ -167,42 +170,37 @@ test('three nested FORMAT references work; cyclic declarations remain undecidabl
         'F1: FORMAT (R(F2)); F2: FORMAT (R(F1));'), []);
 });
 
-test('repeated format at a known array is diagnosed once, not once per element', () => {
+test('a whole field is rejected before format type diagnostics are emitted', () => {
     const results = diagnostics('PUT Array TO Disk BY (3)B;');
-    assert.deepEqual(results.map(d => d.code), [mismatch]);
+    assert.deepEqual(results.map(d => d.code), [SemanticDiagnosticCode.InvalidFormattedIoData]);
 });
 
-test('large known array checks the format after more than 4096 repetitions', () => {
-    const results = diagnostics('PUT Huge TO Disk BY (4096)F(5),B;',
-        'DCL Huge(4097) FIXED;');
-    assert.deepEqual(results.map(d => d.code), [mismatch]);
-    assert.match(results[0].message, /Huge/);
-});
-
-test('large known array skips homogeneous repetitions without a prefix limit', () => {
-    assert.deepEqual(diagnostics('PUT Huge TO Disk BY (100000)F(5);',
-        'DCL Huge(100000) FIXED;'), []);
-    assert.deepEqual(diagnostics('PUT Huge TO Disk BY (100000)(F(5));',
-        'DCL Huge(100000) FIXED;'), []);
-});
-
-test('large known array detects one implicit repetition warning, no duplicate diagnostics', () => {
-    const results = diagnostics('PUT Huge TO Disk BY F(5);',
-        'DCL Huge(100000) FIXED;');
-    assert.deepEqual(results.map(d => d.code), [repeated]);
-});
-
-test('multi-dimensional last-dimension segment uses its known element count', () => {
-    const results = diagnostics('GET Matrix(2,1:3) FROM Disk BY (3)F(5);',
-        'DCL Matrix(2,3) FIXED;');
-    assert.deepEqual(results, []);
-});
-
-test('unknown virtual bounds cannot invent format/data pairs after the field', () => {
-    const results = diagnostics('PUT VarBit,Virtual,A TO Disk BY F(5),B,A;',
-        'DCL Virtual REF () INV FIXED;');
+test('explicit repetition with a scalar list checks the last incompatible object', () => {
+    const results = diagnostics('PUT A,A,A,VarBit TO Disk BY (3)F(5),F(5);');
     assert.deepEqual(results.map(d => d.code), [mismatch]);
     assert.match(results[0].message, /VarBit/);
+});
+
+test('large homogeneous format repetitions are not expanded into surplus diagnostics', () => {
+    const results = diagnostics('PUT A TO Disk BY (100000)F(5);');
+    assert.deepEqual(results.map(d => d.code), [excess]);
+});
+
+test('scalar data are not multiplied by their declared field dimensions', () => {
+    assert.deepEqual(diagnostics('PUT Array,A TO Disk BY F(5),F(5);').map(d => d.code),
+        [SemanticDiagnosticCode.InvalidFormattedIoData]);
+});
+
+test('multi-dimensional formatted I/O slice is rejected', () => {
+    const results = diagnostics('GET Matrix(2,1:3) FROM Disk BY (3)F(5);',
+        'DCL Matrix(2,3) FIXED;');
+    assert.deepEqual(results.map(d => d.code), [SemanticDiagnosticCode.InvalidIoSegment]);
+});
+
+test('a whole virtual field cannot hide an earlier provable formatted I/O error', () => {
+    const results = diagnostics('PUT VarBit,Virtual,A TO Disk BY F(5),B,A;',
+        'DCL Virtual REF () INV FIXED;');
+    assert.deepEqual(results.map(d => d.code), [SemanticDiagnosticCode.InvalidFormattedIoData]);
 });
 
 test('a format list with only controls does not hang or invent a mismatch', () => {
@@ -222,22 +220,21 @@ test('large repeated controls inside a FORMAT reference stay non-consuming', () 
     assert.deepEqual(results.map(d => d.code), [mismatch]);
 });
 
-test('large repeated single-format group still checks the following format', () => {
-    const results = diagnostics('PUT Huge TO Disk BY (4096)(F(5)),B;',
-        'DCL Huge(4097) FIXED;');
-    assert.deepEqual(results.map(d => d.code), [mismatch]);
+test('large repeated scalar format group reports surplus data formats', () => {
+    const results = diagnostics('PUT A TO Disk BY (4096)(F(5)),B;');
+    assert.deepEqual(results.map(d => d.code), [excess]);
 });
 
-test('a fixed multidimensional segment gives one mismatch for many elements', () => {
+test('fixed multidimensional segments are rejected independent of format type', () => {
     const results = diagnostics('GET Matrix(2,1:3) FROM Disk BY (3)B;',
         'DCL Matrix(2,3) FIXED;');
-    assert.deepEqual(results.map(d => d.code), [mismatch]);
+    assert.deepEqual(results.map(d => d.code), [SemanticDiagnosticCode.InvalidIoSegment]);
 });
 
-test('dynamically bounded segment does not speculate about later objects', () => {
+test('dynamically bounded slices are rejected independently of their bounds', () => {
     const results = diagnostics('GET Array(Lower:3),VarBit FROM Disk BY F(5),F(5);',
         'DCL Lower FIXED;');
-    assert.deepEqual(results, []);
+    assert.deepEqual(results.map(d => d.code), [SemanticDiagnosticCode.InvalidIoSegment]);
 });
 
 test('many repeated multi-control FORMAT references do not hide the next mismatch', () => {
@@ -257,21 +254,18 @@ test('huge direct control-only group preserves the implicit restart point', () =
     assert.deepEqual(result.map(d => d.code), [repeated]);
 });
 
-test('more than 4096 non-homogeneous pairings still reach the final error', () => {
-    const result = diagnostics('PUT Huge TO Disk BY (4096)(F(5),X),B;',
-        'DCL Huge(4097) FIXED;');
+test('large scalar repetition still checks the next scalar data item', () => {
+    const result = diagnostics('PUT A,VarBit TO Disk BY (4096)(X,F(5)),B;');
+    assert.deepEqual(result.map(d => d.code), [mismatch, excess]);
+});
+
+test('large scalar control groups do not hide an invalid following format', () => {
+    const result = diagnostics('PUT VarBit TO Disk BY (100000)(X,SKIP),F(5);');
     assert.deepEqual(result.map(d => d.code), [mismatch]);
 });
 
-test('huge groups containing one conversion format and controls are fast-forwarded', () => {
-    const result = diagnostics('PUT Huge TO Disk BY (100000)(X,F(5),SKIP),B;',
-        'DCL Huge(100001) FIXED;');
-    assert.deepEqual(result.map(d => d.code), [mismatch]);
-});
-
-test('a repeated inner format factor is also fast-forwarded', () => {
-    const result = diagnostics('PUT Huge TO Disk BY (50000)((2)F(5),X),B;',
-        'DCL Huge(100001) FIXED;');
+test('repeated inner control factors are fast-forwarded before a data format', () => {
+    const result = diagnostics('PUT VarBit TO Disk BY (50000)((2)X,SKIP),F(5);');
     assert.deepEqual(result.map(d => d.code), [mismatch]);
 });
 
@@ -285,4 +279,28 @@ test('different incompatible data types at the same format remain distinguishabl
     assert.deepEqual(result.map(d => d.code), [mismatch, repeated, mismatch]);
     assert.match(result[0].message, /VarBit/);
     assert.match(result[2].message, /VarChar20/);
+});
+
+
+test('superfluous conversion formats produce exactly one warning at the unused format', () => {
+    const result = diagnostics('PUT A TO Disk BY F(5),E(10,3),B,LIST;');
+    assert.deepEqual(result.map(d => d.code), [excess]);
+    assert.equal(result[0].severity, SemanticDiagnosticSeverity.Warning);
+    assert.match(result[0].message, /keine Datenobjekte/);
+});
+
+test('trailing position formats do not trigger surplus warnings', () => {
+    assert.deepEqual(diagnostics('PUT A TO Disk BY F(5),X(3),SKIP;'), []);
+    assert.deepEqual(diagnostics('PUT A TO Disk BY F(5),(3)X,SKIP;'), []);
+    assert.deepEqual(diagnostics('PUT A TO Disk BY F(5),SKIP,B;').map(d => d.code), [excess]);
+});
+
+test('named FORMAT excess is warned at the actual unused conversion', () => {
+    const results = diagnostics('PUT A TO Disk BY R(Ftab);', '',
+        'Ftab: FORMAT (F(5),SKIP,E(8,2));');
+    assert.deepEqual(results.map(d => d.code), [excess]);
+});
+
+test('unknown repetition counts do not produce speculative surplus warnings', () => {
+    assert.deepEqual(diagnostics('PUT A TO Disk BY (FixedErr1)F(5),B;'), []);
 });

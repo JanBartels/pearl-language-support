@@ -3,7 +3,6 @@
 
 import type { SourceValue } from '../core/sourceValue';
 import type { ExpressionNode } from '../ast/problem/expressions/expressionNode';
-import { IoSegmentNode } from '../ast/problem/statements/ioSegmentNode';
 import type { FormatItemNode } from '../ast/problem/statements/formatItemNode';
 import type { FormattedIoStatementNode } from '../ast/problem/statements/formattedIoStatementNode';
 import type { Environment } from './environment';
@@ -34,7 +33,7 @@ export class FormattedIoFormatCompatibility {
         const formats = node.formats;
         if (!formats || formats.items.length === 0) return;
         const data = node.objects.map((object, index) =>
-            this.describeData(object, objectTypes[index], environment, state));
+            this.describeData(object, objectTypes[index], state));
         const cursor = new FormatExecutionCursor(formats,
             expression => state.tryEvaluateFormatRepeat(expression, environment),
             reference => state.lookupFormatList(reference, environment),
@@ -114,27 +113,40 @@ export class FormattedIoFormatCompatibility {
                 }
             }
         }
+        // After the final data element, RTOS-UH still processes trailing
+        // positioning formats, up to the next data-consuming format. Only
+        // such an unused conversion format constitutes a provable surplus.
+        // Do not restart the cursor: implicit repetition requires more data.
+        this.warnUnusedFormats(cursor, node, state);
+    }
+
+    private warnUnusedFormats(cursor: FormatExecutionCursor, node: FormattedIoStatementNode,
+        state: FormattedIoValidationContext): void {
+        for (let i = 0; i < 50000; i++) {
+            const next = cursor.next();
+            if (next.kind !== 'format') return;
+            if (!next.item.keyword) return;
+            if (NON_CONSUMING.has(next.item.keyword.value)) {
+                cursor.skipIdenticalFormats(next.item);
+                continue;
+            }
+            this.report(state, SemanticDiagnosticCode.ExcessFormattedIoFormats,
+                SemanticDiagnosticSeverity.Warning, next.item.keyword,
+                'Die Formatliste enthält weitere Datenformate, für die keine Datenobjekte mehr vorhanden sind.');
+            return;
+        }
     }
 
     private describeData(expression: ExpressionNode, original: SemanticType | undefined,
-        env: Environment, state: FormattedIoValidationContext): DataElement | undefined {
+        state: FormattedIoValidationContext): DataElement | undefined {
         if (!original) return undefined;
-        let resolved = this.underlying(original, state);
+        const resolved = this.underlying(original, state);
         if (!resolved) return undefined;
-        if (expression instanceof IoSegmentNode) {
-            const from = expression.lower && state.tryEvaluateFixedExpression(expression.lower, env);
-            const to = expression.upper && state.tryEvaluateFixedExpression(expression.upper, env);
-            return { expression, type: resolved,
-                count: from !== undefined && to !== undefined && from <= to ? to - from + 1n : undefined };
-        }
-        if (resolved.kind === SemanticTypeKind.Array) {
-            const count = resolved.dimensions.reduce((product, dimension) =>
-                product * (dimension.upperBound - dimension.lowerBound + 1n), 1n);
-            return { expression, type: resolved.elementType, count: count >= 0n ? count : undefined };
-        }
-        if (resolved.kind === SemanticTypeKind.VirtualArray) {
-            return { expression, type: resolved.elementType, count: undefined };
-        }
+        // The validator rejects full ARRAY objects and I/O slices before
+        // invoking this cursor. Never reinterpret them as streams of scalar
+        // elements: that behavior belongs to the PEARL report, not RTOS-UH.
+        if (resolved.kind === SemanticTypeKind.Array
+            || resolved.kind === SemanticTypeKind.VirtualArray) return undefined;
         return { expression, type: resolved, count: 1n };
     }
 

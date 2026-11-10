@@ -8,6 +8,7 @@ import type { Analysis } from '../../validation/analysis';
 import { findReferences } from '../../lsp/findReferences';
 import { lookupSymbolDefinition } from '../bindingIndex';
 import { analyzeFormattedIo } from '../../validation/tests/formattedIoTestFixture';
+import { SemanticDiagnosticCode } from '../semanticDiagnostic';
 
 test('RST reports and names in A(LEN(...)) bind to their declarations', () => {
     const result = analyzeFormattedIo(`
@@ -27,7 +28,7 @@ test('RST reports and names in A(LEN(...)) bind to their declarations', () => {
 });
 
 test('FORMAT R references participate in definition lookup and occurrence index', () => {
-    const result = analyzeFormattedIo('PUT A TO Disk BY R(Ftab);',
+    const result = analyzeFormattedIo('PUT A,B,B,B TO Disk BY R(Ftab);',
         'Ftab: FORMAT (X(2),F(8,3),(3)(X(2),E(10,3)));');
     assert.deepEqual(result.syntax, []);
     assert.deepEqual(result.diagnostics, []);
@@ -63,7 +64,8 @@ test('findReferences returns the data-list and the nested LEN format argument us
 test('GET array segment retains its bound field symbol', () => {
     const result = analyzeFormattedIo('GET Array(1:3) FROM Disk BY (3)F(4);');
     assert.deepEqual(result.syntax, []);
-    assert.deepEqual(result.diagnostics, []);
+    assert.deepEqual(result.diagnostics.map(d => d.code),
+        [SemanticDiagnosticCode.InvalidIoSegment]);
     const segment = result.statements[0].objects[0] as any;
     assert.equal(result.semantic.bindings.get(segment.array.segments[0].identifier)?.name.value, 'Array');
 });

@@ -85,6 +85,7 @@ export enum SemanticDiagnosticCode {
     InvalidFormatReportVariable = 'semantic.invalid-format-report-variable',
     IncompatibleFormattedIoFormat = 'semantic.incompatible-formatted-io-format',
     ImplicitFormatListRepetition = 'semantic.implicit-format-list-repetition',
+    ExcessFormattedIoFormats = 'semantic.excess-formatted-io-formats',
     InvalidBinaryTransferDation = 'semantic.invalid-binary-transfer-dation',
     InvalidBinaryTransferDirection = 'semantic.invalid-binary-transfer-direction',
     InvalidBinaryReadTarget = 'semantic.invalid-binary-read-target',

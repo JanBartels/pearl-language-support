@@ -41,11 +41,24 @@ test('R reference and named FORMAT declaration have resolvable documentation', (
 });
 
 test('B1 format keyword provides the same binary-format semantics as B in hover', () => {
-    const result = analyzeFormattedIo('PUT VarBit TO Disk BY B1(8), B(8);');
+    const result = analyzeFormattedIo('PUT VarBit,VarBit TO Disk BY B1(8), B(8);');
     assert.deepEqual(result.syntax, []);
     assert.deepEqual(result.diagnostics, []);
     const formats = result.statements[0].formats!.items;
     assert.match(documentationFor(result, formats[0].keyword!) ?? '', /^# B1\n/);
     assert.match(documentationFor(result, formats[0].keyword!) ?? '', /identisch mit B/);
     assert.match(documentationFor(result, formats[1].keyword!) ?? '', /^# B\n/);
+});
+
+test('formatted I/O hover explains the RTOS-UH restriction on field transfers', () => {
+    const result = analyzeFormattedIo(`
+        GET Array(1) FROM Disk BY F(5);
+        PUT Array(2) TO Disk BY F(5);
+        CONVERT Array(3) TO VarChar20 BY F(5);
+    `);
+    assert.deepEqual(result.syntax, []);
+    assert.deepEqual(result.diagnostics, []);
+    for (const statement of result.statements) {
+        assert.match(documentationFor(result, statement.keyword) ?? '', /keine ganzen Felder|Vollständige Felder/);
+    }
 });

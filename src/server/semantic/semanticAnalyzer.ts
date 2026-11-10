@@ -3050,7 +3050,20 @@ export class SemanticAnalyzer {
         }
 
         const initialization = attribute.initialization;
-        const resolvedInitialization = initialization
+        // RTOS-UH: unlike module-level ARRAY presets, a local ARRAY's
+        // INIT list is allocated per declared identifier, not per element.
+        // The original compiler reports "Excessive INIT-data" for the
+        // observed local DCL Feld(1:3) ... INIT(11,22,33).
+        const localArrayExcess = !!initialization
+            && environment.scope.kind !== ScopeKind.Module
+            && type.kind === SemanticTypeKind.Array
+            && initialization.elements.length > node.identifiers.identifiers.length;
+        if (localArrayExcess) {
+            state.reportTooManyInitializationElements(initialization!.keyword,
+                'lokales Feld', BigInt(node.identifiers.identifiers.length),
+                initialization!.elements.length);
+        }
+        const resolvedInitialization = initialization && !localArrayExcess
             ? state.initializationResolver.resolve(
                 initialization,
                 type,
