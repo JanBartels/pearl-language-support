@@ -20,6 +20,7 @@ import { TaskingStatementParser } from "./taskingStatementParser";
 import { InterruptStatementParser } from "./interruptStatementParser";
 import { DationControlStatementParser } from "./dationControlStatementParser";
 import { BinaryTransferStatementParser } from "./binaryTransferStatementParser";
+import { BasicTransferStatementParser } from "./basicTransferStatementParser";
 import { FormattedIoStatementParser } from "./formattedIoStatementParser";
 
 /** All nested statement constructs are dispatched through this common entry point. */
@@ -63,6 +64,10 @@ export class StatementParser extends ParserBase {
                     .parseAfterIdentifier(identifier);
             }
             return new BinaryTransferStatementParser(this.context).parse();
+        }
+
+        if (this.isKeyword(["TAKE", "SEND"])) {
+            return new BasicTransferStatementParser(this.context).parse();
         }
 
         if (this.isKeyword(["GET", "PUT", "CONVERT"])) {
@@ -179,7 +184,7 @@ export class StatementParser extends ParserBase {
 
             // Leave any nested structured statement to the shared statement parser.
             if (this.isKeyword(["BEGIN", "FOR", "WHILE", "REPEAT", "IF", "CASE",
-                "GET", "PUT", "CONVERT"])) {
+                "GET", "PUT", "CONVERT", "TAKE", "SEND"])) {
                 return;
             }
 

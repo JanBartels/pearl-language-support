@@ -1,0 +1,75 @@
+MODULE TKSF01;
+SYSTEM;
+    Eingang: BU(0240FFFC) <-;
+    Ausgang: BU(0240FFF8) ->;
+    Beide:   BU(0240FFF4) <->;
+PROBLEM;
+    SPC Eingang DATION IN BASIC;
+    SPC Ausgang DATION OUT BASIC;
+    SPC Beide DATION INOUT BASIC;
+
+    DCL Einzel FIXED(15), Bits BIT(8);
+    DCL Vektor(1:3) FIXED(15);
+    DCL Matrix(2,3) FIXED(15);
+    DCL Satz STRUCT[Wert FIXED(15), Status BIT(8)];
+    DCL SatzFeld(2) STRUCT[Wert FIXED(15), Status BIT(8)];
+    DCL Behaelter STRUCT[Werte(3) FIXED(15), Status BIT(8)];
+
+    Probe: TASK;
+        ! K01: Elementare Datenobjekte (bekannter Positivfall).
+        TAKE Einzel FROM Eingang;
+        SEND Einzel TO Ausgang;
+        TAKE Einzel,Bits FROM Eingang;
+        SEND Einzel,Bits TO Ausgang;
+
+        ! K02: Indizierte Feldelemente (erwarteter Positivfall).
+        TAKE Vektor(1) FROM Eingang;
+        SEND Vektor(2) TO Ausgang;
+        TAKE Matrix(1,2) FROM Eingang;
+        SEND Matrix(2,3) TO Ausgang;
+
+        ! K03: Elementare Strukturkomponenten.
+        TAKE Satz.Wert FROM Eingang;
+        SEND Satz.Status TO Ausgang;
+        TAKE SatzFeld(1).Wert FROM Eingang;
+        SEND SatzFeld(2).Status TO Ausgang;
+        TAKE Behaelter.Werte(1) FROM Eingang;
+        SEND Behaelter.Werte(2) TO Ausgang;
+
+        ! K04: Gesamtes eindimensionales Feld (OFFEN).
+        TAKE Vektor FROM Eingang;
+        SEND Vektor TO Ausgang;
+
+        ! K05: Gesamtes mehrdimensionales Feld (OFFEN).
+        TAKE Matrix FROM Eingang;
+        SEND Matrix TO Ausgang;
+
+        ! K06: Gesamte Struktur (OFFEN).
+        TAKE Satz FROM Eingang;
+        SEND Satz TO Ausgang;
+
+        ! K07: Gesamtes Feld von Strukturen (OFFEN).
+        TAKE SatzFeld FROM Eingang;
+        SEND SatzFeld TO Ausgang;
+
+        ! K08: Ganze Struktur als Feldelement (OFFEN).
+        TAKE SatzFeld(1) FROM Eingang;
+        SEND SatzFeld(2) TO Ausgang;
+
+        ! K09: Struktur mit eingebettetem Feld (OFFEN).
+        TAKE Behaelter FROM Eingang;
+        SEND Behaelter TO Ausgang;
+
+        ! K10: Ganzes Feld als Strukturkomponente (OFFEN).
+        TAKE Behaelter.Werte FROM Eingang;
+        SEND Behaelter.Werte TO Ausgang;
+
+        ! K11: Gemischte Liste: skalar plus komplettes Objekt (OFFEN).
+        TAKE Einzel,Vektor,Satz FROM Eingang;
+        SEND Einzel,Vektor,Satz TO Ausgang;
+
+        ! K12: Komplette Objekte an INOUT-BASIC-DATION (OFFEN).
+        TAKE Vektor FROM Beide;
+        SEND Satz TO Beide;
+    END;
+MODEND;

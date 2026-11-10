@@ -42,12 +42,14 @@ import { InterruptStatementValidator } from './interruptStatementValidator';
 import { DationControlStatementNode } from '../ast/problem/statements/dationControlStatementNode';
 import { DationControlStatementValidator } from './dationControlStatementValidator';
 import { BinaryTransferStatementNode } from '../ast/problem/statements/binaryTransferStatementNode';
+import { BasicTransferStatementNode } from '../ast/problem/statements/basicTransferStatementNode';
 import { FormattedIoStatementNode } from '../ast/problem/statements/formattedIoStatementNode';
 import type { FormatListNode } from '../ast/problem/statements/formatListNode';
 import type { FormatReferenceNode } from '../ast/problem/statements/formatReferenceNode';
 import { FormatDeclarationNode } from '../ast/problem/declarations/formatDeclarationNode';
 import { FormattedIoStatementValidator } from './formattedIoStatementValidator';
 import { BinaryTransferStatementValidator } from './binaryTransferStatementValidator';
+import { BasicTransferStatementValidator } from './basicTransferStatementValidator';
 import { CallStatementNode } from '../ast/problem/statements/callStatementNode';
 import { RepetitionNode } from '../ast/problem/statements/repetitionNode';
 import { RepetitionExpressionClauseNode } from '../ast/problem/statements/repetitionExpressionClauseNode';
@@ -2062,6 +2064,12 @@ export class SemanticAnalyzer {
         if (node.kind === AstKind.BinaryTransferStatement) {
             if (environment) new BinaryTransferStatementValidator().validate(
                 node as BinaryTransferStatementNode, environment, state);
+            return environment;
+        }
+
+        if (node.kind === AstKind.BasicTransferStatement) {
+            if (environment) new BasicTransferStatementValidator().validate(
+                node as BasicTransferStatementNode, environment, state);
             return environment;
         }
 

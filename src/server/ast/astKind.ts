@@ -121,4 +121,6 @@ export enum AstKind {
     TaskingFrequency,
     TaskingFrequencyLimit,
     TaskingInterruptStart,
+
+    BasicTransferStatement,
 }

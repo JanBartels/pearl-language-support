@@ -1,0 +1,43 @@
+MODULE TKSF02;
+SYSTEM;
+    Eingang: BU(0240FFFC) <-;
+    Ausgang: BU(0240FFF8) ->;
+PROBLEM;
+    SPC Eingang DATION IN BASIC;
+    SPC Ausgang DATION OUT BASIC;
+
+    DCL Vektor(1:4) FIXED(15);
+    DCL Matrix(2,3) FIXED(15);
+    DCL Behaelter STRUCT[Werte(4) FIXED(15), Status BIT(8)];
+    DCL SatzFeld(3) STRUCT[Wert FIXED(15), Status BIT(8)];
+
+    Probe: TASK;
+        ! S00: Gueltige indizierte Elemente als Kontrolle.
+        TAKE Vektor(2) FROM Eingang;
+        SEND Vektor(3) TO Ausgang;
+        TAKE Matrix(1,2) FROM Eingang;
+        SEND Matrix(2,3) TO Ausgang;
+        TAKE Behaelter.Werte(2) FROM Eingang;
+        SEND SatzFeld(1).Wert TO Ausgang;
+
+        ! S01: Eindimensionale Feld-Ausschnitte (vermutlich Syntaxfehler).
+        TAKE Vektor(2:4) FROM Eingang;
+        SEND Vektor(1:3) TO Ausgang;
+
+        ! S02: Ausschnitte in letzter Matrixdimension (offen).
+        TAKE Matrix(1,2:3) FROM Eingang;
+        SEND Matrix(2,1:2) TO Ausgang;
+
+        ! S03: Ausschnitte in Struktur-Feldkomponente (offen).
+        TAKE Behaelter.Werte(2:4) FROM Eingang;
+        SEND Behaelter.Werte(1:3) TO Ausgang;
+
+        ! S04: Ausschnitt aus einem Feld von Strukturen (offen).
+        TAKE SatzFeld(1:2) FROM Eingang;
+        SEND SatzFeld(2:3) TO Ausgang;
+
+        ! S05: Weiterer gueltiger Fall nach den Slices (Recovery).
+        TAKE SatzFeld(2).Status FROM Eingang;
+        SEND Behaelter.Status TO Ausgang;
+    END;
+MODEND;
