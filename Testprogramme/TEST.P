@@ -54,6 +54,7 @@ SPC MYPROC ENTRY( () FIXED ) GLOBAL;
 
 SPC Boeser_Unterstrich ENTRY GLOBAL;
 
+DCL Pi FLOAT;
 DCL TFU FIXED;
 DCL x FIXED;
 DCL y Counter;

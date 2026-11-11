@@ -13,6 +13,7 @@ export enum SemanticDiagnosticSeverity {
 export enum SemanticDiagnosticCode {
     DuplicateShellProcedure = 'semantic.duplicate-shell-procedure',
     DuplicateShellCommand = 'semantic.duplicate-shell-command',
+    InvalidShellCommandName = 'semantic.invalid-shell-command-name',
     MissingShellProcedure = 'semantic.missing-shell-procedure',
     InvalidShellProcedureSignature = 'semantic.invalid-shell-procedure-signature',
     UnregisteredShellProcedure = 'semantic.unregistered-shell-procedure',

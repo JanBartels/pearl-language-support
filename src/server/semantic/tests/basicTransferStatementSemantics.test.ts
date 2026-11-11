@@ -105,13 +105,33 @@ test('TAKE rejects invariant objects; SEND accepts them', () => {
     assert.deepEqual(r.codes, [SemanticDiagnosticCode.InvalidBasicTakeTarget]);
 });
 
-test('Fields are not among the simple data types supported by /BU', () => {
+test('RTOS-UH 16.7-M accepts entire arrays for TAKE but rejects them for SEND', () => {
     const r = analyze('TAKE Feld FROM Eingang; SEND Feld TO Ausgang;');
     assert.deepEqual(r.syntax, []);
-    assert.deepEqual(r.codes, [
-        SemanticDiagnosticCode.InvalidBasicTransferData,
-        SemanticDiagnosticCode.InvalidBasicTransferData
-    ]);
+    assert.deepEqual(r.codes, [SemanticDiagnosticCode.InvalidBasicTransferData]);
+});
+
+test('Original compiler: TAKE accepts multidimensional and STRUCT-element arrays', () => {
+    const r = analyze(`DCL Matrix(2,3) FIXED(15);
+        DCL SatzFeld(2) STRUCT[Wert FIXED(15), Status BIT(8)];
+        DCL Behaelter STRUCT[Werte(3) FIXED(15), Status BIT(8)];
+        TAKE Feld,Matrix,SatzFeld,Behaelter.Werte FROM Eingang;
+        TAKE Matrix FROM Beide;
+        SEND Feld,Matrix,SatzFeld,Behaelter.Werte TO Ausgang;`);
+    assert.deepEqual(r.syntax, []);
+    assert.deepEqual(r.codes, Array(4).fill(SemanticDiagnosticCode.InvalidBasicTransferData));
+});
+
+test('Original compiler: TAKE and SEND reject complete individual STRUCT values', () => {
+    const r = analyze(`DCL Satz STRUCT[Wert FIXED(15), Status BIT(8)];
+        DCL SatzFeld(2) STRUCT[Wert FIXED(15), Status BIT(8)];
+        TAKE Satz FROM Eingang;
+        SEND Satz TO Ausgang;
+        TAKE SatzFeld(1) FROM Eingang;
+        SEND SatzFeld(2) TO Ausgang;
+        TAKE Satz.Wert,SatzFeld(1).Wert FROM Eingang;`);
+    assert.deepEqual(r.syntax, []);
+    assert.deepEqual(r.codes, Array(4).fill(SemanticDiagnosticCode.InvalidBasicTransferData));
 });
 
 test('Single array element can be transferred with TAKE/SEND', () => {

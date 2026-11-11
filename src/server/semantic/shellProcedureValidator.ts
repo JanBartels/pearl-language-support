@@ -60,8 +60,11 @@ function checkShellSignature(signature: ProcedureType | undefined): boolean {
     });
 }
 
+/** Preserve the written command name in messages and hover.
+ * Only the duplicate-key comparison below uses an uppercase canonical name.
+ */
 function shellName(value: string): string {
-    return value.replace(/^['"]|['"]$/g, '').toUpperCase();
+    return value.replace(/^['"]|['"]$/g, '');
 }
 
 export function validateShellProcedures(
@@ -94,10 +97,14 @@ export function validateShellProcedures(
 
     const declaredProcedures = new Map<string, SourceValue<string>>();
     const commandNames = new Map<string, SourceValue<string>>();
-    const emit = (code: SemanticDiagnosticCode, name: SourceValue<string>, message: string): void => {
+    const emit = (
+        code: SemanticDiagnosticCode,
+        name: SourceValue<string>,
+        message: string,
+        severity = SemanticDiagnosticSeverity.Error
+    ): void => {
         if (name.location) {
-            diagnostics.push({ code, severity: SemanticDiagnosticSeverity.Error,
-                location: name.location, message });
+            diagnostics.push({ code, severity, location: name.location, message });
         }
     };
 
@@ -112,11 +119,22 @@ export function validateShellProcedures(
         declaredProcedures.set(name.value, name);
 
         const cmdName = shellName(command.commandName.value);
-        if (commandNames.has(cmdName)) {
+        // RTOS-UH 3.3, p. 71 recommends uppercase shell command names.
+        // The original spelling is retained; lowercase is a warning, not an error.
+        if (/[a-z]/.test(cmdName)) {
+            emit(SemanticDiagnosticCode.InvalidShellCommandName, command.commandName,
+                `Shellbefehl '${cmdName}' sollte in Grossbuchstaben angegeben werden (RTOS-UH-Empfehlung).`,
+                SemanticDiagnosticSeverity.Warning);
+        }
+        // RTOS-UH 3.1, p. 58: shell command lookup in ROM/RAM is
+        // case-insensitive. Canonicalize ONLY for duplicate detection;
+        // messages and symbol names retain the written spelling.
+        const comparisonKey = cmdName.toUpperCase();
+        if (commandNames.has(comparisonKey)) {
             emit(SemanticDiagnosticCode.DuplicateShellCommand, command.commandName,
                 `Shellbefehl '${cmdName}' ist im SHELLMODULE-Kopf mehrfach angegeben.`);
         } else {
-            commandNames.set(cmdName, command.commandName);
+            commandNames.set(comparisonKey, command.commandName);
         }
 
         const definition = definitions.get(name.value);

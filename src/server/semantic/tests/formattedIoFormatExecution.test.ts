@@ -47,15 +47,15 @@ test('explicit repetition and nested groups do not produce implicit-repeat warni
     assert.deepEqual(diagnostics('PUT A,B,A TO Disk BY (3)F(5);'), []);
 });
 
-test('short list is legal but triggers one implicit-repeat warning', () => {
+test('short list triggers only the implicit-repeat warning, not a trailing surplus warning', () => {
     const results = diagnostics('PUT A,VarBit,B TO Disk BY F(5),B;');
-    assert.deepEqual(results.map(d => d.code), [repeated, excess]);
+    assert.deepEqual(results.map(d => d.code), [repeated]);
     assert.equal(results[0].severity, SemanticDiagnosticSeverity.Warning);
 });
 
 test('implicit repeat still validates the type reached after wrap-around', () => {
     const results = diagnostics('PUT A,VarBit,VarChar20 TO Disk BY F(5),B;');
-    assert.deepEqual(results.map(d => d.code), [repeated, mismatch, excess]);
+    assert.deepEqual(results.map(d => d.code), [repeated, mismatch]);
     assert.match(results[1].message, /VarChar20/);
 });
 
@@ -281,6 +281,14 @@ test('different incompatible data types at the same format remain distinguishabl
     assert.match(result[2].message, /VarChar20/);
 });
 
+
+test('implicit R-based restart suppresses redundant surplus warnings for a truncated final pass', () => {
+    const result = diagnostics('PUT A,VarBit,A,VarBit TO Disk BY R(Ftab);', '',
+        'Ftab: FORMAT (F(7),(1)(B),X,F(7),SKIP);');
+    // The final pass is truncated by the data list; the single warning already
+    // identifies the relevant reason for the incomplete format cycle.
+    assert.deepEqual(result.map(d => d.code), [repeated]);
+});
 
 test('superfluous conversion formats produce exactly one warning at the unused format', () => {
     const result = diagnostics('PUT A TO Disk BY F(5),E(10,3),B,LIST;');

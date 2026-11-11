@@ -100,7 +100,9 @@ const catalog = new Map(RTOS_UH_BUILTINS.map(definition => [definition.name, def
 
 /** Lookup never fabricates a SourceValue: intrinsic names have no declaration site. */
 export function lookupBuiltin(name: string): BuiltinDefinition | undefined {
-    return catalog.get(name.toUpperCase());
+    // RTOS-UH 5.1.2: identifiers are case-sensitive.  An intrinsic named
+    // PI must not capture a user identifier Pi (or pi) when it is not in scope.
+    return catalog.get(name);
 }
 
 export function getBuiltinCatalog(): ReadonlyMap<string, BuiltinDefinition> {

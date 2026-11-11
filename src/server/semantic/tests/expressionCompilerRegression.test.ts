@@ -115,6 +115,29 @@ test('invalid builtin arity and argument types have specific diagnostics', () =>
     ]);
 });
 
+test('RTOS-UH: Pi variable and PI builtin remain distinct case-sensitive names', () => {
+    const r = analyze(`DCL Pi FLOAT;
+        R: PROC RETURNS(FLOAT);
+            RETURN(Pi + PI(1.0));
+        END;`);
+    assert.deepEqual(r.syntax, []);
+    assert.deepEqual(r.errors, []);
+    assert.deepEqual([...r.semantic.builtinBindings].map(([source, builtin]) =>
+        [source.value, builtin.name]), [['PI', 'PI']]);
+    assert.deepEqual(r.semantic.expressionTypes.get(r.returns[0].expression!),
+        { kind: SemanticTypeKind.Float, precision: 23 });
+    assert.doesNotMatch(r.hover('Pi + PI')!, /RTOS-UH-Einbaufunktion/);
+    assert.match(r.hover('PI(1.0)')!, /RTOS-UH-Einbaufunktion/);
+});
+
+test('undeclared Pi is not silently reinterpreted as the builtin PI', () => {
+    const r = analyze(`R: PROC RETURNS(FLOAT); RETURN(Pi); END;`);
+    assert.deepEqual(r.syntax, []);
+    assert.equal(r.semantic.builtinBindings.size, 0);
+    assert.ok(r.errors.some(error => error.code === SemanticDiagnosticCode.UnknownIdentifier));
+    assert.ok(!r.errors.some(error => error.code === SemanticDiagnosticCode.InvalidCallArity));
+});
+
 test('user-defined function shadows intrinsic name', () => {
     const r = analyze(`LEN: PROC(I FIXED) RETURNS(FIXED); RETURN(I); END;
         R: PROC RETURNS(FIXED); RETURN(LEN(3)); END;`);

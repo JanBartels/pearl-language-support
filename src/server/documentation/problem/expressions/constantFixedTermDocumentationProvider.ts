@@ -29,7 +29,7 @@ export class ConstantFixedTermDocumentationProvider
 
         let documentation: string;
 
-        switch (tail.operator.value.toUpperCase()) {
+        switch (tail.operator.value) {
 
             case "*":
                 documentation = md`

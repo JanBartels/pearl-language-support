@@ -211,8 +211,10 @@ export class Preprocessor {
 
             if (!this.context.conditionals.isActive()) {
                 if (token.kind === TokenKind.PreprocessorDirective) {
-                    const directive = stream.tokenText(token).toLowerCase();
-                    switch (directive) {
+                    // External #directives are case-sensitive, even in inactive
+                    // conditional branches. The uppercase RTOS-UH compiler
+                    // directives belong to a different language layer.
+                    switch (stream.tokenText(token)) {
                     case "#ifdef":
                     case "#ifndef":
                     case "#else":

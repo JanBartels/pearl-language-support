@@ -58,14 +58,16 @@ export class BasicTransferStatementValidator {
                         'TAKE erwartet ein beschreibbares Datenobjekt.');
                 }
             }
-            // Chapter 6.2 lists simple data types; total field and structure
-            // transfers are NOT established for BASIC-DATIONs. Do not guess
-            // a byte layout for such objects.
-            if (actual?.kind === SemanticTypeKind.Array
+            // RTOS-UH 16.7-M compiler reference: TAKE accepts entire arrays,
+            // even arrays of STRUCT and array-valued STRUCT components. SEND
+            // rejects entire arrays; both directions reject individual STRUCT
+            // values. Virtual arrays have not been verified and remain out
+            // of scope rather than assuming a transferable memory layout.
+            if (actual?.kind === SemanticTypeKind.Struct
                 || actual?.kind === SemanticTypeKind.VirtualArray
-                || actual?.kind === SemanticTypeKind.Struct) {
+                || (!take && actual?.kind === SemanticTypeKind.Array)) {
                 this.report(state, SemanticDiagnosticCode.InvalidBasicTransferData,
-                    anchor, `${node.keyword.value} unterstützt nur einfache Datenobjekte, keine vollständigen Felder oder Strukturen.`);
+                    anchor, `${node.keyword.value} unterstützt dieses vollständige Feld oder diese Struktur nicht.`);
             }
         }
     }

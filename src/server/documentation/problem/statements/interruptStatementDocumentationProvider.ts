@@ -14,7 +14,7 @@ const descriptions: Record<string, string> = {
 export class InterruptStatementDocumentationProvider extends DocumentationProvider<InterruptStatementNode> {
     override getDocumentation(node: InterruptStatementNode, lookup: AstLookupResult): string | undefined {
         if (lookup.element !== node.keyword) return undefined;
-        const operation = node.keyword.value.toUpperCase();
+        const operation = node.keyword.value;
         const description = descriptions[operation];
         return description ? `# ${operation}\n\n${description}\n\nErwartet einen INTERRUPT-Namen.` : undefined;
     }

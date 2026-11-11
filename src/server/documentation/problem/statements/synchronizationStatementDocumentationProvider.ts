@@ -17,7 +17,7 @@ const descriptions: Record<string, string> = {
 export class SynchronizationStatementDocumentationProvider extends DocumentationProvider<SynchronizationStatementNode> {
     override getDocumentation(node: SynchronizationStatementNode, lookup: AstLookupResult): string | undefined {
         if (lookup.element !== node.keyword) return undefined;
-        const operation = node.keyword.value.toUpperCase();
+        const operation = node.keyword.value;
         const description = descriptions[operation];
         if (!description) return undefined;
         return `# ${operation}\n\n${description}\n\nErwartet ${operation === 'REQUEST' || operation === 'RELEASE' ? 'SEMA' : 'BOLT'}-Objekte als Operanden.`;

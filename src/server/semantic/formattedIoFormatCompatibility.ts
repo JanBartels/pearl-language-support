@@ -116,8 +116,12 @@ export class FormattedIoFormatCompatibility {
         // After the final data element, RTOS-UH still processes trailing
         // positioning formats, up to the next data-consuming format. Only
         // such an unused conversion format constitutes a provable surplus.
+        // Once an implicit restart was necessary, the final truncated pass
+        // may contain further conversion formats.  That is the natural end
+        // of the data-driven transfer, not an independent surplus problem.
+        // Report only the implicit-repetition warning for this statement.
         // Do not restart the cursor: implicit repetition requires more data.
-        this.warnUnusedFormats(cursor, node, state);
+        if (!warned) this.warnUnusedFormats(cursor, node, state);
     }
 
     private warnUnusedFormats(cursor: FormatExecutionCursor, node: FormattedIoStatementNode,

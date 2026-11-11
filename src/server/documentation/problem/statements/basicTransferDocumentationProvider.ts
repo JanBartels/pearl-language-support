@@ -15,9 +15,9 @@ export class BasicTransferDocumentationProvider extends DocumentationProvider<Ba
         if (!token) return undefined;
         switch (token.value) {
             case 'TAKE':
-                return '# TAKE\n\nLiest Prozessdaten von einer BASIC-DATION. RTOS-UH akzeptiert eine leere oder mehrere Variablen umfassende Datenliste. Die Ziele müssen beschreibbar sein. Direkte Hardwarezugriffe können Nebenwirkungen haben.\n\nRTOS-UH: Abschnitt 6.2.';
+                return '# TAKE\n\nLiest Prozessdaten von einer BASIC-DATION. RTOS-UH akzeptiert eine leere oder mehrere Variablen umfassende Datenliste. Die Ziele müssen beschreibbar sein. Der Originalcompiler erlaubt auch vollständige Felder als TAKE-Ziel, einschließlich mehrdimensionaler Felder und Feldern mit Struktur-Elementen, nicht jedoch einzelne vollständige Strukturen oder Feld-Ausschnitte. Direkte Hardwarezugriffe können Nebenwirkungen haben.\n\nRTOS-UH: Abschnitt 6.2.';
             case 'SEND':
-                return '# SEND\n\nÜberträgt Ausdrücke an eine BASIC-DATION. RTOS-UH akzeptiert eine leere oder mehrere Ausdrücke umfassende Datenliste. Die Übertragung kann unmittelbar auf die Peripherie zugreifen.\n\nRTOS-UH: Abschnitt 6.2.';
+                return '# SEND\n\nÜberträgt Ausdrücke an eine BASIC-DATION. RTOS-UH akzeptiert eine leere oder mehrere Ausdrücke umfassende Datenliste. Vollständige Felder, Strukturen und Feld-Ausschnitte sind beim Originalcompiler nicht zulässig; einzelne Feldelemente können übertragen werden. Die Übertragung kann unmittelbar auf die Peripherie zugreifen.\n\nRTOS-UH: Abschnitt 6.2.';
             case 'FROM':
                 return '# FROM\n\nTAKE benötigt eine BASIC-DATION mit Richtung IN oder INOUT.';
             case 'TO':

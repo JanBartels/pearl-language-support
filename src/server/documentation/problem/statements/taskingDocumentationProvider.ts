@@ -24,7 +24,7 @@ const operations: Record<string, string> = {
 export class TaskingStatementDocumentationProvider extends DocumentationProvider<TaskingStatementNode> {
     override getDocumentation(node: TaskingStatementNode, lookup: AstLookupResult): string | undefined {
         if (lookup.element === node.keyword) {
-            const operation = node.keyword.value.toUpperCase();
+            const operation = node.keyword.value;
             const description = operations[operation];
             return description ? `# ${operation}\n\n${description}` : undefined;
         }
@@ -46,25 +46,35 @@ export class TaskingInterruptStartDocumentationProvider extends DocumentationPro
 export class TaskingTimeClauseDocumentationProvider extends DocumentationProvider<TaskingTimeClauseNode> {
     override getDocumentation(node: TaskingTimeClauseNode, lookup: AstLookupResult): string | undefined {
         if (lookup.element !== node.keyword) return undefined;
-        return node.keyword.value.toUpperCase() === 'AT'
-            ? '# AT\n\nZeitgesteuerte Einplanung zu einem CLOCK-Ausdruck.'
-            : '# AFTER\n\nZeitgesteuerte Einplanung nach einem nichtnegativen DURATION-Ausdruck. 0 SEC bezeichnet den nächsten Timertick.';
+        if (node.keyword.value === 'AT') {
+            return '# AT\n\nZeitgesteuerte Einplanung zu einem CLOCK-Ausdruck.';
+        }
+        if (node.keyword.value === 'AFTER') {
+            return '# AFTER\n\nZeitgesteuerte Einplanung nach einem nichtnegativen DURATION-Ausdruck. 0 SEC bezeichnet den nächsten Timertick.';
+        }
+        return undefined;
     }
 }
 
 export class TaskingFrequencyDocumentationProvider extends DocumentationProvider<TaskingFrequencyNode> {
     override getDocumentation(node: TaskingFrequencyNode, lookup: AstLookupResult): string | undefined {
-        return lookup.element === node.keyword
-            ? `# ${node.keyword.value.toUpperCase()}\n\nZyklische Einplanung im Abstand eines nichtnegativen DURATION-Ausdrucks. Optional wird der Zyklus durch UNTIL oder DURING begrenzt.`
-            : undefined;
+        if (lookup.element !== node.keyword
+            || (node.keyword.value !== 'ALL' && node.keyword.value !== 'EVERY')) {
+            return undefined;
+        }
+        return `# ${node.keyword.value}\n\nZyklische Einplanung im Abstand eines nichtnegativen DURATION-Ausdrucks. Optional wird der Zyklus durch UNTIL oder DURING begrenzt.`;
     }
 }
 
 export class TaskingFrequencyLimitDocumentationProvider extends DocumentationProvider<TaskingFrequencyLimitNode> {
     override getDocumentation(node: TaskingFrequencyLimitNode, lookup: AstLookupResult): string | undefined {
         if (lookup.element !== node.keyword) return undefined;
-        return node.keyword.value.toUpperCase() === 'UNTIL'
-            ? '# UNTIL\n\nBegrenzt eine zyklische Einplanung bis zu einem CLOCK-Ausdruck. Nur zusammen mit ALL/EVERY.'
-            : '# DURING\n\nBegrenzt eine zyklische Einplanung auf eine nichtnegative DURATION. Nur zusammen mit ALL/EVERY; 0 SEC ist zulässig.';
+        if (node.keyword.value === 'UNTIL') {
+            return '# UNTIL\n\nBegrenzt eine zyklische Einplanung bis zu einem CLOCK-Ausdruck. Nur zusammen mit ALL/EVERY.';
+        }
+        if (node.keyword.value === 'DURING') {
+            return '# DURING\n\nBegrenzt eine zyklische Einplanung auf eine nichtnegative DURATION. Nur zusammen mit ALL/EVERY; 0 SEC ist zulässig.';
+        }
+        return undefined;
     }
 }
