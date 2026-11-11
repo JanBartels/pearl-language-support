@@ -11,6 +11,9 @@ export enum SemanticDiagnosticSeverity {
 
 
 export enum SemanticDiagnosticCode {
+    UnusedSymbol = 'semantic.unused-symbol',
+    WrittenButNeverRead = 'semantic.written-but-never-read',
+    ReadButNeverWritten = 'semantic.read-but-never-written',
     DuplicateShellProcedure = 'semantic.duplicate-shell-procedure',
     DuplicateShellCommand = 'semantic.duplicate-shell-command',
     InvalidShellCommandName = 'semantic.invalid-shell-command-name',

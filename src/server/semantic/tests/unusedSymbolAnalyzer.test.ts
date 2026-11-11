@@ -1,0 +1,393 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Jan Bartels
+
+import { strict as assert } from 'node:assert';
+import { test } from 'node:test';
+import { ProblemCollection } from '../../core/problemCollection';
+import { Lexer } from '../../lexer/lexer';
+import { Parser } from '../../parser/parser';
+import { ConditionalStack } from '../../preproc/conditionalStack';
+import { MacroTable } from '../../preproc/macroTable';
+import { Preprocessor } from '../../preproc/preprocessor';
+import { PreprocessorContext } from '../../preproc/preprocessorContext';
+import { PreprocessorConditionalBlockCollection } from '../../preproc/preprocessorConditionalBlockCollection';
+import { PreprocessorConditionalBlockStack } from '../../preproc/preprocessorConditionalBlockStack';
+import { FileSource } from '../../source/fileSource';
+import type { DocumentRegistry } from '../../utility/documentRegistry';
+import type { Logger } from '../../utility/logging/logger';
+import { SemanticAnalyzer } from '../semanticAnalyzer';
+import { SemanticDiagnosticCode, SemanticDiagnosticSeverity } from '../semanticDiagnostic';
+import { SymbolReferenceCollector } from '../symbolReferenceCollector';
+import { SymbolReferenceResolver } from '../symbolReferenceResolver';
+import { UnusedSymbolAnalyzer } from '../unusedSymbolAnalyzer';
+import { SymbolAccessKind } from '../symbolUsageIndex';
+
+const logger: Logger = { info() {}, warn() {}, error() {} };
+
+function analyze(body: string) {
+    const source = new FileSource('file:///unused.pearl',
+        `P=MPC603; SC=2000; MODULE M; PROBLEM; ${body} MODEND;`);
+    const problems = new ProblemCollection();
+    const context = new PreprocessorContext(
+        {} as DocumentRegistry, new MacroTable(), new ConditionalStack(),
+        new PreprocessorConditionalBlockStack()
+    );
+    const tokens = new Lexer(source, problems, logger).tokenize();
+    const stream = Preprocessor.create(tokens, source, context, problems, [],
+        new PreprocessorConditionalBlockCollection(), logger);
+    const ast = new Parser(stream, problems, logger).parse();
+    const references = new SymbolReferenceCollector().collect(ast);
+    const semantic = new SemanticAnalyzer().analyze(ast);
+    const resolutions = new SymbolReferenceResolver().resolve(references, semantic);
+    const result = new UnusedSymbolAnalyzer().analyze(semantic, resolutions);
+    return { syntax: problems.toArray().map(p => p.message), semantic, result,
+        enriched: semantic.withSymbolUsages(result.usages, result.diagnostics) };
+}
+
+function unused(body: string): string[] {
+    const result = analyze(body);
+    assert.deepEqual(result.syntax, []);
+    return result.result.diagnostics
+        .filter(d => d.code === SemanticDiagnosticCode.UnusedSymbol).map(d => {
+        assert.equal(d.code, SemanticDiagnosticCode.UnusedSymbol);
+        assert.equal(d.severity, SemanticDiagnosticSeverity.Warning);
+        return d.message.match(/'([^']+)'/)?.[1] ?? '';
+    });
+}
+
+test('detects unused local and module variables; a write is still a use', () => {
+    assert.deepEqual(unused(`
+        DCL ModuleUnused FIXED;
+        Main: TASK;
+            DCL LocalUnused FIXED;
+            DCL Written FIXED;
+            Written := 5;
+        END;`), ['ModuleUnused', 'Main', 'LocalUnused']);
+});
+
+test('GLOBAL data, procedures and tasks are assumed used across modules', () => {
+    assert.deepEqual(unused(`
+        DCL Shared FIXED GLOBAL;
+        Remote: PROC GLOBAL; END;
+        RemoteTask: TASK GLOBAL; END;
+        DCL Local FIXED;
+        LocalProc: PROC; END;
+        LocalTask: TASK; END;`), ['Local', 'LocalProc', 'LocalTask']);
+});
+
+test('TASK MAIN is implicitly used without an ACTIVATE reference', () => {
+    const result = analyze(`Startup: TASK MAIN; END; Ordinary: TASK; END;`);
+    assert.deepEqual(result.syntax, []);
+    assert.deepEqual(result.result.diagnostics.map(d => d.message),
+        ["Symbol 'Ordinary' wird nicht verwendet."]);
+    const startup = result.enriched.symbolUsages.all.find(u => u.declaration.value === 'Startup')!;
+    assert.equal(startup.implicitlyUsed, true);
+    assert.equal(startup.externallyVisible, false);
+    assert.equal(startup.unused, false);
+});
+
+test('TASK MAIN remains implicitly used when preceded by a local SPC', () => {
+    const result = analyze(`SPC Startup TASK; Startup: TASK MAIN; END;`);
+    assert.deepEqual(result.syntax, []);
+    assert.deepEqual(result.result.diagnostics, []);
+    const usages = result.result.usages.all.filter(u => u.declaration.value === 'Startup');
+    assert.equal(usages.length, 1);
+    assert.equal(usages[0].implicitlyUsed, true);
+    assert.equal(usages[0].unused, false);
+});
+
+test('external GLOBAL specifications are never diagnosed as unused', () => {
+    assert.deepEqual(unused(`
+        SPC External FIXED GLOBAL;
+        SPC ExternalProc PROC GLOBAL;
+        SPC ExternalTask TASK GLOBAL;
+        Main: PROC; END;`), ['Main']);
+});
+
+test('real references mark types, procedures, task targets and labels as used', () => {
+    assert.deepEqual(unused(`
+        TYPE Used FIXED;
+        TYPE Unused FIXED;
+        DCL X Used;
+        Helper: PROC; END;
+        Worker: TASK; END;
+        Main: PROC;
+            DCL Local FIXED;
+            Local := X;
+            CALL Helper;
+            ACTIVATE Worker;
+            GOTO Done;
+            Done: ;
+        END;`), ['Unused', 'Main']);
+});
+
+test('FORMAT declarations count R(...) references as uses', () => {
+    assert.deepEqual(unused(`
+        SPC Disk DATION INOUT ALPHIC GLOBAL;
+        Startup: TASK MAIN;
+            DCL V FIXED;
+            InUse: FORMAT (F(4));
+            UnusedFormat: FORMAT (F(5));
+            PUT V TO Disk BY R(InUse);
+        END;`), ['UnusedFormat']);
+});
+
+test('local SPC/PROC declaration sites are counted as one definition, not as uses', () => {
+    const result = analyze(`SPC Helper PROC; Helper: PROC; END;`);
+    assert.deepEqual(result.syntax, []);
+    assert.deepEqual(result.result.diagnostics.map(d => d.message),
+        ["Symbol 'Helper' wird nicht verwendet."]);
+    assert.equal(result.result.usages.all.filter(u => u.declaration.value === 'Helper').length, 1);
+});
+
+test('a referenced local SPC/PROC and shadowed parameters resolve independently', () => {
+    assert.deepEqual(unused(`
+        SPC Helper PROC;
+        Helper: PROC; END;
+        Main: PROC(X FIXED, Y FIXED);
+            DCL Z FIXED;
+            Z := X;
+            CALL Helper;
+        END;`), ['Main', 'Y']);
+});
+
+test('labels without GOTO are unused, FOR controls and STRUCT components are not diagnosed', () => {
+    assert.deepEqual(unused(`
+        TYPE Item STRUCT[Value FIXED];
+        Main: PROC;
+            FOR Index FROM 1 TO 5 REPEAT END;
+            Unreachable: ;
+        END;`), ['Item', 'Main', 'Unreachable']);
+});
+
+test('duplicate declarations do not trigger a cascading unused warning at the error site', () => {
+    const result = analyze('TYPE A FIXED; TYPE A FLOAT;');
+    assert.ok(result.semantic.diagnostics.some(d => d.code === SemanticDiagnosticCode.DuplicateType));
+    assert.deepEqual(result.result.diagnostics.map(d => d.location.span.start),
+        [result.enriched.symbolUsages.all.find(u => u.symbol.name.value === 'A')!.declaration.location!.span.start]);
+});
+
+test('the usage index survives additional diagnostics and distinguishes mapped SourceValues', () => {
+    const result = analyze('DCL A FIXED; DCL B FIXED; Main: PROC; A := 1; END;');
+    const usages = result.enriched.symbolUsages;
+    assert.ok(usages.all.some(u => u.declaration.value === 'A' && !u.unused && u.references.length === 1));
+    assert.ok(usages.all.some(u => u.declaration.value === 'B' && u.unused));
+    assert.equal(result.enriched.withAdditionalDiagnostics([]).symbolUsages, usages);
+    const warning = result.result.diagnostics[0];
+    assert.ok(result.enriched.diagnostics.includes(warning));
+});
+
+test('Validator publishes unused warnings and the reusable usage index', async () => {
+    const { Validator } = await import('../../validation/validator');
+    const validator = new Validator(
+        {} as ConstructorParameters<typeof Validator>[0],
+        { get: () => undefined } as unknown as DocumentRegistry,
+        logger
+    );
+    const text = `P=MPC603; SC=2000; MODULE M; PROBLEM;
+        DCL Used FIXED, Unused FIXED, Exported FIXED GLOBAL;
+        Startup: TASK MAIN;
+            Used := 1;
+        END;
+        MODEND;`;
+    const document = {
+        uri: 'file:///full-pipeline.P',
+        version: 1,
+        getText: () => text
+    };
+    const result = await validator.analyze(
+        document as Parameters<InstanceType<typeof Validator>['analyze']>[0],
+        { macros: {}, warnOnCharTruncation: true } as Parameters<InstanceType<typeof Validator>['analyze']>[1]
+    );
+    assert.deepEqual(result.problems.toArray().map(problem => problem.message),
+        ["Variable 'Used' wird beschrieben, aber niemals gelesen.",
+         "Symbol 'Unused' wird nicht verwendet."]);
+    const usages = result.rootAnalysis.semanticContext!.symbolUsages.all;
+    assert.equal(usages.find(usage => usage.declaration.value === 'Used')?.unused, false);
+    assert.equal(usages.find(usage => usage.declaration.value === 'Unused')?.unused, true);
+    assert.equal(usages.find(usage => usage.declaration.value === 'Exported')?.externallyVisible, true);
+    assert.equal(usages.find(usage => usage.declaration.value === 'Startup')?.implicitlyUsed, true);
+});
+
+function warningNames(body: string, code: SemanticDiagnosticCode): string[] {
+    const result = analyze(body);
+    assert.deepEqual(result.syntax, []);
+    return result.result.diagnostics.filter(d => d.code === code)
+        .map(d => d.message.match(/'([^']+)'/)?.[1] ?? '');
+}
+
+test('distinguishes a read from a write, including self-increment and array indices', () => {
+    const result = analyze(`
+        DCL OnlyWritten FIXED, OnlyRead FIXED, Both FIXED, Idx FIXED;
+        DCL Values(10) FIXED;
+        Startup: TASK MAIN;
+            OnlyWritten := 10;
+            Both := OnlyRead;
+            Both := Both + 1;
+            Values(Idx) := Both;
+        END;`);
+    assert.deepEqual(result.syntax, []);
+    const byName = (name: string) => result.result.usages.all.find(u => u.declaration.value === name)!;
+    assert.equal(byName('OnlyWritten').written, true);
+    assert.equal(byName('OnlyWritten').read, false);
+    assert.equal(byName('OnlyRead').read, true);
+    assert.equal(byName('OnlyRead').written, false);
+    assert.equal(byName('Both').read && byName('Both').written, true);
+    assert.equal(byName('Idx').read, true);
+    assert.equal(byName('Values').written, true);
+    assert.deepEqual(result.result.diagnostics.filter(d =>
+        d.code === SemanticDiagnosticCode.WrittenButNeverRead).map(d => d.message), [
+            "Variable 'OnlyWritten' wird beschrieben, aber niemals gelesen.",
+            "Variable 'Values' wird beschrieben, aber niemals gelesen."
+        ]);
+    assert.deepEqual(result.result.diagnostics.filter(d =>
+        d.code === SemanticDiagnosticCode.ReadButNeverWritten).map(d => d.message), [
+            "Variable 'OnlyRead' wird gelesen, aber niemals beschrieben.",
+            "Variable 'Idx' wird gelesen, aber niemals beschrieben."
+        ]);
+    const writeRef = byName('OnlyWritten').references[0].identifier;
+    assert.equal(result.result.usages.lookupAccess(writeRef)?.kind, SymbolAccessKind.Write);
+    assert.equal(result.result.usages.lookupReference(writeRef), byName('OnlyWritten'));
+});
+
+test('INIT values prevent read-but-never-written, but not unused or write-only warnings', () => {
+    assert.deepEqual(warningNames(`
+        DCL Initialized FIXED INIT(5), UnusedInit FIXED INIT(10), Written FIXED INIT(1);
+        Startup: TASK MAIN;
+            DCL Receiver FIXED;
+            Receiver := Initialized;
+            Written := 2;
+        END;`, SemanticDiagnosticCode.ReadButNeverWritten), []);
+    assert.deepEqual(warningNames(`
+        DCL Initialized FIXED INIT(5), UnusedInit FIXED INIT(10), Written FIXED INIT(1);
+        Startup: TASK MAIN;
+            DCL Receiver FIXED;
+            Receiver := Initialized;
+            Written := 2;
+        END;`, SemanticDiagnosticCode.UnusedSymbol), ['UnusedInit']);
+});
+
+test('GLOBAL and implicit TASK MAIN are exempt from access-mode warnings', () => {
+    const result = analyze(`
+        DCL External FIXED GLOBAL, Local FIXED;
+        Startup: TASK MAIN;
+            Local := External;
+        END;`);
+    assert.deepEqual(result.syntax, []);
+    assert.deepEqual(result.result.diagnostics.map(d => d.code),
+        [SemanticDiagnosticCode.WrittenButNeverRead]);
+    assert.equal(result.result.usages.all.find(u => u.declaration.value === 'Startup')?.accesses[0]?.kind,
+        SymbolAccessKind.Implicit);
+});
+
+test('GET/PUT, READ/WRITE, TAKE/SEND and CONVERT classify data direction', () => {
+    const result = analyze(`
+        SPC Text DATION INOUT ALPHIC GLOBAL;
+        SPC Binary DATION INOUT BASIC GLOBAL;
+        SPC Port DATION INOUT BASIC GLOBAL;
+        Startup: TASK MAIN;
+            DCL FromGet FIXED, ToPut FIXED;
+            DCL FromRead FIXED, ToWrite FIXED;
+            DCL FromTake FIXED, ToSend FIXED;
+            DCL FromConvert FIXED, ToConvert FIXED;
+            DCL Buffer CHAR(30);
+            GET FromGet FROM Text BY F(5);
+            PUT ToPut TO Text BY F(5);
+            READ FromRead FROM Binary;
+            WRITE ToWrite TO Binary;
+            TAKE FromTake FROM Port;
+            SEND ToSend TO Port;
+            CONVERT FromConvert FROM Buffer BY F(5);
+            CONVERT ToConvert TO Buffer BY F(5);
+        END;`);
+    assert.deepEqual(result.syntax, []);
+    const kind = (name: string) => result.result.usages.all.find(u => u.declaration.value === name)!.accesses[0]?.kind;
+    for (const name of ['FromGet', 'FromRead', 'FromTake', 'FromConvert']) {
+        assert.equal(kind(name), SymbolAccessKind.Write, name);
+    }
+    for (const name of ['ToPut', 'ToWrite', 'ToSend', 'ToConvert']) {
+        assert.equal(kind(name), SymbolAccessKind.Read, name);
+    }
+});
+
+test('IDENT actuals are address uses; do not infer read/write effects of the callee', () => {
+    const result = analyze(`
+        Writer: PROC(X FIXED IDENT); X := 1; END;
+        Startup: TASK MAIN;
+            DCL Passed FIXED, NotPassed FIXED;
+            CALL Writer(Passed);
+            NotPassed := 1;
+        END;`);
+    assert.deepEqual(result.syntax, []);
+    const passed = result.result.usages.all.find(u => u.declaration.value === 'Passed')!;
+    assert.equal(passed.addressTaken, true);
+    assert.equal(passed.read || passed.written, false);
+    assert.equal(passed.accesses[0].kind, SymbolAccessKind.Address);
+    assert.ok(!result.result.diagnostics.some(d => d.message.includes("'Passed'")));
+    assert.ok(result.result.diagnostics.some(d => d.code === SemanticDiagnosticCode.WrittenButNeverRead
+        && d.message.includes("'NotPassed'")));
+});
+
+test('REF INIT references record address escapes and suppress access-mode warnings', () => {
+    const result = analyze(`
+        DCL Value FIXED;
+        DCL Pointer REF FIXED INIT(Value);
+        Startup: TASK MAIN;
+            Value := 3;
+            PUT Pointer TO Log;
+        END;`);
+    const value = result.result.usages.all.find(u => u.declaration.value === 'Value')!;
+    assert.equal(value.addressTaken, true);
+    assert.equal(value.accesses[0].kind, SymbolAccessKind.Address);
+    assert.ok(!result.result.diagnostics.some(d =>
+        d.code === SemanticDiagnosticCode.WrittenButNeverRead && d.message.includes("'Value'")));
+});
+
+test('REF value actuals take addresses; REF variables passed by value are read', () => {
+    const result = analyze(`
+        Accept: PROC(P REF FIXED); END;
+        Startup: TASK MAIN;
+            DCL Target FIXED, Ptr REF FIXED INIT(Target);
+            CALL Accept(Target);
+            CALL Accept(Ptr);
+        END;`);
+    assert.deepEqual(result.syntax, []);
+    const target = result.result.usages.all.find(u => u.declaration.value === 'Target')!;
+    const ptr = result.result.usages.all.find(u => u.declaration.value === 'Ptr')!;
+    assert.equal(target.addressTaken, true);
+    assert.equal(target.read, false);
+    assert.equal(ptr.read, true);
+    assert.equal(ptr.initialized, true);
+    assert.ok(!result.result.diagnostics.some(d => d.message.includes("'Target'")));
+    assert.ok(!result.result.diagnostics.some(d => d.message.includes("'Ptr'")));
+});
+
+test('RST output is a write, while ordinary format arguments are reads', () => {
+    const result = analyze(`
+        SPC Disk DATION INOUT ALPHIC GLOBAL;
+        Startup: TASK MAIN;
+            DCL Status FIXED, Width FIXED, Value FIXED;
+            GET Value FROM Disk BY RST(Status), F(Width);
+        END;`);
+    assert.deepEqual(result.syntax, []);
+    const kind = (name: string) => result.result.usages.all
+        .find(u => u.declaration.value === name)!.accesses[0]?.kind;
+    assert.equal(kind('Status'), SymbolAccessKind.Write);
+    assert.equal(kind('Width'), SymbolAccessKind.Read);
+    assert.equal(kind('Value'), SymbolAccessKind.Write);
+});
+
+test('repeated writes remain a single symbol-level warning without flow analysis', () => {
+    const result = analyze(`
+        Startup: TASK MAIN;
+            DCL X FIXED;
+            X := 1;
+            X := 2;
+            IF X > 0 THEN X := 3; FIN;
+        END;`);
+    assert.deepEqual(result.syntax, []);
+    const usage = result.result.usages.all.find(u => u.declaration.value === 'X')!;
+    assert.equal(usage.read, true);
+    assert.equal(usage.written, true);
+    assert.ok(!result.result.diagnostics.some(d => d.message.includes("'X'")));
+});

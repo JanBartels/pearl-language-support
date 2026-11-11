@@ -30,6 +30,7 @@ import { SemanticAnalyzer } from '../semantic/semanticAnalyzer';
 import { SymbolReferenceCollector } from '../semantic/symbolReferenceCollector';
 import { SymbolReferenceResolver } from '../semantic/symbolReferenceResolver';
 import { SymbolOccurrenceIndex } from '../semantic/symbolOccurrenceIndex';
+import { UnusedSymbolAnalyzer } from '../semantic/unusedSymbolAnalyzer';
 import { CompilerControlAnalyzer } from '../semantic/compilerControlAnalyzer';
 import {
     SemanticDiagnostic,
@@ -166,11 +167,6 @@ export class Validator {
             compilerControlDiagnostics
         );
 
-        this.addSemanticDiagnostics(
-            problems,
-            semanticContext.diagnostics
-        );
-
         // ----------------------------
         // Symbolbindungen zu den syntaktischen Referenzen zuordnen
         // ----------------------------
@@ -182,6 +178,17 @@ export class Validator {
         const symbolOccurrences = new SymbolOccurrenceIndex(
             symbolReferenceResolutions, semanticContext
         );
+
+        // ----------------------------
+        // Verwendung der aufgeloesten Symbole (unabhaengiger semantischer Pass)
+        // ----------------------------
+
+        const unused = new UnusedSymbolAnalyzer().analyze(
+            semanticContext, symbolReferenceResolutions
+        );
+        semanticContext = semanticContext.withSymbolUsages(unused.usages, unused.diagnostics);
+
+        this.addSemanticDiagnostics(problems, semanticContext.diagnostics);
 
         // ----------------------------
         // Analysis

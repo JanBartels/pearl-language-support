@@ -98,6 +98,9 @@ export interface ProcedureSymbol extends GlobalSymbolBase {
 export interface TaskSymbol extends GlobalSymbolBase {
 
     readonly kind: SymbolKind.Task;
+
+    /** TASK MAIN is activated automatically at program or system start. */
+    readonly main?: boolean;
 }
 
 export interface LoopControlVariableSymbol extends SymbolBase {

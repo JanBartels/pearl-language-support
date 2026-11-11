@@ -22,6 +22,7 @@ import type { SemanticDiagnostic } from './semanticDiagnostic';
 import type { ModuleConfiguration } from './moduleConfiguration';
 import type { SemanticType } from './semanticType';
 import type { DataObjectSymbol, TypeSymbol } from './symbol';
+import { SymbolUsageIndex } from './symbolUsageIndex';
 
 export class SemanticContext {
     readonly typeDefinitions: ReadonlyMap<TypeSymbol, SemanticType>;
@@ -38,6 +39,7 @@ export class SemanticContext {
     readonly moduleConfigurations: ReadonlyMap<ModuleNode, ModuleConfiguration>;
     readonly shellCommandsByProcedure: ReadonlyMap<ProcedureDeclarationNode, ShellCommandNode>;
     readonly localSpecificationRelations: LocalSpecificationRelationIndex;
+    readonly symbolUsages: SymbolUsageIndex;
 
     constructor(
         typeDefinitions: ReadonlyMap<TypeSymbol, SemanticType> = new Map(),
@@ -53,8 +55,10 @@ export class SemanticContext {
         shellCommandsByProcedure: ReadonlyMap<ProcedureDeclarationNode, ShellCommandNode> = new Map(),
         builtinBindings: ReadonlyMap<SourceValue<string>, BuiltinDefinition> = new Map(),
         localSpecificationRelations: LocalSpecificationRelationIndex = new Map(),
-        expressionTypes: ReadonlyMap<ExpressionNode, SemanticType> = new Map()
+        expressionTypes: ReadonlyMap<ExpressionNode, SemanticType> = new Map(),
+        symbolUsages: SymbolUsageIndex = new SymbolUsageIndex()
     ) {
+        this.symbolUsages = symbolUsages;
         this.typeDefinitions = new Map(typeDefinitions);
         this.expressionTypes = new Map(expressionTypes);
         this.bindings = new Map(bindings);
@@ -132,7 +136,28 @@ export class SemanticContext {
             this.shellCommandsByProcedure,
             this.builtinBindings,
             this.localSpecificationRelations,
-            this.expressionTypes
+            this.expressionTypes,
+            this.symbolUsages
+        );
+    }
+
+    withSymbolUsages(usages: SymbolUsageIndex, diagnostics: readonly SemanticDiagnostic[]): SemanticContext {
+        return new SemanticContext(
+            this.typeDefinitions,
+            this.bindings,
+            [...this.diagnostics, ...diagnostics],
+            this.constantFixedExpressionValues,
+            this.namedConstantValues,
+            this.initialValues,
+            this.constantFixedValues,
+            this.timeConstantValues,
+            this.semaPresetValues,
+            this.moduleConfigurations,
+            this.shellCommandsByProcedure,
+            this.builtinBindings,
+            this.localSpecificationRelations,
+            this.expressionTypes,
+            usages
         );
     }
 

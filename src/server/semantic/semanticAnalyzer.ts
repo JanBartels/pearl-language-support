@@ -1812,7 +1812,8 @@ export class SemanticAnalyzer {
             kind: SymbolKind.Task,
             name: node.name,
             definition: node.name,
-            global: this.globalSymbolAttribute(node.global)
+            global: this.globalSymbolAttribute(node.global),
+            main: node.mainKeyword !== undefined
         };
 
         state.taskSymbols.set(node, symbol);
