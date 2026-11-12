@@ -707,7 +707,7 @@ export class Preprocessor {
         const name = this.input.tokenText(token);
         const macroDefinition = this.context.macroTable.get(name);
         if (macroDefinition) {
-            this.recordMacroReference(token, macroDefinition);
+            this.recordMacroReference(token, macroDefinition, 'undef');
         }
 
         // Makronamen konsumieren
@@ -846,12 +846,14 @@ export class Preprocessor {
 
     private recordMacroReference(
         token: Token,
-        definition: MacroDefinition
+        definition: MacroDefinition,
+        kind?: 'undef'
     ): void {
 
         this.macroReferences.push({
             definition,
-            location: token.location
+            location: token.location,
+            ...(kind ? { kind } : {})
         });
     }    
 }

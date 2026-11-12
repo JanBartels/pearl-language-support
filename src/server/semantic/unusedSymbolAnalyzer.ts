@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import type { SourceValue } from '../core/sourceValue';
+import { ProblemTag } from '../core/problemTag';
 import type { SemanticContext } from './semanticContext';
 import {
     SemanticDiagnosticCode,
@@ -72,8 +73,13 @@ export class UnusedSymbolAnalyzer {
             const written = accesses.some(access => access.kind === SymbolAccessKind.Write);
             const addressTaken = accesses.some(access => access.kind === SymbolAccessKind.Address);
             const uncertain = accesses.some(access => access.kind === SymbolAccessKind.Unknown);
+            // INIT also exists for aggregates such as STRUCT whose values are
+            // not yet represented by the scalar constant initialization resolver.
+            // A declared initializer rules out "never written" independently
+            // of whether the compiler can evaluate its value.
             const initialized = definitionSymbol.kind === SymbolKind.DataObject
-                && semantic.initialValues.has(definitionSymbol);
+                && (definitionSymbol.hasInitializationAttribute === true
+                    || semantic.initialValues.has(definitionSymbol));
             const unused = references.length === 0 && !externallyVisible && !implicitlyUsed;
             usages.push({ symbol: definitionSymbol, declaration, references, accesses,
                 read, written, addressTaken, uncertain, initialized,
@@ -87,7 +93,8 @@ export class UnusedSymbolAnalyzer {
                     code: SemanticDiagnosticCode.UnusedSymbol,
                     severity: SemanticDiagnosticSeverity.Warning,
                     location: declaration.location,
-                    message: `Symbol '${declaration.value}' wird nicht verwendet.`
+                    message: `Symbol '${declaration.value}' wird nicht verwendet.`,
+                    tags: [ProblemTag.Unnecessary]
                 });
                 continue;
             }
@@ -103,7 +110,8 @@ export class UnusedSymbolAnalyzer {
                     code: SemanticDiagnosticCode.WrittenButNeverRead,
                     severity: SemanticDiagnosticSeverity.Warning,
                     location: declaration.location,
-                    message: `Variable '${declaration.value}' wird beschrieben, aber niemals gelesen.`
+                    message: `Variable '${declaration.value}' wird beschrieben, aber niemals gelesen.`,
+                    tags: [ProblemTag.Unnecessary]
                 });
             } else if (read && !written && !initialized) {
                 diagnostics.push({

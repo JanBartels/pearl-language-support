@@ -47,7 +47,7 @@ export interface SymbolUsage {
     readonly written: boolean;
     readonly addressTaken: boolean;
     readonly uncertain: boolean;
-    /** Semantic INIT value, distinct from a runtime write. */
+    /** Declared INIT attribute (or resolved INIT value), not a runtime write. */
     readonly initialized: boolean;
     /** May be used externally: GLOBAL, any TASK, or a compiler +G procedure entry. */
     readonly externallyVisible: boolean;

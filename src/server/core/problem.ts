@@ -3,10 +3,11 @@
 
 import { Location } from './location';
 import { Severity } from './severity';
+import { ProblemTag } from './problemTag';
 
 export interface ProblemOptions {
   readonly code?: string;
-  readonly tags?: readonly string[];
+  readonly tags?: readonly ProblemTag[];
 }
 
 export class Problem {
@@ -15,7 +16,7 @@ export class Problem {
   readonly message: string;
   readonly severity: Severity;
   readonly code?: string | undefined;
-  readonly tags?: readonly string[] | undefined;
+  readonly tags?: readonly ProblemTag[] | undefined;
 
   private constructor(
     location: Location,

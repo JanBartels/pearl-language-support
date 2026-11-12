@@ -5,4 +5,21 @@ PROBLEM;
 
 DCL Value MY_TYPE;
 
+#define Unused "42"
+
+#define Unused2
+#undef Unused2
+
+#define Used
+#ifdef Used
+#endif
+
+#define Used2 "42"
+DCL X FIXED INIT( Used2 );
+
+#define UnusedUsed "42"
+#undef UnusedUsed
+#define UnusedUsed "43"
+DCL X2 FIXED INIT( UnusedUsed );
+
 MODEND;

@@ -8,6 +8,10 @@ import { Lexer } from '../lexer/lexer';
 import { ArrayTokenStream } from '../lexer/arrayTokenStream';
 
 import { ProblemCollection } from '../core/problemCollection';
+import { ProblemTag } from '../core/problemTag';
+import { PreprocessorInactiveRegionCollector } from '../preproc/preprocessorInactiveRegionCollector';
+import { MacroOccurrenceIndex } from '../preproc/macroOccurrenceIndex';
+import { UnusedMacroAnalyzer } from '../preproc/unusedMacroAnalyzer';
 
 import { Preprocessor } from '../preproc/preprocessor';
 import { PreprocessorContext } from '../preproc/preprocessorContext';
@@ -116,6 +120,28 @@ export class Validator {
         // passed to createExpanded only serves the old preprocessor code path.
         // Textual expansion emits its references directly into the result builder.
         const effectiveMacroReferences = [...expanded.macroReferences];
+        const macroOccurrences = new MacroOccurrenceIndex(
+            context.macroDefinitions, effectiveMacroReferences
+        );
+        for (const definition of new UnusedMacroAnalyzer().analyze(macroOccurrences)) {
+            if (!definition.location) continue;
+            problems.warning(
+                definition.location,
+                `Makro '${definition.name}' wird nicht verwendet.`,
+                { tags: [ProblemTag.Unnecessary] }
+            );
+        }
+
+        // Inactive source ranges are editor metadata produced by the preprocessor.
+        // No disabled text is parsed or semantically analyzed.
+        const inactiveRegions = new PreprocessorInactiveRegionCollector().collect(
+            preprocessorConditionalBlocks
+        );
+        for (const location of inactiveRegions) {
+            problems.hint(location, 'Inaktiver Code (Präprozessor).', {
+                tags: [ProblemTag.Unnecessary]
+            });
+        }
 
         const compilerTokens = new Lexer(
             expanded.source,
@@ -210,7 +236,7 @@ export class Validator {
             symbolReferenceResolutions,
             symbolOccurrences,
             context.macroDefinitions,
-            undefined,
+            macroOccurrences,
             compilerBlockComments
         );
 
@@ -233,14 +259,16 @@ export class Validator {
                 case SemanticDiagnosticSeverity.Error:
                     problems.error(
                         diagnostic.location,
-                        diagnostic.message
+                        diagnostic.message,
+                        { tags: diagnostic.tags }
                     );
                     break;
 
                 case SemanticDiagnosticSeverity.Warning:
                     problems.warning(
                         diagnostic.location,
-                        diagnostic.message
+                        diagnostic.message,
+                        { tags: diagnostic.tags }
                     );
                     break;
             }

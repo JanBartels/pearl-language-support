@@ -25,6 +25,7 @@ import type {
     BitType,
     CharacterType,
     FloatType,
+    StructType,
     SemanticType
 } from './semanticType';
 import { SemanticTypeKind } from './semanticType';
@@ -110,6 +111,12 @@ export interface DataObjectInitialization {
     ): void;
 }
 
+/** A compact, type-driven layout; arrays never need to be expanded. */
+interface AggregateInitializationLayout {
+    readonly elementCount: bigint;
+    typeAt(offset: bigint): SemanticType | undefined;
+}
+
 interface InitializationValueResolver {
     readonly typeName: string;
     readonly namedConstantTarget: boolean;
@@ -135,19 +142,13 @@ export class InitializationResolver {
         identifierCount: number,
         environment: Environment
     ): DataObjectInitialization | undefined {
-        if (type.kind === SemanticTypeKind.Array) {
-            return this.resolveArrayInitialization(
-                initialization,
-                type,
-                identifierCount,
-                environment
-            );
-        }
-
         const underlyingType = this.context.resolveUnderlyingType(type);
+        if (!underlyingType) return undefined;
 
-        if (!underlyingType) {
-            return undefined;
+        if (underlyingType.kind === SemanticTypeKind.Array) {
+            return this.resolveArrayInitialization(
+                initialization, underlyingType, identifierCount, environment
+            );
         }
 
         if (underlyingType.kind === SemanticTypeKind.Reference && isNilAssignableTo(underlyingType)) {
@@ -168,6 +169,12 @@ export class InitializationResolver {
             );
         }
 
+        if (underlyingType.kind === SemanticTypeKind.Struct) {
+            return this.resolveAggregateInitialization(
+                initialization, underlyingType, identifierCount, false
+            );
+        }
+
         const valueResolver = this.createValueResolver(underlyingType);
 
         if (!valueResolver) {
@@ -179,6 +186,161 @@ export class InitializationResolver {
             identifierCount,
             valueResolver
         );
+    }
+
+    /**
+     * STRUCT initializers are a flat list of leaf-component values. Recursively
+     * calculate their layout from the RESOLVED type (including named types and
+     * arrays), rather than treating every immediate STRUCT child as one value.
+     *
+     * For an unambiguous STRUCT binding the flattened list must be complete.
+     * An ARRAY of STRUCT may have an explicit prefix, as other PEARL arrays do;
+     * implicit repetition introduces no new source references. Incomplete
+     * mixed STRUCT/ARRAY layouts are left unresolved rather than guessed.
+     *
+     * This pass resolves names and checks supported initializer element types;
+     * it does not yet manufacture a mixed Constant/Reference aggregate value.
+     */
+    private resolveAggregateInitialization(
+        initialization: InitializationAttributeNode,
+        type: SemanticType,
+        identifierCount: number,
+        isArray: boolean
+    ): DataObjectInitialization | undefined {
+        const layout = this.aggregateLayout(type);
+        if (!layout || layout.elementCount === 0n) return undefined;
+
+        const total = layout.elementCount * BigInt(identifierCount);
+        const actual = BigInt(initialization.elements.length);
+        if (isArray) {
+            if (actual > total) {
+                this.context.reportTooManyInitializationElements(
+                    initialization.keyword, 'STRUCT', total, initialization.elements.length
+                );
+                return undefined;
+            }
+        } else if (actual !== total) {
+            // Incomplete nested component arrays do not have an established
+            // grouping rule in our AST. Do not guess which later component
+            // owns a value (or introduce a new validity restriction here).
+            return undefined;
+        }
+
+        // Check the complete explicitly written prefix before binding names.
+        // Reject malformed slots once, at the INIT attribute, rather than
+        // producing one diagnostic per declared object.
+        for (let index = 0; index < initialization.elements.length; index++) {
+            const elementType = layout.typeAt(BigInt(index) % layout.elementCount);
+            if (!elementType || !this.acceptsAggregateElement(initialization.elements[index], elementType)) {
+                this.context.reportInvalidInitialization(initialization.keyword, 'STRUCT');
+                return undefined;
+            }
+        }
+
+        return {
+            apply: (_symbol, identifierIndex, environment) => {
+                const start = layout.elementCount * BigInt(identifierIndex);
+                const end = start + layout.elementCount;
+                const stop = end < actual ? Number(end) : initialization.elements.length;
+                for (let index = Number(start); index < stop; index++) {
+                    const elementType = layout.typeAt(BigInt(index) - start);
+                    if (elementType) {
+                        this.resolveAggregateElement(initialization.elements[index], elementType, environment);
+                    }
+                }
+            }
+        };
+    }
+
+    /**
+     * A type-at-offset lookup keeps even large multidimensional arrays compact.
+     * A REF is always a leaf, so recursive reference types do not recurse here.
+     * Guard by-value cycles and unresolvable named types against endless descent.
+     */
+    private aggregateLayout(
+        type: SemanticType,
+        active: Set<SemanticType> = new Set()
+    ): AggregateInitializationLayout | undefined {
+        const underlying = this.context.resolveUnderlyingType(type);
+        if (!underlying) return undefined;
+
+        if (underlying.kind === SemanticTypeKind.Struct) {
+            if (active.has(underlying)) return undefined;
+            active.add(underlying);
+            const children: { start: bigint; layout: AggregateInitializationLayout }[] = [];
+            let count = 0n;
+            for (const component of underlying.components) {
+                const layout = this.aggregateLayout(component.type, active);
+                if (!layout) {
+                    active.delete(underlying);
+                    return undefined;
+                }
+                children.push({ start: count, layout });
+                count += layout.elementCount;
+            }
+            active.delete(underlying);
+            return {
+                elementCount: count,
+                typeAt: offset => {
+                    if (offset < 0n || offset >= count) return undefined;
+                    for (const child of children) {
+                        if (offset < child.start + child.layout.elementCount) {
+                            return child.layout.typeAt(offset - child.start);
+                        }
+                    }
+                    return undefined;
+                }
+            };
+        }
+
+        if (underlying.kind === SemanticTypeKind.Array) {
+            if (active.has(underlying)) return undefined;
+            active.add(underlying);
+            const element = this.aggregateLayout(underlying.elementType, active);
+            active.delete(underlying);
+            if (!element || element.elementCount === 0n) return undefined;
+            const count = this.semanticElementCount(underlying) * element.elementCount;
+            return {
+                elementCount: count,
+                typeAt: offset => offset >= 0n && offset < count
+                    ? element.typeAt(offset % element.elementCount)
+                    : undefined
+            };
+        }
+
+        if (underlying.kind === SemanticTypeKind.VirtualArray) return undefined;
+        return { elementCount: 1n, typeAt: offset => offset === 0n ? underlying : undefined };
+    }
+
+    private acceptsAggregateElement(element: InitElementNode, type: SemanticType): boolean {
+        if (type.kind === SemanticTypeKind.Reference || type.kind === SemanticTypeKind.VoidReference) {
+            return element.value.kind === 'identifier' || element.value.kind === 'nil';
+        }
+        const valueResolver = this.createValueResolver(type);
+        return valueResolver ? valueResolver.accepts(element) : true;
+    }
+
+    private resolveAggregateElement(
+        element: InitElementNode,
+        type: SemanticType,
+        environment: Environment
+    ): void {
+        if (type.kind === SemanticTypeKind.Reference || type.kind === SemanticTypeKind.VoidReference) {
+            if (element.value.kind === 'nil') return;
+            if (element.value.kind !== 'identifier') return;
+            this.context.resolveReferenceInitializer(
+                element.value.identifier,
+                type.kind === SemanticTypeKind.Reference ? type.target : undefined,
+                type.targetInvariant,
+                environment
+            );
+            return;
+        }
+
+        const valueResolver = this.createValueResolver(type);
+        if (valueResolver && valueResolver.accepts(element)) {
+            valueResolver.evaluate(element, environment);
+        }
     }
 
     private resolveScalarInitialization(
@@ -236,6 +398,13 @@ export class InitializationResolver {
 
         if (!elementType) {
             return undefined;
+        }
+
+        if (elementType.kind === SemanticTypeKind.Struct
+            || elementType.kind === SemanticTypeKind.Array) {
+            return this.resolveAggregateInitialization(
+                initialization, type, identifierCount, true
+            );
         }
 
         if (elementType.kind === SemanticTypeKind.Reference) {

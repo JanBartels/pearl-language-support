@@ -4,6 +4,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { ProblemCollection } from '../../core/problemCollection';
+import { ProblemTag } from '../../core/problemTag';
 import { Lexer } from '../../lexer/lexer';
 import { Parser } from '../../parser/parser';
 import { ConditionalStack } from '../../preproc/conditionalStack';
@@ -328,6 +329,69 @@ test('INIT values prevent read-but-never-written, but not unused or write-only w
         END;`, SemanticDiagnosticCode.UnusedSymbol), ['UnusedInit']);
 });
 
+test('STRUCT INIT counts as initialization when a named structure component is read', () => {
+    const result = analyze(`
+        TYPE MyType STRUCT [ E FIXED ];
+        DCL Value INV MyType INIT( ( 7 ) );
+        MyTask: TASK;
+            IF Value.E == 7 THEN
+                ;
+            FIN;
+        END;
+    `);
+    assert.deepEqual(result.syntax, []);
+    assert.deepEqual(result.semantic.diagnostics, []);
+    assert.deepEqual(result.result.diagnostics, []);
+    const value = result.result.usages.all.find(usage => usage.declaration.value === 'Value')!;
+    assert.equal(value.initialized, true);
+    assert.equal(value.read, true);
+    assert.equal(value.unused, false);
+    // INIT is meaningful to usage analysis even without a scalar constant value.
+    assert.equal('hasInitializationAttribute' in value.symbol
+        && value.symbol.hasInitializationAttribute, true);
+});
+
+test('STRUCT without INIT remains a read-but-never-written candidate', () => {
+    const result = analyze(`
+        TYPE MyType STRUCT [ E FIXED ];
+        DCL Value MyType;
+        MyTask: TASK;
+            IF Value.E == 7 THEN ; FIN;
+        END;
+    `);
+    assert.deepEqual(result.syntax, []);
+    assert.deepEqual(warningNames(`
+        TYPE MyType STRUCT [ E FIXED ];
+        DCL Value MyType;
+        MyTask: TASK;
+            IF Value.E == 7 THEN ; FIN;
+        END;
+    `, SemanticDiagnosticCode.ReadButNeverWritten), ['Value']);
+    assert.equal(result.result.usages.all.find(usage => usage.declaration.value === 'Value')?.initialized, false);
+});
+
+test('REF INIT of an invariant STRUCT is an address use, not an apparent unused symbol', () => {
+    const result = analyze(`
+        TYPE MyType STRUCT [ E FIXED ];
+        DCL Value INV MyType INIT( ( 7 ) );
+        DCL RIX REF INV MyType INIT(Value);
+        MyTask: TASK;
+            IF RIX.E == 7 THEN ; FIN;
+        END;
+    `);
+    assert.deepEqual(result.syntax, []);
+    assert.deepEqual(result.semantic.diagnostics, []);
+    assert.deepEqual(result.result.diagnostics, []);
+    const value = result.result.usages.all.find(usage => usage.declaration.value === 'Value')!;
+    const pointer = result.result.usages.all.find(usage => usage.declaration.value === 'RIX')!;
+    assert.equal(value.initialized, true);
+    assert.equal(value.addressTaken, true);
+    assert.equal(value.unused, false);
+    assert.equal(pointer.initialized, true);
+    assert.equal(pointer.read, true);
+    assert.equal(pointer.unused, false);
+});
+
 test('GLOBAL and implicit TASK MAIN are exempt from access-mode warnings', () => {
     const result = analyze(`
         DCL External FIXED GLOBAL, Local FIXED;
@@ -502,4 +566,256 @@ test('ABS procedure occurrence in IF is a use even when the call has a type erro
     assert.equal(result.result.usages.all.find(usage => usage.declaration.value === 'ABS')?.unused, false);
     assert.equal(result.result.diagnostics.some(d => d.code === SemanticDiagnosticCode.UnusedSymbol
         && /'ABS'/.test(d.message)), false);
+});
+
+
+test('only genuinely unnecessary declarations and write-only variables are tagged', () => {
+    const result = analyze(`
+        DCL Unused FIXED, Written FIXED, Read FIXED;
+        Main: TASK MAIN;
+            Written := Read;
+        END;
+    `);
+    const byCode = (code: SemanticDiagnosticCode) => result.result.diagnostics
+        .filter(d => d.code === code);
+    for (const d of [...byCode(SemanticDiagnosticCode.UnusedSymbol),
+                     ...byCode(SemanticDiagnosticCode.WrittenButNeverRead)]) {
+        assert.deepEqual(d.tags, [ProblemTag.Unnecessary]);
+    }
+    for (const d of byCode(SemanticDiagnosticCode.ReadButNeverWritten)) {
+        assert.equal(d.tags, undefined);
+    }
+});
+
+test('Validator emits tagged unused warnings and inactive-region hints', async () => {
+    const { Validator } = await import('../../validation/validator');
+    const validator = new Validator(
+        {} as ConstructorParameters<typeof Validator>[0],
+        { get: () => undefined } as unknown as DocumentRegistry,
+        logger
+    );
+    const text = `P=MPC603; SC=2000; MODULE M; PROBLEM;
+DCL Unused FIXED;
+#ifdef DISABLED
+DCL Hidden FIXED;
+#else
+DCL Written FIXED;
+#endif
+Startup: TASK MAIN; Written := 7; END;
+MODEND;`;
+    const result = await validator.analyze(
+        { uri: 'file:///inactive-usage.P', version: 1, getText: () => text } as Parameters<InstanceType<typeof Validator>['analyze']>[0],
+        { macros: {}, warnOnCharTruncation: true } as Parameters<InstanceType<typeof Validator>['analyze']>[1]
+    );
+    const all = result.problems.toArray();
+    const inactive = all.filter(d => d.message.startsWith('Inaktiver Code'));
+    assert.equal(inactive.length, 1);
+    assert.deepEqual(inactive[0]!.tags, [ProblemTag.Unnecessary]);
+    assert.equal(text.slice(inactive[0]!.location.span.start, inactive[0]!.location.span.end),
+        'DCL Hidden FIXED;\n');
+    assert.equal(all.some(d => d.message.includes("'Hidden'")), false);
+    const unused = all.find(d => d.message.includes("'Unused'"));
+    const written = all.find(d => d.message.includes("'Written'"));
+    assert.deepEqual(unused?.tags, [ProblemTag.Unnecessary]);
+    assert.deepEqual(written?.tags, [ProblemTag.Unnecessary]);
+});
+
+test('STRUCT REF component INIT binds its target and records an address use', () => {
+    const result = analyze(`
+        TYPE MyType STRUCT [ E FIXED ];
+        TYPE MyType2 STRUCT [ E FIXED, R REF INV MyType ];
+        DCL Value INV MyType INIT( ( 7 ) );
+        DCL Value2 INV MyType INIT( ( 7 ) );
+        DCL Value3 INV MyType2 INIT( 1, Value2 );
+        MyTask: TASK;
+            IF Value.E == 7 THEN ; FIN;
+            IF Value3.R ISNT NIL THEN ; FIN;
+        END;
+    `);
+    assert.deepEqual(result.syntax, []);
+    assert.deepEqual(result.semantic.diagnostics, []);
+    assert.deepEqual(result.result.diagnostics, []);
+    const value2 = result.result.usages.all.find(u => u.declaration.value === 'Value2')!;
+    assert.equal(value2.unused, false);
+    assert.equal(value2.addressTaken, true);
+    assert.equal(value2.references.length, 1);
+    assert.equal(value2.accesses[0].kind, SymbolAccessKind.Address);
+    assert.equal(result.result.usages.all.find(u => u.declaration.value === 'Value3')?.initialized, true);
+});
+
+test('STRUCT REF component INIT binds the referenced declaration, not an unrelated symbol', () => {
+    const result = analyze(`
+        TYPE Cell STRUCT [ V FIXED ];
+        TYPE WithPtr STRUCT [ Number FIXED, Pointer REF INV Cell ];
+        DCL Referenced INV Cell INIT((1));
+        DCL Other INV Cell INIT((2));
+        DCL Box INV WithPtr INIT(3, Referenced);
+        T: TASK;
+            IF Box.Pointer ISNT NIL THEN ; FIN;
+        END;
+    `);
+    assert.deepEqual(result.syntax, []);
+    assert.deepEqual(result.semantic.diagnostics, []);
+    const referenced = result.result.usages.all.find(u => u.declaration.value === 'Referenced')!;
+    const other = result.result.usages.all.find(u => u.declaration.value === 'Other')!;
+    assert.equal(referenced.addressTaken, true);
+    assert.equal(referenced.unused, false);
+    assert.equal(other.unused, true);
+});
+
+test('nested STRUCT INIT resolves REF leaves through named structure components', () => {
+    const result = analyze(`
+        TYPE Cell STRUCT[E FIXED];
+        TYPE Inner STRUCT[Number FIXED, Pointer REF INV Cell];
+        TYPE Outer STRUCT[Tag FIXED, Nested Inner];
+        DCL Target INV Cell INIT(7);
+        DCL Container INV Outer INIT(1, 2, Target);
+        Worker: TASK;
+            IF Container.Nested.Pointer ISNT NIL THEN ; FIN;
+        END;
+    `);
+    assert.deepEqual(result.syntax, []);
+    assert.deepEqual(result.semantic.diagnostics, []);
+    const target = result.result.usages.all.find(u => u.declaration.value === 'Target')!;
+    assert.equal(target.addressTaken, true);
+    assert.equal(target.unused, false);
+    assert.equal(target.references.length, 1);
+    assert.equal(result.semantic.referenceInitializerIdentifiers.size, 1);
+    assert.equal(result.result.usages.lookupAccess(target.references[0].identifier)?.kind, SymbolAccessKind.Address);
+});
+
+test('STRUCT INIT resolves named FIXED constants and nested REF targets independently', () => {
+    const result = analyze(`
+        TYPE Cell STRUCT[E FIXED];
+        TYPE Inside STRUCT[Value FIXED, Pointer REF INV Cell];
+        TYPE Box STRUCT[InsideData Inside];
+        DCL Named INV FIXED INIT(4);
+        DCL Target INV Cell INIT(3);
+        DCL Container Box INIT(Named, Target);
+    `);
+    assert.deepEqual(result.syntax, []);
+    assert.deepEqual(result.semantic.diagnostics, []);
+    const named = result.result.usages.all.find(u => u.declaration.value === 'Named')!;
+    const target = result.result.usages.all.find(u => u.declaration.value === 'Target')!;
+    assert.equal(named.read, true);
+    assert.equal(named.addressTaken, false);
+    assert.equal(target.addressTaken, true);
+    assert.equal(target.read, false);
+});
+
+test('STRUCT INIT visits REF fields inside an array component', () => {
+    const result = analyze(`
+        TYPE Cell STRUCT[E FIXED];
+        TYPE Box STRUCT[Items(2) REF INV Cell, Last REF INV Cell];
+        DCL First INV Cell INIT(1);
+        DCL Second INV Cell INIT(2);
+        DCL LastOne INV Cell INIT(3);
+        DCL Container INV Box INIT(First, Second, LastOne);
+    `);
+    assert.deepEqual(result.syntax, []);
+    assert.deepEqual(result.semantic.diagnostics, []);
+    for (const name of ['First', 'Second', 'LastOne']) {
+        const usage = result.result.usages.all.find(u => u.declaration.value === name)!;
+        assert.equal(usage.addressTaken, true, name);
+        assert.equal(usage.unused, false, name);
+        assert.equal(usage.references.length, 1, name);
+    }
+});
+
+test('ARRAY of STRUCT INIT resolves repeated nested REF leaves', () => {
+    const result = analyze(`
+        TYPE Cell STRUCT[E FIXED];
+        TYPE Inner STRUCT[Pointer REF INV Cell];
+        TYPE Outer STRUCT[Number FIXED, Nested Inner];
+        DCL First INV Cell INIT(1);
+        DCL Second INV Cell INIT(2);
+        DCL Boxes(2) INV Outer INIT(10, First, 11, Second);
+    `);
+    assert.deepEqual(result.syntax, []);
+    assert.deepEqual(result.semantic.diagnostics, []);
+    for (const name of ['First', 'Second']) {
+        const usage = result.result.usages.all.find(u => u.declaration.value === name)!;
+        assert.equal(usage.addressTaken, true, name);
+        assert.equal(usage.unused, false, name);
+    }
+});
+
+test('multiple STRUCT identifiers receive separate INIT element ranges', () => {
+    const result = analyze(`
+        TYPE Cell STRUCT[E FIXED];
+        TYPE Box STRUCT[Number FIXED, Pointer REF INV Cell];
+        DCL First INV Cell INIT(1);
+        DCL Second INV Cell INIT(2);
+        DCL (Box1, Box2) INV Box INIT(11, First, 12, Second);
+    `);
+    assert.deepEqual(result.syntax, []);
+    assert.deepEqual(result.semantic.diagnostics, []);
+    for (const name of ['First', 'Second']) {
+        const usage = result.result.usages.all.find(u => u.declaration.value === name)!;
+        assert.equal(usage.addressTaken, true, name);
+        assert.equal(usage.references.length, 1, name);
+    }
+});
+
+test('invalid nested REF initializer is bound for navigation but not marked as address-taken', () => {
+    const result = analyze(`
+        TYPE Cell STRUCT[E FIXED];
+        TYPE Box STRUCT[Nested STRUCT[P REF INV Cell]];
+        DCL Wrong FIXED;
+        DCL Container Box INIT(Wrong);
+    `);
+    assert.deepEqual(result.syntax, []);
+    assert.ok(result.semantic.diagnostics.some(d => d.message.includes('REF')));
+    const wrong = result.result.usages.all.find(u => u.declaration.value === 'Wrong')!;
+    assert.equal(wrong.addressTaken, false);
+    assert.equal(result.semantic.referenceInitializerIdentifiers.size, 0);
+});
+
+test('named ARRAY types nested inside STRUCT resolve without expanding large arrays', () => {
+    const result = analyze(`
+        TYPE Cell STRUCT[E FIXED];
+        TYPE Slot STRUCT[R REF INV Cell];
+        TYPE Slots(2) Slot;
+        TYPE Outer STRUCT[Items Slots, Last REF INV Cell];
+        DCL First INV Cell INIT(1);
+        DCL Second INV Cell INIT(2);
+        DCL Third INV Cell INIT(3);
+        DCL Container Outer INIT(First, Second, Third);
+    `);
+    assert.deepEqual(result.syntax, []);
+    assert.deepEqual(result.semantic.diagnostics, []);
+    assert.equal(result.semantic.referenceInitializerIdentifiers.size, 3);
+    for (const name of ['First', 'Second', 'Third']) {
+        const usage = result.result.usages.all.find(u => u.declaration.value === name)!;
+        assert.equal(usage.addressTaken, true, name);
+    }
+    assert.equal(result.semantic.withAdditionalDiagnostics([]).referenceInitializerIdentifiers.size, 3);
+    assert.equal(result.enriched.referenceInitializerIdentifiers.size, 3);
+});
+
+test('ARRAY of STRUCT with an initialization prefix still binds explicit REF names', () => {
+    const result = analyze(`
+        TYPE Cell STRUCT[E FIXED];
+        TYPE Outer STRUCT[N FIXED, R REF INV Cell];
+        DCL First INV Cell INIT(1);
+        DCL Many(1000000) Outer INIT(3, First);
+    `);
+    assert.deepEqual(result.syntax, []);
+    assert.deepEqual(result.semantic.diagnostics, []);
+    const first = result.result.usages.all.find(u => u.declaration.value === 'First')!;
+    assert.equal(first.addressTaken, true);
+    assert.equal(first.references.length, 1);
+});
+
+test('an incomplete mixed STRUCT/ARRAY INIT never invents a REF binding', () => {
+    const result = analyze(`
+        TYPE Cell STRUCT[E FIXED];
+        TYPE Box STRUCT[Items(2) FIXED, Pointer REF INV Cell];
+        DCL Target INV Cell INIT(3);
+        DCL Container Box INIT(1, Target);
+    `);
+    assert.deepEqual(result.syntax, []);
+    assert.equal(result.semantic.referenceInitializerIdentifiers.size, 0);
+    const target = result.result.usages.all.find(u => u.declaration.value === 'Target')!;
+    assert.equal(target.addressTaken, false);
 });

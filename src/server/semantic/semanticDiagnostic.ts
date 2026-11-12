@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import type { Location } from '../core/location';
+import type { ProblemTag } from '../core/problemTag';
 
 
 export enum SemanticDiagnosticSeverity {
@@ -161,6 +162,8 @@ export interface SemanticDiagnostic {
     readonly location: Location;
 
     readonly message: string;
+
+    readonly tags?: readonly ProblemTag[];
 
     readonly relatedLocations?: readonly SemanticDiagnosticRelatedLocation[];
 }

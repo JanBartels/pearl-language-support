@@ -54,6 +54,9 @@ export interface DataObjectSymbol extends GlobalSymbolBase {
 
     readonly assignmentProtected: boolean;
 
+    /** A declared INIT attribute, even when its value is not represented by the constant resolver. */
+    readonly hasInitializationAttribute?: boolean;
+
     /** True only for an SPC DATION describing a system DATION (also for GLOBAL SPC). */
     readonly systemDationSpecification?: boolean;
 }

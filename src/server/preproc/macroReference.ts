@@ -15,4 +15,7 @@ export interface MacroReference {
      * Location of the macro invocation in the original source.
      */
     readonly location: Location;
+
+    /** #undef is a navigable reference, but not a use of the macro value. */
+    readonly kind?: 'undef';
 }

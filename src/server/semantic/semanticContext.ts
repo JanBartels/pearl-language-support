@@ -29,6 +29,7 @@ export class SemanticContext {
     readonly bindings: BindingIndex;
     readonly builtinBindings: ReadonlyMap<SourceValue<string>, BuiltinDefinition>;
     readonly monadicOperatorBindings: ReadonlySet<SourceValue<string>>;
+    readonly referenceInitializerIdentifiers: ReadonlySet<SourceValue<string>>;
     readonly diagnostics: readonly SemanticDiagnostic[];
     readonly expressionTypes: ReadonlyMap<ExpressionNode, SemanticType>;
     readonly constantFixedExpressionValues: ReadonlyMap<ConstantFixedExpressionNode, FixedConstantValue>;
@@ -58,7 +59,8 @@ export class SemanticContext {
         localSpecificationRelations: LocalSpecificationRelationIndex = new Map(),
         expressionTypes: ReadonlyMap<ExpressionNode, SemanticType> = new Map(),
         symbolUsages: SymbolUsageIndex = new SymbolUsageIndex(),
-        monadicOperatorBindings: ReadonlySet<SourceValue<string>> = new Set()
+        monadicOperatorBindings: ReadonlySet<SourceValue<string>> = new Set(),
+        referenceInitializerIdentifiers: ReadonlySet<SourceValue<string>> = new Set()
     ) {
         this.symbolUsages = symbolUsages;
         this.typeDefinitions = new Map(typeDefinitions);
@@ -66,6 +68,7 @@ export class SemanticContext {
         this.bindings = new Map(bindings);
         this.builtinBindings = new Map(builtinBindings);
         this.monadicOperatorBindings = new Set(monadicOperatorBindings);
+        this.referenceInitializerIdentifiers = new Set(referenceInitializerIdentifiers);
         this.localSpecificationRelations = new Map(localSpecificationRelations);
         this.diagnostics = [...diagnostics];
         this.constantFixedExpressionValues = new Map(constantFixedExpressionValues);
@@ -141,7 +144,8 @@ export class SemanticContext {
             this.localSpecificationRelations,
             this.expressionTypes,
             this.symbolUsages,
-            this.monadicOperatorBindings
+            this.monadicOperatorBindings,
+            this.referenceInitializerIdentifiers
         );
     }
 
@@ -162,7 +166,8 @@ export class SemanticContext {
             this.localSpecificationRelations,
             this.expressionTypes,
             usages,
-            this.monadicOperatorBindings
+            this.monadicOperatorBindings,
+            this.referenceInitializerIdentifiers
         );
     }
 

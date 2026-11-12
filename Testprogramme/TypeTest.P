@@ -1,0 +1,30 @@
+#define MY_TYPE "FIXED"
+SC=100;
+P=MPC604;
+MODULE Test;
+PROBLEM;
+
+TYPE MyType STRUCT [
+    E FIXED
+];
+TYPE MyType2 STRUCT [
+    E FIXED,
+    R REF INV MyType
+];
+
+DCL Value INV MyType INIT( 7 );
+DCL Value2 INV MyType INIT( 7 );
+DCL Value3 INV MyType2 INIT( 1, Value2 );
+
+MyTask: TASK;
+    IF Value.E == 7
+    THEN
+        ;
+    FIN;
+    IF ( Value3.R ISNT NIL )
+    THEN
+        ;
+    FIN;
+END;
+
+MODEND;

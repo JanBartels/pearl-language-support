@@ -5,6 +5,8 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { ProblemCollection } from '../../core/problemCollection';
+import { ProblemTag } from '../../core/problemTag';
+import { DiagnosticTag, DiagnosticSeverity } from 'vscode-languageserver/node';
 import { FileSource } from '../../source/fileSource';
 import { MacroSource } from '../../source/macroSource';
 import { mapDiagnostics } from '../diagnosticMapper';
@@ -115,4 +117,20 @@ test('preprocessing an included #define reports incomplete expansion at LEN call
         end: { line: 201, character: 'HuhuA = LEN( '.length + 'AusEinerAnderenWelt'.length }
     });
     assert.equal(mapped.get(includeUri)?.some(d => d.message === 'Unterminated string literal.'), undefined);
+});
+
+
+test('unnecessary tag is mapped to LSP without changing existing severity', () => {
+    const text = 'DCL Unused FIXED;\n';
+    const source = new FileSource(mainUri, text);
+    const problems = new ProblemCollection();
+    problems.warning({ source, span: { start: 4, end: 10 } },
+        "Symbol 'Unused' wird nicht verwendet.", { tags: [ProblemTag.Unnecessary] });
+    const diagnostic = mapDiagnostics(problems, documents(new Map([[mainUri, text]])))
+        .get(mainUri)?.[0];
+    assert.equal(diagnostic?.severity, DiagnosticSeverity.Warning);
+    assert.deepEqual(diagnostic?.tags, [DiagnosticTag.Unnecessary]);
+    assert.deepEqual(diagnostic?.range, {
+        start: { line: 0, character: 4 }, end: { line: 0, character: 10 }
+    });
 });

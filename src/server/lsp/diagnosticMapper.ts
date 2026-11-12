@@ -3,10 +3,12 @@
 
 import {
   Diagnostic,
-  DiagnosticSeverity
+  DiagnosticSeverity,
+  DiagnosticTag
 } from 'vscode-languageserver/node';
 
 import { Problem } from '../core/problem';
+import { ProblemTag } from '../core/problemTag';
 import { mapToOriginalLocation } from '../core/sourceOffset';
 import type { Location } from '../core/location';
 import { ProblemCollection } from '../core/problemCollection';
@@ -65,8 +67,17 @@ function mapDiagnostic(
     message: problem.message,
     severity: mapSeverity(problem.severity),
     source: 'pearl',
-    ...(problem.code !== undefined && { code: problem.code })      
+    ...(problem.code !== undefined && { code: problem.code }),
+    ...(problem.tags?.length && { tags: problem.tags.map(mapTag) })
   };
+}
+
+function mapTag(tag: ProblemTag): DiagnosticTag {
+  switch (tag) {
+    case ProblemTag.Unnecessary:
+      return DiagnosticTag.Unnecessary;
+  }
+  return assertNever(tag);
 }
 
 function mapSeverity(severity: Severity): DiagnosticSeverity {

@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import type { AstNode } from '../ast/astNode';
+import { InitElementNode } from '../ast/problem/declarations/initElementNode';
 import { NameExpressionNode } from '../ast/problem/expressions/nameExpressionNode';
 import { NameArgumentListNode } from '../ast/problem/expressions/nameArgumentListNode';
 import { NameSegmentNode } from '../ast/problem/expressions/nameSegmentNode';
@@ -17,13 +18,8 @@ import { FormatItemNode } from '../ast/problem/statements/formatItemNode';
 import { IoSegmentNode } from '../ast/problem/statements/ioSegmentNode';
 import { ReturnStatementNode } from '../ast/problem/statements/returnStatementNode';
 import { ProcedureDeclarationNode } from '../ast/problem/declarations/procedureDeclarationNode';
-import { InitElementNode } from '../ast/problem/declarations/initElementNode';
-import { InitializationAttributeNode } from '../ast/problem/declarations/initializationAttributeNode';
-import { ProblemDataAttributeNode } from '../ast/problem/declarations/problemDataAttributeNode';
-import { DclDeclarationSentenceNode } from '../ast/problem/declarations/dclDeclarationSentenceNode';
 import type { SourceValue } from '../core/sourceValue';
 import type { BuiltinDefinition } from './builtins/builtinSignature';
-import { SemanticInitialValueKind } from './semanticConstantValue';
 import type { SemanticContext } from './semanticContext';
 import { SemanticTypeKind, type ProcedureParameterType, type ProcedureType, type SemanticType } from './semanticType';
 import type { SemanticSymbol } from './symbol';
@@ -73,18 +69,11 @@ export class SymbolAccessClassifier {
     }
 
     private referenceInitializer(node: AstNode): boolean {
-        if (!(node instanceof InitElementNode)) return false;
-        const initialization = node.parent;
-        const attribute = initialization instanceof InitializationAttributeNode
-            ? initialization.parent : undefined;
-        const sentence = attribute instanceof ProblemDataAttributeNode
-            ? attribute.parent : undefined;
-        if (!(sentence instanceof DclDeclarationSentenceNode)) return false;
-        return sentence.identifiers.identifiers.some(identifier => {
-            const symbol = this.semantic.bindings.get(identifier);
-            return symbol?.kind === SymbolKind.DataObject
-                && this.semantic.initialValues.get(symbol)?.kind === SemanticInitialValueKind.Reference;
-        });
+        // Only the initialization resolver knows the type of the specific
+        // flattened (possibly nested) aggregate component. Reuse its result.
+        return node instanceof InitElementNode
+            && node.value.kind === 'identifier'
+            && this.semantic.referenceInitializerIdentifiers.has(node.value.identifier);
     }
 
     private classifyName(segment: NameSegmentNode, symbol: SemanticSymbol): SymbolAccessKind {

@@ -241,6 +241,7 @@ class SemanticAnalysisState implements
     readonly forwardReferences = new Map<TypeSymbol, SourceValue<string>[]>();
     readonly typeResolver = new SemanticTypeResolver(this);
     readonly constantFixedExpressionEvaluator = new ConstantFixedExpressionEvaluator(this);
+    readonly referenceInitializerIdentifiers = new Set<SourceValue<string>>();
     readonly initializationResolver = new InitializationResolver(this);
     readonly timeConstantEvaluator = new TimeConstantEvaluator(this);
     readonly expressionTypeResolver = new ExpressionTypeResolver(this);
@@ -322,7 +323,8 @@ class SemanticAnalysisState implements
             this.localSpecificationRelations,
             this.expressionTypes,
             undefined,
-            this.monadicOperatorBindings
+            this.monadicOperatorBindings,
+            this.referenceInitializerIdentifiers
         );
     }
 
@@ -1033,6 +1035,7 @@ class SemanticAnalysisState implements
                 return undefined;
             }
 
+            this.referenceInitializerIdentifiers.add(identifier);
             return symbol;
         }
 
@@ -1042,6 +1045,7 @@ class SemanticAnalysisState implements
                 this.reportInvalidInitialization(identifier, 'REF PROC');
                 return undefined;
             }
+            this.referenceInitializerIdentifiers.add(identifier);
             return symbol;
         }
 
@@ -1065,6 +1069,7 @@ class SemanticAnalysisState implements
             return undefined;
         }
 
+        this.referenceInitializerIdentifiers.add(identifier);
         return symbol;
     }
 
@@ -3106,7 +3111,8 @@ export class SemanticAnalyzer {
             state,
             (symbol, index, current) => {
                 resolvedInitialization?.apply(symbol, index, current);
-            }
+            },
+            initialization !== undefined
         );
     }
 
@@ -3586,7 +3592,8 @@ export class SemanticAnalyzer {
         global: GlobalSymbolAttribute | undefined,
         environment: Environment,
         state: SemanticAnalysisState,
-        beforeIntroduce?: (symbol: DataObjectSymbol, index: number, current: Environment) => void
+        beforeIntroduce?: (symbol: DataObjectSymbol, index: number, current: Environment) => void,
+        hasInitializationAttribute = false
     ): Environment {
         let current = environment;
 
@@ -3619,7 +3626,8 @@ export class SemanticAnalyzer {
                 type,
                 assignmentProtected,
                 global,
-                declarationScope: environment.scope.kind
+                declarationScope: environment.scope.kind,
+                ...(hasInitializationAttribute ? { hasInitializationAttribute: true } : {})
             };
 
             (environment.scope as MutableScope).symbols.push(symbol);
