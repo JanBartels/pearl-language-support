@@ -44,32 +44,6 @@
         "path": "./syntaxes/pearl.tmLanguage.json"
       }
     ],
-    "semanticTokenTypes": [
-      {
-        "id": "testToken",
-        "description": "A test token"
-      }
-    ],
-    "semanticTokenModifiers": [
-      {
-        "id": "inactive",
-        "description": "Inaktiv (Präprozessor)"
-      }
-    ],
-    "semanticTokenStyleDefaults": [
-      {
-        "selector": "testToken",
-        "scope": [
-          "entity.name.variable.special"
-        ]
-      },
-      {
-        "selector": "comment.inactive",
-        "scope": [
-          "entity.name.variable.special.extra"
-        ]
-      }
-    ],
     "configuration": {
       "title": "PEARL",
       "type": "object",
@@ -115,38 +89,94 @@
           "type": "boolean",
           "default": true,
           "description": "Warnung ausgeben, wenn bei der Zuweisung oder Übergabe eines CHAR-Wertes Zeichen abgeschnitten werden können."
-        }        
+        }
       }
     },
     "configurationDefaults": {
+      "[pearl]": {
+        "editor.semanticHighlighting.enabled": true
+      },
       "editor.semanticTokenColorCustomizations": {
         "rules": {
-          "*.inactive": {
-            "foreground": "#888888",
-            "fontStyle": "italic"
+          "namespace:pearl": {
+            "foreground": "#D6C1F0"
           },
-          "operator": {
-            "foreground": "#fafac2"
+          "type:pearl": {
+            "foreground": "#C5A3F5"
           },
-          "type": {
-            "foreground": "#847fad"
+          "variable:pearl": {
+            "foreground": "#83C7F3"
           },
-          "number": {
-            "foreground": "#98d6b6"
+          "variable.readonly:pearl": {
+            "foreground": "#B7DE8A",
+            "italic": true
           },
-          "string": {
-            "foreground": "#d68389"
+          "parameter:pearl": {
+            "foreground": "#71D8C6"
           },
-          "variable": {
-            "foreground": "#65bcd9"
+          "parameter.readonly:pearl": {
+            "foreground": "#B7DE8A",
+            "italic": true
           },
-          "parameter": {
-            "foreground": "#219cc4"
+          "property:pearl": {
+            "foreground": "#F5A59C"
           },
-          "*": {
-            "foreground": "#ff00ff"
+          "function:pearl": {
+            "foreground": "#F2D187"
+          },
+          "class:pearl": {
+            "foreground": "#F29CD4"
+          },
+          "label:pearl": {
+            "foreground": "#92DBD5"
+          },
+          "macro:pearl": {
+            "foreground": "#FFB96B"
+          },
+          "operator:pearl": {
+            "foreground": "#E6D6AA"
+          },
+          "*.declaration:pearl": {
+            "bold": true
           }
         }
+      },
+      "editor.tokenColorCustomizations": {
+        "textMateRules": [
+          {
+            "scope": [
+              "keyword.operator.assign.pearl",
+              "keyword.operator.comparator.pearl",
+              "keyword.operator.arithmetic.pearl",
+              "keyword.operator.logical.pearl",
+              "keyword.operator.comparatorref.pearl",
+              "keyword.operator.other.pearl",
+              "keyword.operator.fixed.pearl",
+              "keyword.operator.conversion.pearl"
+            ],
+            "settings": {
+              "foreground": "#E6D6AA"
+            }
+          },
+          {
+            "scope": [
+              "keyword.control.directive.pearl"
+            ],
+            "settings": {
+              "foreground": "#C5A3F5"
+            }
+          },
+          {
+            "scope": [
+              "constant.numeric.bitstring.pearl",
+              "constant.numeric.hex.pearl",
+              "constant.character.escape.pearl"
+            ],
+            "settings": {
+              "foreground": "#98D6B6"
+            }
+          }
+        ]
       }
     }
   },
@@ -155,7 +185,7 @@
     "watch": "node build.mjs --watch",
     "clean": "rm -rf dist",
     "test": "echo \"no tests\"",
-    "typecheck": "tsc --noEmit",    
+    "typecheck": "tsc --noEmit",
     "vscode:prepublish": "npm run build",
     "package": "npm run typecheck && npm run build && vsce package"
   },

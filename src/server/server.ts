@@ -99,6 +99,8 @@ const validator = new Validator(
   logger
 );
 
+let clientSupportsSemanticTokenRefresh = false;
+
 const tokenLegend = new TokenLegend();
 const semanticTokenService = new SemanticTokenService(
   documentRegistry,
@@ -111,6 +113,8 @@ connection.onInitialize((params: InitializeParams) => {
 
   workspaceManager.initialize(params);
   settingsManager.initialize(params);
+  clientSupportsSemanticTokenRefresh =
+    params.capabilities.workspace?.semanticTokens?.refreshSupport === true;
 
   return {
     capabilities: {
@@ -533,6 +537,14 @@ async function validateAndPublish(document: TextDocument): Promise<void> {
     // Analyse für spätere LSP-Features zwischenspeichern.
     documentRegistry.setAnalysisResult(snapshot.uri, snapshot.version, result);
 
+    // An early semantic-token request may have seen no completed analysis.
+    // Refresh only if the client advertises the corresponding capability.
+    if (clientSupportsSemanticTokenRefresh) {
+      void connection.languages.semanticTokens.refresh().catch((error: unknown) => {
+        logger.warn(`Semantic-token refresh failed: ${String(error)}`);
+      });
+    }
+
     // aktuelle Diagnostics melden
     const oldUris = documentRegistry.takeReportedDiagnosticUris();
     const diagnosticsByUri = mapDiagnostics(result.problems, documentRegistry);
@@ -570,10 +582,6 @@ documents.onDidOpen((event) => {
 
 documents.onDidChangeContent((event) => {
 
-  semanticTokenService.invalidate(
-    event.document.uri
-  );
-
   void validateAndPublish(event.document);
 });
 
@@ -582,7 +590,6 @@ const uri = event.document.uri;
 
   logger.info(`onDidClose ${uri}`);
 
-  semanticTokenService.clear(uri);
   settingsManager.clearDocument(uri);
   documentRegistry.clearAnalysisResult(uri);
 

@@ -16,6 +16,7 @@ import { SymbolReferenceResolutionIndex } from '../semantic/symbolReferenceResol
 import { SymbolOccurrenceIndex } from '../semantic/symbolOccurrenceIndex';
 import { CallSignatureIndex } from '../semantic/callSignatureIndex';
 import { CallSignatureHelpIndex } from '../semantic/callSignatureHelpIndex';
+import type { SourceHighlight } from '../semantic/sourceHighlight';
 
 export function collectBlockComments(tokens: readonly Token[]): readonly CommentToken[] {
     return tokens.filter(
@@ -59,7 +60,10 @@ export class Analysis {
         readonly macroOccurrences: MacroOccurrenceIndex = new MacroOccurrenceIndex(macroDefinitions, macroReferences),
 
         /** Active block comments from this translation unit, including nested includes. */
-        readonly activeBlockComments: readonly CommentToken[] = []
+        readonly activeBlockComments: readonly CommentToken[] = [],
+
+        /** Classifications from compiler passes, independent of LSP presentation. */
+        readonly sourceHighlights: readonly SourceHighlight[] = []
 
     ) {
     }

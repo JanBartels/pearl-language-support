@@ -34,6 +34,9 @@ import { SemanticAnalyzer } from '../semantic/semanticAnalyzer';
 import { SymbolReferenceCollector } from '../semantic/symbolReferenceCollector';
 import { SymbolReferenceResolver } from '../semantic/symbolReferenceResolver';
 import { SymbolOccurrenceIndex } from '../semantic/symbolOccurrenceIndex';
+import { SymbolHighlightCollector } from '../semantic/symbolHighlightCollector';
+import { MacroHighlightCollector } from '../semantic/macroHighlightCollector';
+import { OperatorHighlightCollector } from '../semantic/operatorHighlightCollector';
 import { UnusedSymbolAnalyzer } from '../semantic/unusedSymbolAnalyzer';
 import { CompilerControlAnalyzer } from '../semantic/compilerControlAnalyzer';
 import {
@@ -216,6 +219,14 @@ export class Validator {
 
         this.addSemanticDiagnostics(problems, semanticContext.diagnostics);
 
+        // Compiler-side classifications only: no duplicate lexical highlighting
+        // of keywords and literals already covered by the TextMate grammar.
+        const sourceHighlights = [
+            ...new SymbolHighlightCollector().collect(semanticContext, symbolOccurrences),
+            ...new MacroHighlightCollector().collect(macroOccurrences),
+            ...new OperatorHighlightCollector().collect(ast, semanticContext)
+        ];
+
         // ----------------------------
         // Analysis
         // ----------------------------
@@ -237,7 +248,8 @@ export class Validator {
             symbolOccurrences,
             context.macroDefinitions,
             macroOccurrences,
-            compilerBlockComments
+            compilerBlockComments,
+            sourceHighlights
         );
 
         return AnalysisResult.create(

@@ -397,6 +397,7 @@ DCL something FIXED;
 DCL Ch CHAR(10);
 
 something = 2;
+something := AFDim1;
 
 LEAVE MyBolt;
 

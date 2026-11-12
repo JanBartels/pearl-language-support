@@ -38,7 +38,10 @@ export const semanticTokenTypes = [
   'label',      // Sprungmarken MyLabel:
   'operator',   // Operatoren (z. B. +, ==)  
   'string',     // String-Literale
-  'number'      // numerische Literale
+  'number',     // numerische Literale
+  'namespace',  // MODULE-Namen
+  'macro',      // #define-Namen und ihre Verwendungen
+  'keyword'     // PEARL-Schluesselwoerter
 ] as const;
 
 /*
