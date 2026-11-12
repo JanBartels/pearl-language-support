@@ -6,6 +6,7 @@ import type { AstNode } from '../ast/astNode';
 import type { ModuleNode } from '../ast/module/moduleNode';
 import { ProcedureDeclarationNode } from '../ast/problem/declarations/procedureDeclarationNode';
 import type { Location } from '../core/location';
+import type { SourceValue } from '../core/sourceValue';
 import type { CommentToken } from '../lexer';
 import { CompilerOptionLookup } from '../lexer/compilerOptionLookup';
 import type { ModuleConfiguration } from './moduleConfiguration';
@@ -15,6 +16,13 @@ import {
     SemanticDiagnosticSeverity
 } from './semanticDiagnostic';
 import type { SemanticDiagnostic } from './semanticDiagnostic';
+
+/** Valid compiler +G entries also matter for symbol-usage analysis. */
+export interface CompilerControlAnalysis {
+    readonly diagnostics: readonly SemanticDiagnostic[];
+    /** Declaration identities, not procedure-name strings. */
+    readonly gProcedures: ReadonlySet<SourceValue<string>>;
+}
 
 /**
  * Validates lexer-level compiler control comments against AST context and
@@ -30,7 +38,17 @@ export class CompilerControlAnalyzer {
         blockComments: readonly CommentToken[],
         semanticContext: SemanticContext
     ): readonly SemanticDiagnostic[] {
+        return this.analyzeWithEntryPoints(root, blockComments, semanticContext).diagnostics;
+    }
+
+    /** Reuse the same +G recognition for diagnostics and external-entry usage. */
+    analyzeWithEntryPoints(
+        root: AstNode,
+        blockComments: readonly CommentToken[],
+        semanticContext: SemanticContext
+    ): CompilerControlAnalysis {
         const diagnostics: SemanticDiagnostic[] = [];
+        const gProcedures = new Set<SourceValue<string>>();
 
         for (const comment of blockComments) {
             const option = CompilerOptionLookup.lookup(
@@ -43,7 +61,7 @@ export class CompilerControlAnalyzer {
             }
 
             if (option.option.charAt(0) === 'G' && option.mode) {
-                this.analyzeGOption(root, comment, diagnostics);
+                this.analyzeGOption(root, comment, diagnostics, gProcedures);
                 continue;
             }
 
@@ -70,7 +88,7 @@ export class CompilerControlAnalyzer {
             });
         }
 
-        return diagnostics;
+        return { diagnostics, gProcedures };
     }
 
     /**
@@ -89,7 +107,8 @@ export class CompilerControlAnalyzer {
     private analyzeGOption(
         root: AstNode,
         comment: CommentToken,
-        diagnostics: SemanticDiagnostic[]
+        diagnostics: SemanticDiagnostic[],
+        gProcedures: Set<SourceValue<string>>
     ): void {
         for (const module of this.modulesOf(root)) {
             const declarations = module.problemPart?.children ?? [];
@@ -103,6 +122,10 @@ export class CompilerControlAnalyzer {
                 if (!this.isGOptionInHeader(comment.location, procedure)) {
                     continue;
                 }
+
+                // This is an externally callable entry regardless of whether
+                // PEARL GLOBAL was specified. Do not change its symbol type.
+                gProcedures.add(procedure.name);
 
                 const firstTaskIndex = declarations.findIndex(
                     child => child.kind === AstKind.TaskDeclaration

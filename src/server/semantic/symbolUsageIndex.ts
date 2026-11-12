@@ -49,7 +49,7 @@ export interface SymbolUsage {
     readonly uncertain: boolean;
     /** Semantic INIT value, distinct from a runtime write. */
     readonly initialized: boolean;
-    /** GLOBAL objects can be accessed from other translation units. */
+    /** May be used externally: GLOBAL, any TASK, or a compiler +G procedure entry. */
     readonly externallyVisible: boolean;
     /** E.g. TASK MAIN runs without an explicit PEARL reference. */
     readonly implicitlyUsed: boolean;

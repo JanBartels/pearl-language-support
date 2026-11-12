@@ -28,7 +28,11 @@ export interface UnusedSymbolAnalysis {
  * only the existing resolver can decide which declaration a use denotes.
  */
 export class UnusedSymbolAnalyzer {
-    analyze(semantic: SemanticContext, resolutions: SymbolReferenceResolutionIndex): UnusedSymbolAnalysis {
+    analyze(
+        semantic: SemanticContext,
+        resolutions: SymbolReferenceResolutionIndex,
+        gProcedures: ReadonlySet<SourceValue<string>> = new Set()
+    ): UnusedSymbolAnalysis {
         const usages: SymbolUsage[] = [];
         const diagnostics: SemanticDiagnostic[] = [];
         const seen = new Set<SourceValue<string>>();
@@ -55,7 +59,12 @@ export class UnusedSymbolAnalyzer {
                 reference: result.reference,
                 kind: classifier.classify(result)
             }));
-            const externallyVisible = 'global' in definitionSymbol && definitionSymbol.global !== undefined;
+            // RTOS-UH TASKs are externally addressable even without an
+            // explicit GLOBAL attribute. The compiler's /*+G*/ option creates
+            // an externally callable procedure entry, but does not set GLOBAL.
+            const externallyVisible = ('global' in definitionSymbol && definitionSymbol.global !== undefined)
+                || definitionSymbol.kind === SymbolKind.Task
+                || (definitionSymbol.kind === SymbolKind.Procedure && gProcedures.has(declaration));
             const implicitlyUsed = definitionSymbol.kind === SymbolKind.Task && definitionSymbol.main === true;
             if (implicitlyUsed) accesses.push({ kind: SymbolAccessKind.Implicit });
 

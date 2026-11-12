@@ -27,11 +27,13 @@ import type { CharacterTransferDiagnosticContext } from './procedureActualParame
 import { lookupBuiltin } from './builtins/builtinCatalog';
 import type { BuiltinDefinition } from './builtins/builtinSignature';
 import { matchBuiltinSignature, builtinExpectedArity, acceptsBuiltinArity } from './builtins/builtinSignature';
+import { isMonadicWordOperator } from '../parser/problem/expressions/monadicOperators';
 
 /** The expression resolver is a semantic phase, never a dependency of the parser/AST. */
 export interface ExpressionTypeResolverContext {
     bind(source: SourceValue<string>, symbol: SemanticSymbol): void;
     bindBuiltin(source: SourceValue<string>, builtin: BuiltinDefinition): void;
+    bindMonadicOperator(source: SourceValue<string>): void;
     reportInvalidBuiltinCallArity(source: SourceValue<string>, expected: string, actual: number): void;
     reportInvalidBuiltinArgumentType(source: SourceValue<string>, builtinName: string): void;
     reportUnknownIdentifier(source: SourceValue<string>): void;
@@ -157,8 +159,11 @@ export class ExpressionTypeResolver {
         if (!first) return undefined;
         const symbol = resolveSymbol(environment, first.identifier.value);
         const builtin = symbol ? undefined : lookupBuiltin(first.identifier.value);
+        const monadic = !symbol && !builtin && node.segments.length === 1
+            && first.suffix && isMonadicWordOperator(first.identifier.value);
         if (symbol) this.context.bind(first.identifier, symbol);
         else if (builtin) this.context.bindBuiltin(first.identifier, builtin);
+        else if (monadic) this.context.bindMonadicOperator(first.identifier);
         else this.context.reportUnknownIdentifier(first.identifier);
 
         // Every parenthesized slot remains a syntactic expression, regardless
@@ -167,7 +172,8 @@ export class ExpressionTypeResolver {
         const argumentTypes = node.segments.map(segment =>
             (segment.suffix?.expressions ?? []).map(argument => this.resolve(argument, environment)));
         if (!symbol) {
-            return builtin ? this.builtinResult(node, builtin, argumentTypes, environment) : undefined;
+            if (builtin) return this.builtinResult(node, builtin, argumentTypes, environment);
+            return monadic ? this.parenthesizedMonadic(first, argumentTypes[0] ?? []) : undefined;
         }
 
         let type: SemanticType | undefined;
@@ -456,13 +462,34 @@ export class ExpressionTypeResolver {
             this.context.reportUnsupportedContExpression(node.operator);
             return undefined;
         }
-        const original = this.resolve(node.operand, environment);
+        return this.monadicResult(node.operator, this.resolve(node.operand, environment));
+    }
+
+    /** A parenthesized operator spelling is also a syntactically valid call.
+     * Only after normal scope lookup fails may it be interpreted as an
+     * intrinsic operator; the parser must not make that decision.
+     */
+    private parenthesizedMonadic(
+        segment: NameSegmentNode, argumentTypes: readonly (SemanticType | undefined)[]
+    ): SemanticType | undefined {
+        const suffix = segment.suffix;
+        if (!suffix?.closeParenthesis || suffix.expressions.some(expression => !expression)) return undefined;
+        if (suffix.expressions.length !== 1) {
+            this.context.reportInvalidCallArity(segment.identifier, 1, suffix.expressions.length);
+            return undefined;
+        }
+        return this.monadicResult(segment.identifier, argumentTypes[0]);
+    }
+
+    private monadicResult(
+        operator: SourceValue<string>, original: SemanticType | undefined
+    ): SemanticType | undefined {
         const operand = original && this.context.resolveUnderlyingType(original);
-        if (!operand || !node.operand) return undefined;
+        if (!operand) return undefined;
         // RTOS-UH may automatically dereference REF values depending on use.
         // Defer this case until contextual dereference is modeled.
         if (this.reference(operand)) return undefined;
-        switch (node.operator.value) {
+        switch (operator.value) {
             case '+':
             case '-':
             case 'ABS':
@@ -526,7 +553,7 @@ export class ExpressionTypeResolver {
                 }
                 // PEARL 90 also permits monadic UPB on a character string.
                 // Its result precision is FIXED(15), unlike array bounds.
-                if (node.operator.value === 'UPB' && operand.kind === SemanticTypeKind.Character) {
+                if (operator.value === 'UPB' && operand.kind === SemanticTypeKind.Character) {
                     return { kind: SemanticTypeKind.Fixed, precision: 15 };
                 }
                 break;
@@ -534,7 +561,7 @@ export class ExpressionTypeResolver {
                 // Other PEARL monadic operators need dedicated rules.
                 return undefined;
         }
-        this.context.reportInvalidExpressionOperands(node.operator);
+        this.context.reportInvalidExpressionOperands(operator);
         return undefined;
     }
 

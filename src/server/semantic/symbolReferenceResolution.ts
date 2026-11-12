@@ -31,6 +31,11 @@ export type SymbolReferenceResolution =
         readonly diagnostics: readonly SemanticDiagnostic[];
     }
     | {
+        readonly kind: 'monadicOperator';
+        readonly reference: SymbolReference;
+        readonly diagnostics: readonly SemanticDiagnostic[];
+    }
+    | {
         readonly kind: 'unresolved';
         readonly reference: SymbolReference;
         readonly diagnostics: readonly SemanticDiagnostic[];

@@ -22,6 +22,8 @@ import { SemanticAnalyzer } from '../semanticAnalyzer';
 import { SemanticDiagnosticCode, SemanticDiagnosticSeverity } from '../semanticDiagnostic';
 import { SemanticTypeKind } from '../semanticType';
 import { CallSignatureIndex } from '../callSignatureIndex';
+import { SymbolReferenceCollector } from '../symbolReferenceCollector';
+import { SymbolReferenceResolver } from '../symbolReferenceResolver';
 import { AstLookupResultDocumentationProvider } from '../../documentation/astLookupResultDocumentationProvider';
 
 const logger: Logger = { info() {}, warn() {}, error() {} };
@@ -169,4 +171,53 @@ test('parentheses around NIL do not hide a scalar return mismatch', () => {
     const r = analyze('R: PROC RETURNS(FIXED); RETURN((NIL)); END;');
     assert.deepEqual(r.syntax, []);
     assert.deepEqual(r.errors.map(d => d.code), [SemanticDiagnosticCode.InvalidReturnType]);
+});
+
+test('user-defined ABS overrides parenthesized monadic ABS and has an ordinary symbol binding', () => {
+    const r = analyze(`ABS: PROC(X FLOAT) RETURNS(FLOAT); RETURN(X); END;
+        R: PROC RETURNS(FLOAT); RETURN(ABS(7.0)); END;`);
+    assert.deepEqual(r.syntax, []);
+    assert.deepEqual(r.errors, []);
+    const call = r.returns[1].expression;
+    assert.ok(call instanceof NameExpressionNode);
+    const symbol = r.semantic.bindings.get(call.segments[0].identifier);
+    assert.ok(symbol);
+    assert.equal(symbol.name.value, 'ABS');
+    assert.deepEqual(r.semantic.expressionTypes.get(call),
+        { kind: SemanticTypeKind.Float, precision: undefined });
+    assert.doesNotMatch(r.hover('ABS(7.0)')!, /# Monadic operator/i);
+    const resolutions = new SymbolReferenceResolver().resolve(
+        new SymbolReferenceCollector().collect(r.ast), r.semantic);
+    const reference = resolutions.all.find(value => value.reference.identifier === call.segments[0].identifier);
+    assert.equal(reference?.kind, 'bound');
+});
+
+test('parenthesized monadic operators still work when not shadowed', () => {
+    const r = analyze(`R: PROC RETURNS(FIXED); RETURN(ABS(-7)); END;
+        S: PROC RETURNS(FIXED); RETURN(ROUND(2.5)); END;`);
+    assert.deepEqual(r.syntax, []);
+    assert.deepEqual(r.errors, []);
+    assert.deepEqual(r.semantic.expressionTypes.get(r.returns[0].expression!),
+        { kind: SemanticTypeKind.Fixed, precision: 15 });
+    assert.deepEqual(r.semantic.expressionTypes.get(r.returns[1].expression!),
+        { kind: SemanticTypeKind.Fixed, precision: 15 });
+    assert.match(r.hover('ABS(-7)')!, /# Monadic operator/);
+    const first = r.returns[0].expression as NameExpressionNode;
+    assert.ok(r.semantic.monadicOperatorBindings.has(first.segments[0].identifier));
+    const resolutions = new SymbolReferenceResolver().resolve(
+        new SymbolReferenceCollector().collect(r.ast), r.semantic);
+    const reference = resolutions.all.find(value => value.reference.identifier === first.segments[0].identifier);
+    assert.equal(reference?.kind, 'monadicOperator');
+});
+
+test('shadowing does not silently fall back to an operator when a data name is not callable', () => {
+    const r = analyze(`DCL ABS FIXED; R: PROC RETURNS(FIXED); RETURN(ABS(7)); END;`);
+    assert.deepEqual(r.syntax, []);
+    assert.deepEqual(r.errors.map(error => error.code), [SemanticDiagnosticCode.InvalidNameSuffix]);
+});
+
+test('parenthesized intrinsic monadic form reports invalid arity without a name error', () => {
+    const r = analyze(`R: PROC RETURNS(FIXED); RETURN(ABS(1, 2)); END;`);
+    assert.deepEqual(r.syntax, []);
+    assert.deepEqual(r.errors.map(error => error.code), [SemanticDiagnosticCode.InvalidCallArity]);
 });

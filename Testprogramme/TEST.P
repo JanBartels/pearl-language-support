@@ -45,6 +45,9 @@ DCL Param(10) TP;
 
 TYPE Counter FIXED(31);
 
+DCL IX TP;
+DCL RIX REF TP INIT(IX);
+
 SPC MYPROC ENTRY( () FIXED ) GLOBAL;
 #ifdef PEARL90
    #define INOUTP90_ " "
@@ -204,7 +207,15 @@ DCL MyRefProc2 TRefProc2;
 
 DCL RIS REF INV STRUCT[];
 
+ABS: PROC( X FLOAT ) RETURNS( FLOAT );
+   RETURN( 7 );
+END;
+
 FloatProc: PROC( FLOAT IDENT ) RETURNS( BIT );
+   IF ABS(9) == 8
+   THEN
+      ;
+   FIN;
    CALL MyRefProc2(42);
    MyRefProc2(42);
    MyRefProc2( 4 );
@@ -450,6 +461,10 @@ T2: TASK;
 END;
 
 P2: PROC /*+G*/ ( A FIXED, B FIXED );
+  A := 2+3*5;
+END;
+
+P2Unused: PROC /*+G*/ ( A FIXED, B FIXED );
   A := 2+3*5;
 END;
 

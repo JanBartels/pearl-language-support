@@ -55,6 +55,11 @@ export class SymbolReferenceResolver {
                 continue;
             }
 
+            if (semantic.monadicOperatorBindings.has(source)) {
+                results.push({ kind: 'monadicOperator', reference, diagnostics });
+                continue;
+            }
+
             // END identifiers name the surrounding block/repetition, but the
             // existing semantic symbol model has no symbol/declaration for
             // these structural names. Do not misdiagnose them as unknown names.

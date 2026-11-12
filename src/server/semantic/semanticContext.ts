@@ -28,6 +28,7 @@ export class SemanticContext {
     readonly typeDefinitions: ReadonlyMap<TypeSymbol, SemanticType>;
     readonly bindings: BindingIndex;
     readonly builtinBindings: ReadonlyMap<SourceValue<string>, BuiltinDefinition>;
+    readonly monadicOperatorBindings: ReadonlySet<SourceValue<string>>;
     readonly diagnostics: readonly SemanticDiagnostic[];
     readonly expressionTypes: ReadonlyMap<ExpressionNode, SemanticType>;
     readonly constantFixedExpressionValues: ReadonlyMap<ConstantFixedExpressionNode, FixedConstantValue>;
@@ -56,13 +57,15 @@ export class SemanticContext {
         builtinBindings: ReadonlyMap<SourceValue<string>, BuiltinDefinition> = new Map(),
         localSpecificationRelations: LocalSpecificationRelationIndex = new Map(),
         expressionTypes: ReadonlyMap<ExpressionNode, SemanticType> = new Map(),
-        symbolUsages: SymbolUsageIndex = new SymbolUsageIndex()
+        symbolUsages: SymbolUsageIndex = new SymbolUsageIndex(),
+        monadicOperatorBindings: ReadonlySet<SourceValue<string>> = new Set()
     ) {
         this.symbolUsages = symbolUsages;
         this.typeDefinitions = new Map(typeDefinitions);
         this.expressionTypes = new Map(expressionTypes);
         this.bindings = new Map(bindings);
         this.builtinBindings = new Map(builtinBindings);
+        this.monadicOperatorBindings = new Set(monadicOperatorBindings);
         this.localSpecificationRelations = new Map(localSpecificationRelations);
         this.diagnostics = [...diagnostics];
         this.constantFixedExpressionValues = new Map(constantFixedExpressionValues);
@@ -137,7 +140,8 @@ export class SemanticContext {
             this.builtinBindings,
             this.localSpecificationRelations,
             this.expressionTypes,
-            this.symbolUsages
+            this.symbolUsages,
+            this.monadicOperatorBindings
         );
     }
 
@@ -157,7 +161,8 @@ export class SemanticContext {
             this.builtinBindings,
             this.localSpecificationRelations,
             this.expressionTypes,
-            usages
+            usages,
+            this.monadicOperatorBindings
         );
     }
 

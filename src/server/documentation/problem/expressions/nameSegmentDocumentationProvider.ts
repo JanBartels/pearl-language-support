@@ -27,10 +27,15 @@ export class NameSegmentDocumentationProvider extends DocumentationProvider<Name
         if (lookup.element !== node.identifier) return undefined;
 
         const symbol = semanticContext && lookupBoundSymbol(semanticContext.bindings, node.identifier);
+        const monadicOperator = semanticContext?.monadicOperatorBindings.has(node.identifier) === true;
         const selector = !symbol && node.dot && node.suffix
             && (node.identifier.value === 'BIT' || node.identifier.value === 'CHAR'
                 || node.identifier.value === 'CHARACTER');
-        let documentation = selector
+        let documentation = monadicOperator
+            ? md`# Monadic operator
+
+Operator \`${node.identifier.value}\` acts on one operand.`
+            : selector
             ? md`# String selector
 
 \`.${node.identifier.value}(i)\` selects a single ${node.identifier.value === 'BIT' ? 'bit' : 'character'} of the named object. Its index must be FIXED.`

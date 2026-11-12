@@ -182,6 +182,7 @@ class SemanticAnalysisState implements
     readonly procedureReturnTypeStack: (SemanticType | undefined)[] = [];
     readonly bindings = new Map<SourceValue<string>, SemanticSymbol>();
     readonly builtinBindings = new Map<SourceValue<string>, BuiltinDefinition>();
+    readonly monadicOperatorBindings = new Set<SourceValue<string>>();
     readonly diagnostics: SemanticDiagnostic[] = [];
 
     /** SourceValue may be synthetic (not backed by source text). Such values
@@ -319,7 +320,9 @@ class SemanticAnalysisState implements
             this.shellCommandsByProcedure,
             this.builtinBindings,
             this.localSpecificationRelations,
-            this.expressionTypes
+            this.expressionTypes,
+            undefined,
+            this.monadicOperatorBindings
         );
     }
 
@@ -783,6 +786,10 @@ class SemanticAnalysisState implements
 
     bindBuiltin(source: SourceValue<string>, builtin: BuiltinDefinition): void {
         this.builtinBindings.set(source, builtin);
+    }
+
+    bindMonadicOperator(source: SourceValue<string>): void {
+        this.monadicOperatorBindings.add(source);
     }
 
     linkLocalSpecification(

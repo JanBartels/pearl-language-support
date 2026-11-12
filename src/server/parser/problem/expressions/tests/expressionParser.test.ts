@@ -167,3 +167,19 @@ test('RTOS-UH SHIFT parentheses rule also applies to negative names, not to subt
     assert.deepEqual(parse('B SHIFT I - 2').problems, []);
     assert.deepEqual(parse('B CSHIFT -2').problems, []);
 });
+
+test('parenthesized operator names remain syntax-neutral for procedure shadowing', () => {
+    for (const name of ['ABS', 'SIGN', 'ROUND', 'NOT', 'LWB']) {
+        const result = parse(`${name} (7);`);
+        assert.deepEqual(result.problems, []);
+        assert.equal(result.rest, ';');
+        assert.ok(result.expression instanceof NameExpressionNode);
+        assert.equal(result.expression.segments[0].identifier.value, name);
+        assert.equal(result.expression.segments[0].suffix?.expressions.length, 1);
+    }
+    const nonParenthesized = parse('ABS 7');
+    assert.deepEqual(nonParenthesized.problems, []);
+    assert.ok(nonParenthesized.expression instanceof MonadicExpressionNode);
+    const reserved = parse('TOFIXED(7)');
+    assert.ok(reserved.expression instanceof MonadicExpressionNode);
+});

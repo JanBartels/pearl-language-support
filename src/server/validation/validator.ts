@@ -157,14 +157,14 @@ export class Validator {
 
         // Inactive branches are already absent from compilerTokens; macro-generated
         // comments are present and share their Source with parsed AST locations.
-        const compilerControlDiagnostics = new CompilerControlAnalyzer().analyze(
+        const compilerControls = new CompilerControlAnalyzer().analyzeWithEntryPoints(
             ast,
             compilerBlockComments,
             semanticContext
         );
 
         semanticContext = semanticContext.withAdditionalDiagnostics(
-            compilerControlDiagnostics
+            compilerControls.diagnostics
         );
 
         // ----------------------------
@@ -184,7 +184,7 @@ export class Validator {
         // ----------------------------
 
         const unused = new UnusedSymbolAnalyzer().analyze(
-            semanticContext, symbolReferenceResolutions
+            semanticContext, symbolReferenceResolutions, compilerControls.gProcedures
         );
         semanticContext = semanticContext.withSymbolUsages(unused.usages, unused.diagnostics);
 

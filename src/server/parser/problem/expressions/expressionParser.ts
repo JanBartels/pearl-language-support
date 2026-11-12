@@ -13,6 +13,7 @@ import { SourceValue } from '../../../core/sourceValue';
 import { NameExpressionParser } from './nameExpressionParser';
 import { ClockConstantTailParser } from './clockConstantTailParser';
 import { DurationConstantTailParser } from './durationConstantTailParser';
+import { MONADIC_WORD_OPERATORS, isMonadicWordOperator } from './monadicOperators';
 
 /** Operator ranks from PEARL 90, section 6.1.3, Table 6.10.
  * Larger binding power means higher precedence. Rank 1 associates to the
@@ -28,11 +29,6 @@ const DYADIC_OPERATORS: ReadonlyMap<string, { power: number; rightAssociative: b
         ['AND', { power: 2, rightAssociative: false }],
         ...['OR', 'EXOR'].map(op => [op, { power: 1, rightAssociative: false }] as const)
     ]);
-
-const MONADIC_OPERATORS = [
-    'NOT', 'ABS', 'SIGN', 'LWB', 'UPB', 'SIZEOF', 'CONT',
-    'TOFIXED', 'TOFLOAT', 'TOBIT', 'TOCHAR', 'ENTIER', 'ROUND'
-] as const;
 
 /** First vertical slice of the general expression grammar.
  * A deliberate standalone parser: statement token preservation and the
@@ -89,8 +85,13 @@ export class ExpressionParser extends ParserBase {
             if (!sema) this.problems.error(this.location(), 'Expected SEMA name after TRY.');
             return new TryExpressionNode(keyword, sema);
         }
+        // A non-reserved operator name followed by (...) may also be the
+        // name of a user procedure.  Keep the syntax neutral and leave the
+        // precedence between a declared symbol and an intrinsic operator
+        // to semantic resolution.  Unparenthesized forms remain operators.
+        const namedCall = this.isParenthesizedOperatorName();
         const operator = this.acceptOperator(['+', '-'])
-            ?? this.acceptKeyword(MONADIC_OPERATORS);
+            ?? (namedCall ? undefined : this.acceptKeyword(MONADIC_WORD_OPERATORS));
         if (operator) {
             // Sign operators bind less strongly than ** (so -A**B means
             // -(A**B)). Named monadic conversions bind before FIT/UPB etc.:
@@ -158,6 +159,16 @@ export class ExpressionParser extends ParserBase {
             return new NameExpressionParser(this.context).parseAfterIdentifier(identifier);
         }
         return undefined;
+    }
+
+    private isParenthesizedOperatorName(): boolean {
+        if (!this.isIdentifier() || !isMonadicWordOperator(this.tokenText())) return false;
+        let offset = 1;
+        let next = this.context.stream.peek(offset);
+        while (next.kind === TokenKind.Newline || next.kind === TokenKind.Comment) {
+            next = this.context.stream.peek(++offset);
+        }
+        return next.kind === TokenKind.Operator && this.tokenText(next) === '(';
     }
 
     /** Distinguish CLOCK (12:30:00) from a CASE selection range (1:5).

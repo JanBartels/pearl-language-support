@@ -21,6 +21,9 @@ import { SymbolReferenceCollector } from '../symbolReferenceCollector';
 import { SymbolReferenceResolver } from '../symbolReferenceResolver';
 import { UnusedSymbolAnalyzer } from '../unusedSymbolAnalyzer';
 import { SymbolAccessKind } from '../symbolUsageIndex';
+import { SymbolKind } from '../symbolKind';
+import { CompilerControlAnalyzer } from '../compilerControlAnalyzer';
+import { collectBlockComments } from '../../validation/analysis';
 
 const logger: Logger = { info() {}, warn() {}, error() {} };
 
@@ -39,7 +42,10 @@ function analyze(body: string) {
     const references = new SymbolReferenceCollector().collect(ast);
     const semantic = new SemanticAnalyzer().analyze(ast);
     const resolutions = new SymbolReferenceResolver().resolve(references, semantic);
-    const result = new UnusedSymbolAnalyzer().analyze(semantic, resolutions);
+    const controls = new CompilerControlAnalyzer().analyzeWithEntryPoints(
+        ast, collectBlockComments(tokens), semantic
+    );
+    const result = new UnusedSymbolAnalyzer().analyze(semantic, resolutions, controls.gProcedures);
     return { syntax: problems.toArray().map(p => p.message), semantic, result,
         enriched: semantic.withSymbolUsages(result.usages, result.diagnostics) };
 }
@@ -62,7 +68,7 @@ test('detects unused local and module variables; a write is still a use', () => 
             DCL LocalUnused FIXED;
             DCL Written FIXED;
             Written := 5;
-        END;`), ['ModuleUnused', 'Main', 'LocalUnused']);
+        END;`), ['ModuleUnused', 'LocalUnused']);
 });
 
 test('GLOBAL data, procedures and tasks are assumed used across modules', () => {
@@ -72,17 +78,19 @@ test('GLOBAL data, procedures and tasks are assumed used across modules', () => 
         RemoteTask: TASK GLOBAL; END;
         DCL Local FIXED;
         LocalProc: PROC; END;
-        LocalTask: TASK; END;`), ['Local', 'LocalProc', 'LocalTask']);
+        LocalTask: TASK; END;`), ['Local', 'LocalProc']);
 });
 
 test('TASK MAIN is implicitly used without an ACTIVATE reference', () => {
     const result = analyze(`Startup: TASK MAIN; END; Ordinary: TASK; END;`);
     assert.deepEqual(result.syntax, []);
-    assert.deepEqual(result.result.diagnostics.map(d => d.message),
-        ["Symbol 'Ordinary' wird nicht verwendet."]);
+    assert.deepEqual(result.result.diagnostics.map(d => d.message), []);
+    const ordinary = result.enriched.symbolUsages.all.find(u => u.declaration.value === 'Ordinary')!;
+    assert.equal(ordinary.externallyVisible, true);
+    assert.equal(ordinary.unused, false);
     const startup = result.enriched.symbolUsages.all.find(u => u.declaration.value === 'Startup')!;
     assert.equal(startup.implicitlyUsed, true);
-    assert.equal(startup.externallyVisible, false);
+    assert.equal(startup.externallyVisible, true);
     assert.equal(startup.unused, false);
 });
 
@@ -96,12 +104,58 @@ test('TASK MAIN remains implicitly used when preceded by a local SPC', () => {
     assert.equal(usages[0].unused, false);
 });
 
+test('all TASKs and TASK specifications are potentially used externally', () => {
+    const result = analyze(`Ordinary: TASK; END; SPC Remote TASK GLOBAL; SPC Local TASK; Local: TASK; END;`);
+    assert.deepEqual(result.syntax, []);
+    assert.deepEqual(result.result.diagnostics, []);
+    for (const name of ['Ordinary', 'Remote', 'Local']) {
+        const usage = result.result.usages.all.find(u => u.declaration.value === name)!;
+        assert.equal(usage.unused, false);
+        assert.equal(usage.externallyVisible, true);
+    }
+});
+
 test('external GLOBAL specifications are never diagnosed as unused', () => {
     assert.deepEqual(unused(`
         SPC External FIXED GLOBAL;
         SPC ExternalProc PROC GLOBAL;
         SPC ExternalTask TASK GLOBAL;
         Main: PROC; END;`), ['Main']);
+});
+
+test('a compiler +G procedure is an external entry without PEARL GLOBAL', () => {
+    const result = analyze(`
+        Entry: PROC /*+G*/; END;
+        Unused: PROC; END;
+    `);
+    assert.deepEqual(result.syntax, []);
+    assert.deepEqual(result.result.diagnostics.map(d => d.message),
+        ["Symbol 'Unused' wird nicht verwendet."]);
+    const entry = result.result.usages.all.find(u => u.declaration.value === 'Entry')!;
+    assert.equal(entry.externallyVisible, true);
+    assert.equal(entry.unused, false);
+    assert.equal(entry.symbol.kind, SymbolKind.Procedure);
+    assert.equal('global' in entry.symbol && entry.symbol.global !== undefined, false);
+});
+
+test('a +G PROC with a preceding local SPC is still one externally used symbol', () => {
+    const result = analyze(`
+        SPC Entry PROC;
+        Entry: PROC /*+G*/; END;
+    `);
+    assert.deepEqual(result.syntax, []);
+    assert.deepEqual(result.result.diagnostics, []);
+    const entries = result.result.usages.all.filter(u => u.declaration.value === 'Entry');
+    assert.equal(entries.length, 1);
+    assert.equal(entries[0].externallyVisible, true);
+    assert.equal(entries[0].unused, false);
+});
+
+test('a misplaced +G comment does not mark an unrelated PROC as an external entry', () => {
+    assert.deepEqual(unused(`
+        /*+G*/
+        Local: PROC; END;
+    `), ['Local']);
 });
 
 test('real references mark types, procedures, task targets and labels as used', () => {
@@ -186,6 +240,8 @@ test('Validator publishes unused warnings and the reusable usage index', async (
     );
     const text = `P=MPC603; SC=2000; MODULE M; PROBLEM;
         DCL Used FIXED, Unused FIXED, Exported FIXED GLOBAL;
+        Entry: PROC /*+G*/; END;
+        Ordinary: TASK; END;
         Startup: TASK MAIN;
             Used := 1;
         END;
@@ -207,6 +263,11 @@ test('Validator publishes unused warnings and the reusable usage index', async (
     assert.equal(usages.find(usage => usage.declaration.value === 'Unused')?.unused, true);
     assert.equal(usages.find(usage => usage.declaration.value === 'Exported')?.externallyVisible, true);
     assert.equal(usages.find(usage => usage.declaration.value === 'Startup')?.implicitlyUsed, true);
+    assert.equal(usages.find(usage => usage.declaration.value === 'Startup')?.externallyVisible, true);
+    assert.equal(usages.find(usage => usage.declaration.value === 'Ordinary')?.externallyVisible, true);
+    const entry = usages.find(usage => usage.declaration.value === 'Entry')!;
+    assert.equal(entry.externallyVisible, true);
+    assert.equal(entry.unused, false);
 });
 
 function warningNames(body: string, code: SemanticDiagnosticCode): string[] {
@@ -343,6 +404,37 @@ test('REF INIT references record address escapes and suppress access-mode warnin
         d.code === SemanticDiagnosticCode.WrittenButNeverRead && d.message.includes("'Value'")));
 });
 
+test('REF INV FIXED INIT of an invariant constant is an address use', () => {
+    const result = analyze(`
+        DCL IX INV FIXED INIT(7);
+        DCL RIX REF INV FIXED INIT(IX);
+    `);
+    assert.deepEqual(result.syntax, []);
+    assert.deepEqual(result.semantic.diagnostics, []);
+    const ix = result.result.usages.all.find(u => u.declaration.value === 'IX')!;
+    const rix = result.result.usages.all.find(u => u.declaration.value === 'RIX')!;
+    assert.equal(ix.unused, false);
+    assert.equal(ix.addressTaken, true);
+    assert.equal(ix.accesses[0].kind, SymbolAccessKind.Address);
+    assert.equal(rix.unused, true);
+    assert.deepEqual(result.result.diagnostics.map(d => d.message),
+        ["Symbol 'RIX' wird nicht verwendet."]);
+});
+
+test('a normal function-like PROC use is a bound symbol reference', () => {
+    const result = analyze(`
+        Calc: PROC(X FLOAT) RETURNS(FLOAT); RETURN(X); END;
+        Runner: TASK MAIN;
+            DCL Result FLOAT;
+            Result := Calc(7.0);
+        END;
+    `);
+    assert.deepEqual(result.syntax, []);
+    const proc = result.result.usages.all.find(u => u.declaration.value === 'Calc')!;
+    assert.equal(proc.unused, false);
+    assert.equal(proc.references.length, 1);
+});
+
 test('REF value actuals take addresses; REF variables passed by value are read', () => {
     const result = analyze(`
         Accept: PROC(P REF FIXED); END;
@@ -390,4 +482,24 @@ test('repeated writes remain a single symbol-level warning without flow analysis
     assert.equal(usage.read, true);
     assert.equal(usage.written, true);
     assert.ok(!result.result.diagnostics.some(d => d.message.includes("'X'")));
+});
+
+test('user procedure named ABS is used when called in an expression', () => {
+    const result = analyze(`ABS: PROC(X FLOAT) RETURNS(FLOAT); RETURN(X); END;
+        Runner: TASK MAIN; DCL Result FLOAT; Result := ABS(7.0); END;`);
+    assert.deepEqual(result.syntax, []);
+    assert.deepEqual(result.semantic.diagnostics.filter(d =>
+        d.severity === SemanticDiagnosticSeverity.Error), []);
+    assert.equal(result.result.usages.all.find(usage => usage.declaration.value === 'ABS')?.unused, false);
+    assert.deepEqual(result.result.diagnostics.filter(d =>
+        d.code === SemanticDiagnosticCode.UnusedSymbol), []);
+});
+
+test('ABS procedure occurrence in IF is a use even when the call has a type error', () => {
+    const result = analyze(`ABS: PROC(X FLOAT) RETURNS(FLOAT); RETURN(X); END;
+        Runner: TASK MAIN; IF ABS(7) > 0.0 THEN ; FIN; END;`);
+    assert.deepEqual(result.syntax, []);
+    assert.equal(result.result.usages.all.find(usage => usage.declaration.value === 'ABS')?.unused, false);
+    assert.equal(result.result.diagnostics.some(d => d.code === SemanticDiagnosticCode.UnusedSymbol
+        && /'ABS'/.test(d.message)), false);
 });
