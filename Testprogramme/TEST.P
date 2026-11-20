@@ -805,11 +805,15 @@ TYPE Other83c STRUCT[E FLOAT];
 
 R83c: PROC;
     DCL AS83c HS83c, BS83c HS83c, CS83c Other83c;
-    DCL AIS83c INV HS83c;
+    DCL AIS83rc REF INV HS83c;
+    DCL AIS83c HS83c;
 
     AS83c := BS83c;  ! Gültig
     AS83c := CS83c;  ! Typfehler
     AIS83c := BS83c;  ! Gültig
+    AIS83c.E = 7; ! ok
+    AS83c.E = 8;  ! ok
+    AIS83rc.E = 7;   ! Fehler
 END;
 
 R83d: PROC;

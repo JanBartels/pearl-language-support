@@ -30,6 +30,29 @@ npm install
 Sobald du eine Datei mit der Endung `.p` oder `.P` öffnest, aktiviert sich die Extension automatisch.
 Der Language Server wird automatisch gestartet und unterstützt grundlegende Sprachfunktionen.
 
+### Syntax- und semantische Hervorhebung
+
+Die Farbgebung orientiert sich an clangd und VS Code Dark+.
+
+| Farbwert | Farbe | Sprachelemente |
+|---|---|---|
+| ![Blau](https://img.shields.io/badge/-%20-569CD6?style=flat-square) `#569CD6` | Blau | Schlüsselwörter, Datentypen |
+| ![Türkis](https://img.shields.io/badge/-%20-4EC9B0?style=flat-square) `#4EC9B0` | Türkis | Benannte Typen |
+| ![Hellblau](https://img.shields.io/badge/-%20-9CDCFE?style=flat-square) `#9CDCFE` | Hellblau | Variablen, Parameter, Strukturkomponenten |
+| ![Hellgelb](https://img.shields.io/badge/-%20-DCDCAA?style=flat-square) `#DCDCAA` | Hellgelb | Prozeduren, Tasks |
+| ![Violett](https://img.shields.io/badge/-%20-C586C0?style=flat-square) `#C586C0` | Violett | Makros, Präprozessordirektiven |
+| ![Hellgrau](https://img.shields.io/badge/-%20-D4D4D4?style=flat-square) `#D4D4D4` | Hellgrau | Operatoren, Labels |
+| ![Hellgrün](https://img.shields.io/badge/-%20-B5CEA8?style=flat-square) `#B5CEA8` | Hellgrün | Zahlen |
+| ![Orangebraun](https://img.shields.io/badge/-%20-CE9178?style=flat-square) `#CE9178` | Orangebraun | Zeichenketten |
+| ![Dunkelgrün](https://img.shields.io/badge/-%20-6A9955?style=flat-square) `#6A9955` | Gedämpftes Grün | Kommentare |
+
+**Zusätzliche Darstellungsstile:**
+
+- *Kursiv:* Zuweisungsgeschützte Symbole und Zugriffe (`INV`).
+- Abgeschwächt: Unbenutzte Symbole, Makros und inaktiver Präprozessorcode.
+
+Die Farbgebung kann über die VS-Code-Einstellungen angepasst werden.
+
 ### PEARL-Include-Dateien in VS Code
 
 RTOS-UH verwendet für PEARL-Include-Dateien häufig die Dateiendungen `.h` und `.H`. VS Code erkennt diese standardmäßig als C/C++-Headerdateien.

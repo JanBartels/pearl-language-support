@@ -46,7 +46,10 @@ export class SymbolHighlightCollector {
 
                 const attributes: SourceHighlightAttribute[] = [];
                 if (declaration) attributes.push(SourceHighlightAttribute.Declaration);
-                if (this.readonly(bound)) attributes.push(SourceHighlightAttribute.Readonly);
+                const protectedAccess = declaration
+                    ? this.readonly(bound)
+                    : semantic.nameAccessProtections.get(identifier) ?? this.readonly(bound);
+                if (protectedAccess) attributes.push(SourceHighlightAttribute.Readonly);
                 result.push({ element: identifier, kind, attributes });
                 seen.add(identifier);
             };

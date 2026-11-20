@@ -29,6 +29,7 @@ import { ParenthesizedExpressionNode } from '../ast/problem/expressions/parenthe
 import type { ExpressionNode } from '../ast/problem/expressions/expressionNode';
 import { ExpressionTypeResolver, ExpressionTypeResolverContext } from './expressionTypeResolver';
 import { classifyObjectExpressionInfo, expressionSource } from './expressionObject';
+import { NameAccessProtectionCollector } from './nameAccessProtectionCollector';
 import { validateProcedureActualParameters, validateBuiltinIdentificationParameters } from './procedureActualParameterValidator';
 import type { CharacterTransferDiagnosticContext } from './procedureActualParameterValidator';
 import { matchBuiltinSignature } from './builtins/builtinSignature';
@@ -242,6 +243,7 @@ class SemanticAnalysisState implements
     readonly typeResolver = new SemanticTypeResolver(this);
     readonly constantFixedExpressionEvaluator = new ConstantFixedExpressionEvaluator(this);
     readonly referenceInitializerIdentifiers = new Set<SourceValue<string>>();
+    nameAccessProtections: ReadonlyMap<SourceValue<string>, boolean> = new Map();
     readonly initializationResolver = new InitializationResolver(this);
     readonly timeConstantEvaluator = new TimeConstantEvaluator(this);
     readonly expressionTypeResolver = new ExpressionTypeResolver(this);
@@ -324,7 +326,8 @@ class SemanticAnalysisState implements
             this.expressionTypes,
             undefined,
             this.monadicOperatorBindings,
-            this.referenceInitializerIdentifiers
+            this.referenceInitializerIdentifiers,
+            this.nameAccessProtections
         );
     }
 
@@ -1582,6 +1585,11 @@ export class SemanticAnalyzer {
         this.analyzeNode(root, undefined, state);
         this.validateShellModules(root, state);
         state.finalize();
+        // Bound access paths are analyzed here, not by the LSP. The same
+        // object-protection semantics are used for assignment diagnostics.
+        state.nameAccessProtections = new NameAccessProtectionCollector().collect(
+            root, state.bindings, type => state.resolveUnderlyingType(type)
+        );
 
         return state.createContext();
     }

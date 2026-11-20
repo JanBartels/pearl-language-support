@@ -2,8 +2,8 @@
   "name": "pearl-language-support",
   "displayName": "PEARL Language Support",
   "description": "VS Code Extension mit Language Server für die Sprache PEARL",
-  "version": "0.2.12",
-  "publisher": "none",
+  "version": "0.2.13",
+  "publisher": "Jan Bartels",
   "author": {
     "name": "Jan Bartels"
   },
@@ -99,50 +99,74 @@
       "editor.semanticTokenColorCustomizations": {
         "rules": {
           "namespace:pearl": {
-            "foreground": "#D6C1F0"
+            "foreground": "#4EC9B0"
           },
           "type:pearl": {
-            "foreground": "#C5A3F5"
+            "foreground": "#4EC9B0"
+          },
+          "struct:pearl": {
+            "foreground": "#4EC9B0"
           },
           "variable:pearl": {
-            "foreground": "#83C7F3"
-          },
-          "variable.readonly:pearl": {
-            "foreground": "#B7DE8A",
-            "italic": true
+            "foreground": "#9CDCFE"
           },
           "parameter:pearl": {
-            "foreground": "#71D8C6"
-          },
-          "parameter.readonly:pearl": {
-            "foreground": "#B7DE8A",
-            "italic": true
+            "foreground": "#9CDCFE"
           },
           "property:pearl": {
-            "foreground": "#F5A59C"
+            "foreground": "#9CDCFE"
           },
           "function:pearl": {
-            "foreground": "#F2D187"
+            "foreground": "#DCDCAA"
           },
           "class:pearl": {
-            "foreground": "#F29CD4"
-          },
-          "label:pearl": {
-            "foreground": "#92DBD5"
+            "foreground": "#DCDCAA"
           },
           "macro:pearl": {
-            "foreground": "#FFB96B"
+            "foreground": "#C586C0"
+          },
+          "label:pearl": {
+            "foreground": "#D4D4D4"
           },
           "operator:pearl": {
-            "foreground": "#E6D6AA"
+            "foreground": "#D4D4D4"
           },
-          "*.declaration:pearl": {
-            "bold": true
+          "*.readonly:pearl": {
+            "italic": true
+          },
+          "variable.readonly:pearl": {
+            "foreground": "#9CDCFE",
+            "italic": true
+          },
+          "parameter.readonly:pearl": {
+            "foreground": "#9CDCFE",
+            "italic": true
+          },
+          "property.readonly:pearl": {
+            "foreground": "#9CDCFE",
+            "italic": true
           }
         }
       },
       "editor.tokenColorCustomizations": {
         "textMateRules": [
+          {
+            "scope": [
+              "keyword.declaration.pearl",
+              "keyword.control.pearl",
+              "keyword.other.pearl",
+              "keyword.other.call.pearl",
+              "keyword.other.goto.pearl",
+              "keyword.other.semaop.pearl",
+              "keyword.other.io.pearl",
+              "keyword.other.realtime.pearl",
+              "storage.type.pearl",
+              "constant.language.pearl"
+            ],
+            "settings": {
+              "foreground": "#569CD6"
+            }
+          },
           {
             "scope": [
               "keyword.operator.assign.pearl",
@@ -155,7 +179,7 @@
               "keyword.operator.conversion.pearl"
             ],
             "settings": {
-              "foreground": "#E6D6AA"
+              "foreground": "#D4D4D4"
             }
           },
           {
@@ -163,17 +187,46 @@
               "keyword.control.directive.pearl"
             ],
             "settings": {
-              "foreground": "#C5A3F5"
+              "foreground": "#C586C0"
             }
           },
           {
             "scope": [
               "constant.numeric.bitstring.pearl",
               "constant.numeric.hex.pearl",
+              "constant.numeric.clock.pearl",
+              "constant.numeric.duration.pearl",
+              "constant.numeric.float.pearl",
+              "constant.numeric.integer.pearl"
+            ],
+            "settings": {
+              "foreground": "#B5CEA8"
+            }
+          },
+          {
+            "scope": [
+              "string.quoted.single.pearl",
+              "string.quoted.double.pearl"
+            ],
+            "settings": {
+              "foreground": "#CE9178"
+            }
+          },
+          {
+            "scope": [
               "constant.character.escape.pearl"
             ],
             "settings": {
-              "foreground": "#98D6B6"
+              "foreground": "#D7BA7D"
+            }
+          },
+          {
+            "scope": [
+              "comment.line.exclamation.pearl",
+              "comment.block.pearl"
+            ],
+            "settings": {
+              "foreground": "#6A9955"
             }
           }
         ]

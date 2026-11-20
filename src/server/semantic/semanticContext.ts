@@ -42,6 +42,8 @@ export class SemanticContext {
     readonly shellCommandsByProcedure: ReadonlyMap<ProcedureDeclarationNode, ShellCommandNode>;
     readonly localSpecificationRelations: LocalSpecificationRelationIndex;
     readonly symbolUsages: SymbolUsageIndex;
+    /** Effective object protection for bound occurrences, including selectors and REF boundaries. */
+    readonly nameAccessProtections: ReadonlyMap<SourceValue<string>, boolean>;
 
     constructor(
         typeDefinitions: ReadonlyMap<TypeSymbol, SemanticType> = new Map(),
@@ -60,7 +62,8 @@ export class SemanticContext {
         expressionTypes: ReadonlyMap<ExpressionNode, SemanticType> = new Map(),
         symbolUsages: SymbolUsageIndex = new SymbolUsageIndex(),
         monadicOperatorBindings: ReadonlySet<SourceValue<string>> = new Set(),
-        referenceInitializerIdentifiers: ReadonlySet<SourceValue<string>> = new Set()
+        referenceInitializerIdentifiers: ReadonlySet<SourceValue<string>> = new Set(),
+        nameAccessProtections: ReadonlyMap<SourceValue<string>, boolean> = new Map()
     ) {
         this.symbolUsages = symbolUsages;
         this.typeDefinitions = new Map(typeDefinitions);
@@ -69,6 +72,7 @@ export class SemanticContext {
         this.builtinBindings = new Map(builtinBindings);
         this.monadicOperatorBindings = new Set(monadicOperatorBindings);
         this.referenceInitializerIdentifiers = new Set(referenceInitializerIdentifiers);
+        this.nameAccessProtections = new Map(nameAccessProtections);
         this.localSpecificationRelations = new Map(localSpecificationRelations);
         this.diagnostics = [...diagnostics];
         this.constantFixedExpressionValues = new Map(constantFixedExpressionValues);
@@ -145,7 +149,8 @@ export class SemanticContext {
             this.expressionTypes,
             this.symbolUsages,
             this.monadicOperatorBindings,
-            this.referenceInitializerIdentifiers
+            this.referenceInitializerIdentifiers,
+            this.nameAccessProtections
         );
     }
 
@@ -167,7 +172,8 @@ export class SemanticContext {
             this.expressionTypes,
             usages,
             this.monadicOperatorBindings,
-            this.referenceInitializerIdentifiers
+            this.referenceInitializerIdentifiers,
+            this.nameAccessProtections
         );
     }
 
