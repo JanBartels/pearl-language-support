@@ -1,0 +1,1 @@
+TYPE SharedScalar FIXED;

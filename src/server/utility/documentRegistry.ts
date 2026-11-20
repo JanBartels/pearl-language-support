@@ -16,19 +16,28 @@ export class DocumentRegistry {
     { mtimeMs: number; doc: TextDocument }
   > = new Map();
   
-  // Include-Graph für Re-Validierung bei Änderungen an untergeordneten #includes
+  // Legacy/manual include edges (used by existing parser tests). Production
+  // dependencies are committed atomically with AnalysisResult instead.
   private readonly includes = new Map<string, Set<string>>();
   private readonly includedBy = new Map<string, Set<string>>();
 
-  // Validierungs-Ergebnis
-  private readonly analysisResults =
-    new Map<
-        string,
-        {
-            version: number;
-            result: AnalysisResult;
-        }
-    >();
+  /** Actual dependency relationships of completed translation units. */
+  private readonly sourcesByUnit = new Map<string, Set<string>>();
+  private readonly unitsBySource = new Map<string, Set<string>>();
+
+  // Analysis is owned by a translation unit. Included files have no independent
+  // result unless they were explicitly analyzed as a root.
+  private readonly analysisResults = new Map<string, {
+      version: number;
+      result: AnalysisResult;
+      /** Versions of all source documents used by this analysis. */
+      sourceVersions: ReadonlyMap<string, number>;
+  }>();
+
+  /** Root URIs with an active analysis lifecycle (also while analyzing). */
+  private readonly translationUnits = new Set<string>();
+  /** Monotonically changing request identities reject superseded results. */
+  private readonly requestIds = new Map<string, number>();
 
   constructor(documents: TextDocuments<TextDocument>) {
     this.documents = documents;
@@ -87,30 +96,58 @@ export class DocumentRegistry {
       return this.get(includeUri);
   }
 
-  invalidateUri(uri: string): void {
-
-    const visited = new Set<string>();
-    this.invalidateRecursive(uri, visited);
+  /** Register a new analysis request before awaiting settings or I/O. */
+  beginAnalysis(uri: string): number {
+      this.translationUnits.add(uri);
+      return this.bumpRequestId(uri);
   }
 
-  private invalidateRecursive(
-      uri: string,
-      visited: Set<string>
-  ): void {
+  isCurrentAnalysis(uri: string, requestId: number): boolean {
+      return this.translationUnits.has(uri)
+          && this.requestIds.get(uri) === requestId;
+  }
 
-      if (visited.has(uri)) {
-          return;
-      }
-
-      visited.add(uri);
-
-      const fsPath = filePathFromUri(uri);
-      this.includeCache.delete(fsPath);
+  closeTranslationUnit(uri: string): void {
+      this.translationUnits.delete(uri);
+      this.bumpRequestId(uri);
       this.clearAnalysisResult(uri);
+      this.removeUnitSources(uri);
+  }
 
-      for (const parent of this.includedBy.get(uri) ?? []) {
-          this.invalidateRecursive(parent, visited);
+  getActiveTranslationUnits(): string[] {
+      return [...this.translationUnits];
+  }
+
+  private bumpRequestId(uri: string): number {
+      const next = (this.requestIds.get(uri) ?? 0) + 1;
+      this.requestIds.set(uri, next);
+      return next;
+  }
+
+  /**
+   * Invalidate a source and all its transitive includers. Return only active
+   * translation units that need reanalysis; never analyze intermediate includes
+   * as if they were complete modules.
+   */
+  invalidateUri(uri: string): string[] {
+      this.includeCache.delete(filePathFromUri(uri));
+      const affected = new Set<string>(this.unitsBySource.get(uri) ?? []);
+      if (this.translationUnits.has(uri)) affected.add(uri);
+
+      for (const unitUri of affected) {
+          this.clearAnalysisResult(unitUri);
+          this.bumpRequestId(unitUri);
       }
+      return [...affected].filter(unitUri => this.translationUnits.has(unitUri));
+  }
+
+  /** Also invalidate results after a settings change (without editing text). */
+  invalidateAllAnalyses(): string[] {
+      for (const uri of this.translationUnits) {
+          this.clearAnalysisResult(uri);
+          this.bumpRequestId(uri);
+      }
+      return [...this.translationUnits];
   }
 
   invalidateAllIncludes(): void {
@@ -148,95 +185,110 @@ export class DocumentRegistry {
       this.includes.delete(source);
   }
 
+  private removeUnitSources(unitUri: string): void {
+      for (const sourceUri of this.sourcesByUnit.get(unitUri) ?? []) {
+          const owners = this.unitsBySource.get(sourceUri);
+          owners?.delete(unitUri);
+          if (owners?.size === 0) this.unitsBySource.delete(sourceUri);
+      }
+      this.sourcesByUnit.delete(unitUri);
+  }
+
+  private getLegacyIncludedSources(uri: string): string[] {
+      const sources = new Set<string>();
+      const pending = [uri];
+      const visited = new Set<string>();
+      while (pending.length) {
+          const current = pending.pop()!;
+          if (visited.has(current)) continue;
+          visited.add(current);
+          for (const child of this.includes.get(current) ?? []) {
+              if (child !== uri) sources.add(child);
+              pending.push(child);
+          }
+      }
+      return [...sources];
+  }
+
   setAnalysisResult(
     uri: string,
     version: number,
     result: AnalysisResult
   ): void {
-
-      this.analysisResults.set(
+      // A completed analysis replaces the previous include relationships.
+      // Only executed (not inactive #ifdef) includes participate. The fallback
+      // is for synthetic AST tests which still use addInclude().
+      const sources = new Set<string>([
           uri,
-          {
-              version,
-              result
+          ...(result.includedSourceUris ?? this.getLegacyIncludedSources(uri))
+      ]);
+      const sourceVersions = new Map<string, number>();
+      for (const sourceUri of sources) {
+          const document = this.get(sourceUri);
+          if (document) sourceVersions.set(sourceUri, document.version);
+      }
+
+      this.removeUnitSources(uri);
+      this.sourcesByUnit.set(uri, sources);
+      for (const sourceUri of sources) {
+          let units = this.unitsBySource.get(sourceUri);
+          if (!units) {
+              units = new Set<string>();
+              this.unitsBySource.set(sourceUri, units);
           }
-      );
+          units.add(uri);
+      }
+      this.analysisResults.set(uri, { version, result, sourceVersions });
   }
 
-  getAnalysisResult(
-      uri: string,
-      version: number
-  ): AnalysisResult | undefined {
-
-      const entry =
-          this.analysisResults.get(uri);
-
-      if (!entry) {
-          return undefined;
+  /** Open document versions are checked without filesystem I/O per request. */
+  private isFresh(entry: {
+      version: number;
+      sourceVersions: ReadonlyMap<string, number>;
+  }): boolean {
+      for (const [sourceUri, recordedVersion] of entry.sourceVersions) {
+          const open = this.documents.get(sourceUri);
+          if (open && open.version !== recordedVersion) return false;
       }
+      return true;
+  }
 
-      if (entry.version !== version) {
-          return undefined;
-      }
-
+  getAnalysisResult(uri: string, version: number): AnalysisResult | undefined {
+      const entry = this.analysisResults.get(uri);
+      if (!entry || entry.version !== version || !this.isFresh(entry)) return undefined;
       return entry.result;
   }
 
-  clearAnalysisResult(
-      uri: string
-  ): void {
-
+  clearAnalysisResult(uri: string): void {
       this.analysisResults.delete(uri);
   }
 
-  /**
-   * A file opened in the editor can also be a #include of a translation unit.
-   * Reuse that unit's semantic context when there is exactly one analyzed
-   * including root. With multiple roots the semantics may differ, so there
-   * is intentionally no arbitrary choice of parent.
-   */
+  /** No arbitrary choice among multiple contexts of a shared include. */
   getAnalysisResultForSource(uri: string, version: number): AnalysisResult | undefined {
-    const visited = new Set<string>([uri]);
-    const parents = [uri];
-    const candidates = new Set<AnalysisResult>();
+      const own = this.getAnalysisResult(uri, version);
+      if (own) return own;
 
-    while (parents.length > 0) {
-      const current = parents.pop()!;
-      for (const parent of this.includedBy.get(current) ?? []) {
-        if (visited.has(parent)) continue;
-        visited.add(parent);
-        parents.push(parent);
-        const entry = this.analysisResults.get(parent);
-        if (entry) candidates.add(entry.result);
+      const candidates = new Set<AnalysisResult>();
+      for (const unitUri of this.unitsBySource.get(uri) ?? []) {
+          if (unitUri === uri) continue;
+          const entry = this.analysisResults.get(unitUri);
+          if (!entry) continue;
+          const sourceVersion = entry.sourceVersions.get(uri);
+          if (sourceVersion !== undefined && sourceVersion !== version) continue;
+          const result = this.getAnalysisResult(unitUri, entry.version);
+          if (result) candidates.add(result);
       }
-    }
-
-    if (candidates.size === 1) return [...candidates][0];
-    if (candidates.size > 1) return undefined;
-    return this.getAnalysisResult(uri, version);
+      return candidates.size === 1 ? [...candidates][0] : undefined;
   }
-
 
   // BEGIN TEMP-NAV-DEBUG: read-only analysis version snapshot
-  /** Read-only diagnostic snapshot. Does not change analysis selection. */
   describeAnalysisForSource(uri: string, version: number): string {
     const own = this.analysisResults.get(uri);
-    const visited = new Set<string>([uri]);
-    const pending = [uri];
-    const roots: string[] = [];
-    while (pending.length > 0) {
-      const current = pending.pop()!;
-      for (const parent of this.includedBy.get(current) ?? []) {
-        if (visited.has(parent)) continue;
-        visited.add(parent);
-        pending.push(parent);
-        const entry = this.analysisResults.get(parent);
-        if (entry) roots.push(`${parent}@${entry.version}`);
-      }
-    }
-    return `analysisRequested=${version} ownAnalysis=${own ? own.version : 'none'} parentAnalyses=[${roots.join(', ')}]`;
+    const parents = [...(this.unitsBySource.get(uri) ?? [])]
+        .filter(unit => unit !== uri)
+        .map(unit => `${unit}@${this.analysisResults.get(unit)?.version ?? 'none'}`);
+    return `analysisRequested=${version} ownAnalysis=${own ? own.version : 'none'} parentAnalyses=[${parents.join(', ')}]`;
   }
-
   // END TEMP-NAV-DEBUG
 
   /** Kept for existing Find References clients. All navigation uses the same policy. */

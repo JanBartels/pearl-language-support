@@ -3,7 +3,7 @@
 
 !#undef eineMeldungAusTestincH
 
-SPC GlobProc PROC GLOBAL;
+!SPC GlobProc PROC GLOBAL;
 
 TYPE TestStruct STRUCT [
     Element1 FIXED,
@@ -19,7 +19,7 @@ zu verwirren */
 
 SPC ASSIGN ENTRY( /* Dation */ DATION INOUTP90_ ALPHIC IDENT, /* Devicename */ CHAR(24)) GLOBAL;
 
-#define AusEinerAnderenWelt "'Ich bin ein Alien"
+#define AusEinerAnderenWelt "'Ich bin ein Alien'"
 
 #endif
 

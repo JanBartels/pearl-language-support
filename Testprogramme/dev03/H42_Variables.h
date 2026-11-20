@@ -1,0 +1,14 @@
+#ifdef DEKLARATIONEN
+#define VAR "DCL"
+#define WertIst " "
+#define WertEnde " "
+#else
+#define VAR "SPC"
+#define WertIst "/*"
+#define WertEnde "*/"
+#endif
+
+#define Count "40"
+#define Boundary "WertIst 0:Count WertEnde"
+
+VAR Var( Boundary ) FIXED GLOBAL;

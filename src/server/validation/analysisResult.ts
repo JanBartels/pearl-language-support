@@ -14,22 +14,27 @@ readonly rootAnalysis: Analysis;
     readonly files: ReadonlyMap<string, Analysis>;
     readonly problems: ProblemCollection;
     readonly macroReferences: readonly MacroReference[];
+    /** Actual, active includes; undefined only for legacy/manual analyses. */
+    readonly includedSourceUris: readonly string[] | undefined;
 
     private constructor(
       rootAnalysis: Analysis,
       files: ReadonlyMap<string, Analysis>,
       problems: ProblemCollection,
-      macroReferences: readonly MacroReference[]
+      macroReferences: readonly MacroReference[],
+      includedSourceUris?: readonly string[]
     ) {
       this.rootAnalysis = rootAnalysis;
       this.files = files;
       this.problems = problems;
       this.macroReferences = macroReferences;
+      this.includedSourceUris = includedSourceUris;
     }
 
     static create(
       rootAnalysis: Analysis,
-      analyses: readonly Analysis[]
+      analyses: readonly Analysis[],
+      includedSourceUris?: readonly string[]
     ): AnalysisResult {
 
       const fileMap = new Map<string, Analysis>();
@@ -50,7 +55,8 @@ readonly rootAnalysis: Analysis;
         rootAnalysis,
         fileMap,
         allProblems,
-        allMacroReferences
+        allMacroReferences,
+        includedSourceUris
       );
     }
 

@@ -514,6 +514,7 @@ connection.languages.semanticTokens.on(async (params) => {
 // ------------------------------
 
 async function validateAndPublish(document: TextDocument): Promise<void> {
+  const requestId = documentRegistry.beginAnalysis(document.uri);
   try {
     const snapshot = TextDocument.create(
       document.uri,
@@ -523,6 +524,7 @@ async function validateAndPublish(document: TextDocument): Promise<void> {
     );
 
     const settings = await settingsManager.getDocumentSettings(snapshot.uri);
+    if (!documentRegistry.isCurrentAnalysis(snapshot.uri, requestId)) return;
 
     const result = await validator.analyze(snapshot, settings);
 
@@ -533,7 +535,8 @@ async function validateAndPublish(document: TextDocument): Promise<void> {
 
     if (
         !currentDocument ||
-        currentDocument.version !== snapshot.version
+        currentDocument.version !== snapshot.version ||
+        !documentRegistry.isCurrentAnalysis(snapshot.uri, requestId)
     ) {
         return;
     }
@@ -555,7 +558,7 @@ async function validateAndPublish(document: TextDocument): Promise<void> {
     diagnosticPublicationManager.publish(
         snapshot.uri,
         diagnosticsByUri,
-        result.files.keys()
+        [...result.files.keys(), ...(result.includedSourceUris ?? [])]
     );
   } catch (err) {
     if (err instanceof Error) {
@@ -567,44 +570,63 @@ async function validateAndPublish(document: TextDocument): Promise<void> {
   }
 }
 
+/**
+ * Invalidate first, then reanalyze the affected roots using current document
+ * snapshots. This also handles unsaved edits in an included source.
+ */
+function revalidateChangedSource(uri: string, fallback?: TextDocument): void {
+  const affectedRoots = documentRegistry.invalidateUri(uri);
+  if (affectedRoots.length === 0 && fallback) {
+    // In Open File mode a source with no known including root is a new unit.
+    void validateAndPublish(fallback);
+    return;
+  }
+  for (const rootUri of affectedRoots) {
+    const root = documentRegistry.get(rootUri);
+    if (root) void validateAndPublish(root);
+  }
+}
+
 documents.onDidOpen((event) => {
-  void validateAndPublish(event.document);
+  revalidateChangedSource(event.document.uri, event.document);
 });
 
 documents.onDidChangeContent((event) => {
-
-  void validateAndPublish(event.document);
+  revalidateChangedSource(event.document.uri, event.document);
 });
 
 documents.onDidClose((event) => {
-const uri = event.document.uri;
-
+  const uri = event.document.uri;
   logger.info(`onDidClose ${uri}`);
-
   settingsManager.clearDocument(uri);
-  documentRegistry.clearAnalysisResult(uri);
-
+  const affectedRoots = documentRegistry.invalidateUri(uri);
+  documentRegistry.closeTranslationUnit(uri);
   diagnosticPublicationManager.removeUnit(uri);
+  // The included source now comes from disk, not the editor buffer.
+  for (const rootUri of affectedRoots) {
+    if (rootUri === uri) continue;
+    const root = documentRegistry.get(rootUri);
+    if (root) void validateAndPublish(root);
+  }
 });
 
 connection.onDidChangeWatchedFiles((event) => {
+  const roots = new Set<string>();
   for (const change of event.changes) {
-    documentRegistry.invalidateUri(change.uri);
+    for (const uri of documentRegistry.invalidateUri(change.uri)) roots.add(uri);
   }
-
-  for (const document of documents.all()) {
-    void validateAndPublish(document);
+  for (const rootUri of roots) {
+    const root = documentRegistry.get(rootUri);
+    if (root) void validateAndPublish(root);
   }
 });
 
-// React to configuration changes
 connection.onDidChangeConfiguration((event) => {
   settingsManager.handleConfigurationChange(event.settings);
-
-  // Revalidate all open documents with the new settings
   validator.handleConfigurationChanged();
-for (const document of documents.all()) {
-    void validateAndPublish(document);
+  for (const rootUri of documentRegistry.invalidateAllAnalyses()) {
+    const root = documentRegistry.get(rootUri);
+    if (root) void validateAndPublish(root);
   }
 });
 

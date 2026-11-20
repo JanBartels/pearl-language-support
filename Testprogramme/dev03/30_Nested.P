@@ -1,0 +1,9 @@
+P=MPC603;
+SC=2000;
+MODULE Dev03Nested;
+PROBLEM;
+
+#include "H31_Outer.h"
+DCL NestedValue NestedScalar GLOBAL;
+
+MODEND;

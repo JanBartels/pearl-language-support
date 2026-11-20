@@ -1,0 +1,10 @@
+SC=100;
+P=MPC604;
+MODULE Test;
+PROBLEM;
+
+#include "IncTest.Inc"
+
+DCL R REF FIXED INIT( X );
+
+MODEND;

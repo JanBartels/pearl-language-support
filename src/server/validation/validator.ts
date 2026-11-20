@@ -254,7 +254,8 @@ export class Validator {
 
         return AnalysisResult.create(
             analysis,
-            [analysis]
+            [analysis],
+            [...context.includedSourceUris]
         );
     }
 

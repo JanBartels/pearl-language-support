@@ -20,6 +20,9 @@ export class PreprocessorContext {
    * The AST deliberately does not own these documentation comments. */
   readonly activeBlockComments: CommentToken[] = [];
 
+  /** Active include source URIs in this particular preprocessor run. */
+  readonly includedSourceUris = new Set<string>();
+
   constructor(
 
     /**

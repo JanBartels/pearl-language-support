@@ -822,15 +822,14 @@ export class Preprocessor {
             return;
         }
 
-        this.context.documentRegistry.addInclude(
-            this.source.uri,
-            document.uri
-        );
-
         if (this.includeDepth >= Preprocessor.MAX_INCLUDE_DEPTH) {
             this.problems.error(location, `Maximum include depth (${Preprocessor.MAX_INCLUDE_DEPTH}) exceeded.`);
             return;
         }
+
+        // Record includes within this analysis. Do not mutate a global
+        // dependency graph while a translation unit is still being analyzed.
+        this.context.includedSourceUris.add(document.uri);
 
         const fileSource = FileSource.fromDocument(document);
         const lexer = new Lexer(fileSource, this.problems, this.logger);
