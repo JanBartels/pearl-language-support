@@ -16,10 +16,6 @@ export class DocumentRegistry {
     { mtimeMs: number; doc: TextDocument }
   > = new Map();
   
-  // Liste, für welche Dokumente Diagnosen gesendet worden sind
-  // Wenn keine Diagnose mehr ansteht, muss diese aktiv gelöscht werden
-  private reportedDiagnosticUris = new Set<string>();
-  
   // Include-Graph für Re-Validierung bei Änderungen an untergeordneten #includes
   private readonly includes = new Map<string, Set<string>>();
   private readonly includedBy = new Map<string, Set<string>>();
@@ -150,18 +146,6 @@ export class DocumentRegistry {
       }
 
       this.includes.delete(source);
-  }
-
-  takeReportedDiagnosticUris(): Set<string> {
-
-      const result = new Set(this.reportedDiagnosticUris);
-      this.reportedDiagnosticUris.clear();
-
-      return result;
-  }
-
-  markDiagnosticsReported(uri: string): void {
-      this.reportedDiagnosticUris.add(uri);
   }
 
   setAnalysisResult(

@@ -45,6 +45,7 @@ import { PearlSettings, defaultSettings } from './settings/pearlSettings';
 import { SettingsManager } from './settings/settingsManager';
 import { Validator } from './validation/validator';
 import { mapDiagnostics } from './lsp/diagnosticMapper';
+import { DiagnosticPublicationManager } from './lsp/diagnosticPublicationManager';
 import { mapLspLocation } from './lsp/lspLocationMapper';
 import { createHover } from './lsp/createHover';
 import { findReferences } from './lsp/findReferences';
@@ -92,6 +93,9 @@ const settingsManager = new SettingsManager(connection);
 
 const documents = new TextDocuments(TextDocument);
 const documentRegistry = new DocumentRegistry(documents);
+const diagnosticPublicationManager = new DiagnosticPublicationManager(
+  (uri, diagnostics) => connection.sendDiagnostics({ uri, diagnostics })
+);
 
 const validator = new Validator(
   workspaceManager,
@@ -545,27 +549,14 @@ async function validateAndPublish(document: TextDocument): Promise<void> {
       });
     }
 
-    // aktuelle Diagnostics melden
-    const oldUris = documentRegistry.takeReportedDiagnosticUris();
+    // Diagnostics are owned by translation units, not by the last analysis.
+    // Publication also clears diagnostics from sources no longer in this unit.
     const diagnosticsByUri = mapDiagnostics(result.problems, documentRegistry);
-    for (const [uri, diagnostics] of diagnosticsByUri) {
-        connection.sendDiagnostics({
-            uri,
-            diagnostics
-        });
-
-        // uri für gesendete Diagnostics merken
-        documentRegistry.markDiagnosticsReported(uri);
-        oldUris.delete(uri);
-    }
-
-    // leere Diagnostics müssen (!) gesendet werden
-    for (const uri of oldUris) {
-        connection.sendDiagnostics({
-            uri,
-            diagnostics: []
-        });
-    }    
+    diagnosticPublicationManager.publish(
+        snapshot.uri,
+        diagnosticsByUri,
+        result.files.keys()
+    );
   } catch (err) {
     if (err instanceof Error) {
         logger.error(`Validation error in ${document.uri}: ${err.message}`);
@@ -593,10 +584,7 @@ const uri = event.document.uri;
   settingsManager.clearDocument(uri);
   documentRegistry.clearAnalysisResult(uri);
 
-  connection.sendDiagnostics({
-    uri,
-    diagnostics: []
-  });
+  diagnosticPublicationManager.removeUnit(uri);
 });
 
 connection.onDidChangeWatchedFiles((event) => {

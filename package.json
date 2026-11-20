@@ -2,8 +2,8 @@
   "name": "pearl-language-support",
   "displayName": "PEARL Language Support",
   "description": "VS Code Extension mit Language Server für die Sprache PEARL",
-  "version": "0.2.13",
-  "publisher": "Jan Bartels",
+  "version": "0.3.0",
+  "publisher": "none",
   "author": {
     "name": "Jan Bartels"
   },

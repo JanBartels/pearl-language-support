@@ -1247,7 +1247,7 @@ Beispiele:
 Der Aufbau des AST soll die Grammatik möglichst unmittelbar widerspiegeln.
 
 Referenzimplementierung:
-- `/src/server/ast/moduleNode.ts`
+- `/src/server/ast/module/moduleNode.ts`
 
 ---
 
@@ -1264,7 +1264,7 @@ Quelltext vorkommenden Sprachelementen und werden deshalb durch
 Dadurch bleibt die Zuordnung zwischen Sprachelement und Quelltext eindeutig.
 
 Referenzimplementierung:
-- `/src/server/ast/moduleNode.ts`
+- `/src/server/ast/module/moduleNode.ts`
 
 ---
 
@@ -1314,7 +1314,7 @@ Dadurch spiegeln AST und Quelltext dieselbe Struktur wider.
 
 Referenzimplementierung:
 - `/src/server/core/sourceValue.ts`
-- `/src/server/ast/moduleNode.ts`
+- `/src/server/ast/module/moduleNode.ts`
 
 ---
 
@@ -1323,8 +1323,13 @@ Referenzimplementierung:
 Jeder AST-Knoten implementiert
 
 ```ts
-lookupSourceValue(offset): AstLookupResult | undefined
+lookupSourceValue(position: SourceOffset): AstLookupResult | undefined
 ```
+
+`SourceOffset` enthält die URI des physischen Editor-Dokuments und dessen
+Offset. Das Lookup bezieht die Originalquellen-Zuordnung über `SourceValue`
+ein und darf nicht allein anhand eines Offsets Treffer aus einer anderen
+Includedatei akzeptieren.
 
 Diese Methode entscheidet
 
@@ -1335,7 +1340,7 @@ Dadurch bleibt das Wissen über die syntaktische Struktur vollständig im
 jeweiligen AST-Knoten.
 
 Referenzimplementierung:
-- `/src/server/ast/moduleNode.ts`
+- `/src/server/ast/module/moduleNode.ts`
 
 ---
 
@@ -1385,7 +1390,7 @@ Dadurch bleiben Dokumentation und Baumstruktur sauber getrennt.
 
 Referenzimplementierung:
 - `/src/server/ast/astNode.ts`
-- `/src/server/ast/moduleNode.ts`
+- `/src/server/ast/module/moduleNode.ts`
 - `/src/server/documentation/documentationProvider.ts`
 - `/src/server/documentation/moduleDocumentationProvider.ts`
 
@@ -1614,6 +1619,128 @@ Compilerphasen realisierbar sein.
 
 Compiler und LSP werden daher nicht als zwei getrennte Systeme betrachtet,
 sondern als zwei unterschiedliche Sichten auf dieselbe Programmanalyse.
+
+# Analyseverwaltung und Dokumentlebenszyklus
+
+## Nachweisbarer Ist-Zustand vor Dev_0_3
+
+Dieser Abschnitt dokumentiert den Implementierungsstand aus dem Quellarchiv
+`PreInclude.tar.gz` als Ausgangsbasis für Dev_0_3. Er formuliert **keine**
+bereits beschlossenen Zielentscheidungen für die neue Projektverwaltung.
+
+### Übersetzungseinheit und Analyseergebnis
+
+`Validator.analyze(document, settings)` erstellt eine vollständige Analyse
+ausgehend von einem übergebenen Dokument. Die Verarbeitung umfasst Lexer,
+externe textuelle Präprozessierung, zweiten Lexer, Parser und semantische
+Auswertungen. Die Include-Inhalte gehen in den expandierten Quelltext ein;
+der Parser sieht eine gemeinsame Übersetzungseinheit.
+
+Die bestehenden Typen `Analysis` und `AnalysisResult` sind zu unterscheiden:
+
+- `Analysis` enthält den AST, Probleme, Makro- und Präprozessorinformationen,
+  Semantik und weitere compilerseitige Indizes einer Analyse.
+- `AnalysisResult` enthält `rootAnalysis`, eine `files`-Zuordnung und
+  aggregierte Informationen. Im derzeitigen `Validator` wird es mit
+  `AnalysisResult.create(analysis, [analysis])` erzeugt. Die `files`-Zuordnung
+  enthält daher derzeit nur diesen einen `Analysis`-Eintrag, **nicht** bereits
+  separate Analyseobjekte für jede Includedatei.
+- Die einzelnen Quelltextursprünge der Include-Inhalte bleiben dennoch über
+  `ExpandedSource`, `FileSource` und das Location-Mapping erhalten.
+
+Referenzimplementierung:
+- `/src/server/validation/validator.ts`
+- `/src/server/validation/analysis.ts`
+- `/src/server/validation/analysisResult.ts`
+
+### Dokumente, Include-Beziehungen und Analyse-Cache
+
+`DocumentRegistry` stellt zuerst offene Editor-Dokumente bereit und lädt
+andere Dateien bei Bedarf vom Dateisystem. Für geladene Include-Dateien besteht
+ein Cache anhand des Dateizeitstempels.
+
+Die Registry speichert Include-Beziehungen in beiden Richtungen (`includes`
+und `includedBy`). Zusätzlich speichert sie Analyseergebnisse unter der URI
+der analysierten Ausgangsdatei und deren Dokumentversion.
+
+`getAnalysisResultForSource()` kann eine Anfrage für eine Include-URI auf eine
+Analyse eines einbindenden Dokuments zurückführen, **sofern genau ein
+geeigneter Analysekontext gefunden wird**. Bei mehreren verschiedenen
+Analysekontexten wird bewusst keiner willkürlich ausgewählt. Eine aktive
+Kontextauswahl für mehrfach eingebundene Dateien existiert noch nicht.
+
+Der gespeicherte Versionsschlüssel gehört derzeit zur Ausgangsdatei. Eine
+vollständige Gültigkeitsprüfung gegen die Versionen aller eingebundenen
+Dokumente ist damit nicht gewährleistet.
+
+Referenzimplementierung:
+- `/src/server/utility/documentRegistry.ts`
+- `/src/server/ast/tests/sourceAwareLookup.test.ts`
+
+### Workspace-Unterstützung
+
+`WorkspaceManager` kennt bereits vom LSP-Client übergebene Workspace-Folder,
+reagiert auf Änderungen dieser Folder-Liste und kann daraus ein
+Arbeitsverzeichnis ableiten. Eine automatische Ermittlung aller PEARL-
+Übersetzungseinheiten und ihrer Einbindungskontexte im geöffneten Verzeichnis
+ist damit derzeit **nicht** implementiert.
+
+Die Unterscheidung zwischen bisheriger Dateianalyse und späterer
+projektweiter Analyse darf nicht mit einer zweiten Compilerpipeline
+verwechselt werden.
+
+Referenzimplementierung:
+- `/src/server/utility/workspace.ts`
+
+### Auslösung und Veröffentlichung von Analysen
+
+`server.ts` löst beim Öffnen und bei Textänderungen eines Dokuments die
+Validierung aus. `validateAndPublish()` verwendet einen Textsnapshot und
+verhindert das Speichern beziehungsweise Veröffentlichen, wenn inzwischen eine
+andere Dokumentversion vorliegt. Die Ergebnisse werden für Hover, Navigation,
+Signaturhilfe, Folding und Semantic Tokens wiederverwendet.
+
+Die Diagnoseveröffentlichung verwendet derzeit eine **globale** Menge der
+zuletzt gemeldeten Dokument-URIs. Nicht im zuletzt verarbeiteten Ergebnis
+enthaltene URIs erhalten leere Diagnosen. Diese bisherige Veröffentlichungs-
+strategie ist nicht auf mehrere unabhängig gleichzeitig analysierte
+Übersetzungseinheiten und kontextabhängige Includedateien ausgelegt.
+
+Ein direkt geöffnetes Include wird aktuell ebenfalls zunächst als eigener
+Analyse-Ausgangspunkt validiert. Die bereits vorhandene Rückwärtssuche nach
+einem Include-Kontext wird in den Anfragehandlern genutzt, verhindert diesen
+separaten Validierungslauf aber nicht.
+
+Referenzimplementierung:
+- `/src/server/server.ts`
+- `/src/server/lsp/diagnosticMapper.ts`
+- `/src/server/semanticTokens/semanticTokenService.ts`
+
+## Für Dev_0_3 zu entscheidende Erweiterungen
+
+Die folgenden Punkte sind **offene Architekturaufgaben** und werden erst nach
+der gemeinsamen Entwurfsentscheidung verbindliche Soll-Vorgaben:
+
+- Eigenständige Identität und Gültigkeitsverwaltung der Übersetzungseinheiten
+  einschließlich aller beteiligten Dokumentversionen und Konfigurationen.
+- Trennung von gespeicherten Analyseergebnissen und je Datei veröffentlichten
+  Diagnosen, sodass ein Analyselauf die Diagnoseanzeige anderer Einheiten
+  nicht unbeabsichtigt löscht.
+- Konsistente Invalidierung und Neuanalyse beim Ändern von Includes;
+  Aktualisierung der Include-Abhängigkeiten auch nach Umstrukturierungen.
+- Entscheidung über die Auswahl eines aktiven Analysekontextes, wenn dieselbe
+  physische Datei in mehreren Modulen mit verschiedenen Makrozuständen
+  vorkommt.
+- Verzeichniserkennung für „Open Folder“ bei unverändertem „Open File“ und
+  späterer Erweiterbarkeit auf mehrere Workspace-Verzeichnisse.
+- Verhalten bei konkurrierenden Analyseanforderungen und verspäteten Ergebnissen.
+
+Die bestehenden Compilerphasen, der quellbewusste AST-Lookup und die explizite
+Herkunftsabbildung sollen dabei weiterverwendet werden. Ein zusätzlicher
+Fragmentparser oder eine parallele sprachspezifische LSP-Analyse ist aus den
+bisherigen Befunden nicht erforderlich.
+
+---
 
 # Folding
 
