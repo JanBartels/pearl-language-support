@@ -239,20 +239,30 @@ export interface ExpandedFragment {
 /** Build the output in source order, preserving origins before concatenation. */
 export class ExpandedSourceBuilder {
     private readonly fragments: ExpandedFragment[] = [];
+    private emittedLength = 0;
 
     constructor(private readonly root: Source) {}
+
+    /** Current output offset, before a future fragment is appended. */
+    get length(): number {
+        return this.emittedLength;
+    }
 
     appendOriginal(location: Location): void {
         const text = location.source.getText(location.span);
         if (text.length !== location.span.end - location.span.start) {
             throw new Error('Original fragment length does not match its source span.');
         }
-        if (text.length) this.fragments.push({ text, origin: location, mapping: 'direct' });
+        if (text.length) {
+            this.fragments.push({ text, origin: location, mapping: 'direct' });
+            this.emittedLength += text.length;
+        }
     }
 
     appendExpansion(text: string, invocation: Location): void {
         if (text.length) {
             this.fragments.push({ text, origin: invocation, mapping: 'generated' });
+            this.emittedLength += text.length;
         }
     }
 

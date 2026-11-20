@@ -16,8 +16,14 @@ manuals/
 *.tsbuildinfo
 
 # VS Code workspace settings
-.vscode/
 .vscode-test/
+
+# VS-Code-Konfigurationen grundsätzlich ignorieren
+.vscode/
+
+# Ausnahme: Testprogramme und alle Unterverzeichnisse
+!Testprogramme/**/.vscode/
+!Testprogramme/**/.vscode/**
 
 # Backup files
 *~

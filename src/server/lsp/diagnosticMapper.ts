@@ -16,12 +16,15 @@ import { Severity } from '../core/severity';
 import { DocumentRegistry } from '../utility/documentRegistry';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
+/** Internal metadata; the publisher strips it before sending diagnostics to VS Code. */
+export type MappedDiagnostic = Diagnostic & { readonly includeOccurrenceId?: string };
+
 export function mapDiagnostics(
   problems: ProblemCollection,
   registry: DocumentRegistry
-): Map<string, Diagnostic[]> {
+): Map<string, MappedDiagnostic[]> {
 
-  const result = new Map<string, Diagnostic[]>();
+  const result = new Map<string, MappedDiagnostic[]>();
 
   for (const problem of problems.toArray()) {
 
@@ -55,7 +58,7 @@ function mapDiagnostic(
   problem: Problem,
   location: Location,
   document: TextDocument
-): Diagnostic {
+): MappedDiagnostic {
 
   const span = location.span;
 
@@ -68,7 +71,10 @@ function mapDiagnostic(
     severity: mapSeverity(problem.severity),
     source: 'pearl',
     ...(problem.code !== undefined && { code: problem.code }),
-    ...(problem.tags?.length && { tags: problem.tags.map(mapTag) })
+    ...(problem.tags?.length && { tags: problem.tags.map(mapTag) }),
+    ...(problem.includeOccurrenceId !== undefined && {
+      includeOccurrenceId: problem.includeOccurrenceId
+    })
   };
 }
 

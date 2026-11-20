@@ -7,6 +7,7 @@ import { MacroReference } from '../preproc/macroReference';
 import { SourceOffset } from '../core/sourceOffset';
 import { AMBIGUOUS_MACRO_OCCURRENCE } from '../preproc/macroOccurrenceIndex';
 import { Severity } from '../core/severity';
+import type { IncludeOccurrence } from '../preproc/includeOccurrence';
 
 export class AnalysisResult {
 
@@ -16,25 +17,30 @@ readonly rootAnalysis: Analysis;
     readonly macroReferences: readonly MacroReference[];
     /** Actual, active includes; undefined only for legacy/manual analyses. */
     readonly includedSourceUris: readonly string[] | undefined;
+    /** Executed include instances with their site chains and expanded ranges. */
+    readonly includeOccurrences: readonly IncludeOccurrence[];
 
     private constructor(
       rootAnalysis: Analysis,
       files: ReadonlyMap<string, Analysis>,
       problems: ProblemCollection,
       macroReferences: readonly MacroReference[],
-      includedSourceUris?: readonly string[]
+      includedSourceUris?: readonly string[],
+      includeOccurrences: readonly IncludeOccurrence[] = []
     ) {
       this.rootAnalysis = rootAnalysis;
       this.files = files;
       this.problems = problems;
       this.macroReferences = macroReferences;
       this.includedSourceUris = includedSourceUris;
+      this.includeOccurrences = includeOccurrences;
     }
 
     static create(
       rootAnalysis: Analysis,
       analyses: readonly Analysis[],
-      includedSourceUris?: readonly string[]
+      includedSourceUris?: readonly string[],
+      includeOccurrences: readonly IncludeOccurrence[] = []
     ): AnalysisResult {
 
       const fileMap = new Map<string, Analysis>();
@@ -56,7 +62,8 @@ readonly rootAnalysis: Analysis;
         fileMap,
         allProblems,
         allMacroReferences,
-        includedSourceUris
+        includedSourceUris,
+        Object.freeze([...includeOccurrences])
       );
     }
 

@@ -18,6 +18,7 @@ import { Lexer } from "../lexer/lexer";
 import { MacroDefinition } from './macroDefinition';
 import { MacroReference } from './macroReference';
 import { PreprocessorContext } from './preprocessorContext';
+import { includeOccurrenceId, type IncludeSite } from './includeOccurrence';
 import { ExternalPreprocessorResultBuilder, type ExternalPreprocessorResult } from './externalPreprocessorResult';
 import { appendExpandedMacro } from './externalMacroExpansionWriter';
 import { PreprocessorConditionalBlock } from "./preprocessorConditionalBlock";
@@ -93,7 +94,8 @@ export class Preprocessor {
         private readonly preprocessorConditionalBlocks: PreprocessorConditionalBlockCollection,
         private readonly logger: Logger,
         private readonly textOutput: ExternalPreprocessorResultBuilder,
-        private readonly includeDepth = 0
+        private readonly includeDepth = 0,
+        private readonly includeSites: readonly IncludeSite[] = []
     ) {
         this.initialConditionalDepth = context.conditionals.depth();
 
@@ -470,7 +472,8 @@ export class Preprocessor {
                 open.ifLocation,
                 open.elseLocation,
                 directive.location,
-                open.conditionSatisfied
+                open.conditionSatisfied,
+                this.includeSites.length ? includeOccurrenceId(this.includeSites) : undefined
             )
         );
         this.input.next();
@@ -561,7 +564,9 @@ export class Preprocessor {
             return;
         }
 
-        // "#include" konsumieren
+        // The directive site, rather than the file-name token, identifies an
+        // occurrence across macro substitutions and nested include chains.
+        const directiveLocation = this.input.current().location;
         this.input.next();
 
         const location = this.input.current().location;
@@ -587,7 +592,7 @@ export class Preprocessor {
                         "Expected file name after #include."
                     );
                 } else {
-                    this.includeFile(path, location);
+                    this.includeFile(path, location, directiveLocation);
                 }
 
                 return;
@@ -605,7 +610,7 @@ export class Preprocessor {
                         "Expected file name after #include."
                     );
                 } else {
-                    this.includeFile(path, location);
+                    this.includeFile(path, location, directiveLocation);
                 }
 
                 this.skipToNextLine();
@@ -682,7 +687,7 @@ export class Preprocessor {
 
         } else {
 
-            this.includeFile(path, location);
+            this.includeFile(path, location, directiveLocation);
         }
     }
 
@@ -804,7 +809,11 @@ export class Preprocessor {
         }
     }
 
-    private includeFile(includePath: string, location: Location): void {
+    private includeFile(
+        includePath: string,
+        location: Location,
+        directiveLocation: Location
+    ): void {
 
         const document =
             this.context.documentRegistry.resolveInclude(
@@ -831,6 +840,15 @@ export class Preprocessor {
         // dependency graph while a translation unit is still being analyzed.
         this.context.includedSourceUris.add(document.uri);
 
+        const sites: readonly IncludeSite[] = [
+            ...this.includeSites,
+            {
+                includingUri: this.source.uri,
+                directiveOffset: directiveLocation.span.start,
+                includedUri: document.uri
+            }
+        ];
+        const start = this.textOutput.length;
         const fileSource = FileSource.fromDocument(document);
         const lexer = new Lexer(fileSource, this.problems, this.logger);
         const tokens = lexer.tokenize();
@@ -838,9 +856,18 @@ export class Preprocessor {
             new LexerTokenStream(tokens, fileSource), fileSource, this.context,
             this.problems, this.macroReferences,
             this.preprocessorConditionalBlocks, this.logger,
-            this.textOutput, this.includeDepth + 1
+            this.textOutput, this.includeDepth + 1, sites
         );
         while (!child.eof()) child.next();
+
+        // The same physical file may be included several times. Record the
+        // exact output range of each execution, including nested children.
+        this.context.includeOccurrences.push({
+            id: includeOccurrenceId(sites),
+            sourceUri: document.uri,
+            sites,
+            expandedSpan: { start, end: this.textOutput.length }
+        });
     }
 
     private recordMacroReference(

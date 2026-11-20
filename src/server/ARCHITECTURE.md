@@ -1780,10 +1780,94 @@ Vor einer expliziten Auswahl kann die Diagnoseverwaltung bereits einen
 stabilen Veröffentlichungskontext besitzen, während semantische
 Editoranfragen aus Mehrdeutigkeitsgründen noch kein Ergebnis liefern.
 
-Die derzeitige Auswahl unterscheidet **einbindende Übersetzungseinheiten**,
-nicht mehrere mögliche Einbindungsstellen derselben Datei innerhalb einer
-einzigen Übersetzungseinheit. Für einen solchen Spezialfall ist noch keine
-weitergehende Kontextregel festgelegt.
+### Auswahl einzelner Include-Vorkommen (Paket 06)
+
+Die CodeLens zeigt nun jedes **tatsächlich ausgeführte Include-Vorkommen**
+als eigene Auswahlmöglichkeit an. Auch bei nur **einer** Übersetzungseinheit
+können mehrere Einträge erscheinen. Ein Eintrag besteht aus der URI der
+Übersetzungseinheit und der `IncludeOccurrence.id`; verschachtelte Includes
+werden durch die vollständige Kette der einbindenden Direktiven unterschieden.
+
+Die Registry speichert die explizite Wahl pro physischer Includedatei. Wird die
+Übersetzungseinheit nach einer Headeränderung neu analysiert, wird das aktuell
+gültige `expandedSpan` anhand der stabilen Kennung erneut ermittelt. Ist die
+ursprüngliche Einbindung nicht mehr vorhanden, wird **kein** anderes Vorkommen
+als Ersatz gewählt. Die bestehenden APIs zur Auswahl einer Übersetzungseinheit
+bleiben für Analysen ohne Vorkommensmetadaten und eindeutig eingebundene Dateien
+kompatibel.
+
+Für AST-Abfragen erhält `SourceOffset` bei mehrfacher Einbindung **innerhalb
+des ausgewählten Moduls** optional `occurrenceSpan` in Koordinaten
+des expandierten Textes. `SourceValue.contains()` prüft in diesem Fall neben
+URI/physischem Offset auch die `lexicalLocation` im gewählten Expansionsbereich.
+So bleiben AST-Knoten, `SourceValue` und DocumentationProvider unverändert;
+Quellwerte **ohne** geeignete lexikalische Herkunft werden nicht als
+vermeintlich eindeutig ausgegeben. Find References und semantische Tokens
+berücksichtigen die gleiche Herkunftsgrenze beim Identifizieren bzw.
+Hervorheben. Die Signature-Help-Indexierung berücksichtigt die lexikalischen
+Klammerpositionen. Makro-Hervorhebungen mit unzureichender Herkunft werden
+bei wiederholten Einbindungen nicht einem beliebigen Vorkommen zugeordnet.
+
+**Vorkommensbezogene Inaktivitätsmarkierungen (Paket 07):**
+`PreprocessorConditionalBlock` trägt bei Include-Vorgängen die stabile
+`includeOccurrenceId`. `PreprocessorInactiveRegionCollector.collectWithOrigins()`
+behält diese Identität beim Erzeugen der Bereiche. Nur die aus diesen Bereichen
+abgeleiteten `ProblemTag.Unnecessary`-Hinweise tragen die ID über
+`Problem` und den internen `MappedDiagnostic` bis zur Diagnoseveröffentlichung.
+`DiagnosticPublicationManager` filtert sie nach dem ausgewählten
+Include-Vorkommen und entfernt die interne Kennung vor dem LSP-Versand.
+Ohne eindeutige Auswahl werden vorkommensgebundene Inaktivitäts-Hinweise
+nicht veröffentlicht; normale Compilerdiagnosen bleiben erhalten. Damit
+wird eine beim ersten Include aktive `#ifndef`-Region nicht wegen eines
+späteren, durch den Guard unterdrückten Includes fälschlich abgedunkelt.
+
+**Noch offen:** Sonstige Präprozessorindizes, Hover-/Navigationsantworten
+und allgemeine Compilerdiagnosen besitzen nicht durchgängig eine
+vorkommensbezogene Herkunft. Bei wiederholten Includes werden mehrdeutige
+präprozessorbezogene Hover-/Navigationsantworten deshalb weiterhin
+unterdrückt. Die neuen Inaktivitätsmarkierungen sind eine gezielte Ausnahme;
+weitere Diagnosen dürfen nicht ohne ausreichenden Herkunftsnachweis einem
+beliebigen Include-Vorkommen zugeordnet werden.
+
+### Identität einzelner Include-Vorkommen (Infrastruktur ab Dev_0_3, Paket 05)
+
+Der Präprozessor erfasst zusätzlich zur deduplizierten Abhängigkeitsmenge
+`includedSourceUris` nun die **einzelnen tatsächlich ausgeführten**
+`#include`-Vorkommen in `PreprocessorContext.includeOccurrences`. Jedes
+`IncludeOccurrence` enthält eine Kette physischer `#include`-Stellen
+(URI der einbindenden Datei, Offset der Direktive und URI der eingebundenen
+Datei) sowie den Bereich dieses Vorkommens im gemeinsamen expandierten Text.
+Damit sind zwei Einbindungen derselben Datei innerhalb einer Übersetzungseinheit
+und auch mehrfach erreichte verschachtelte Includes unterscheidbar.
+
+Die aus der Kette gebildete Identität ist unabhängig von der Länge des
+Expansionstextes. Ein normaler Textwechsel innerhalb der eingebundenen Datei
+ändert ihre Identität daher nicht; wird eine einbindende Direktive verschoben
+oder die Einbindungskette verändert, kann eine spätere Auswahl ungültig werden.
+Die Bereiche im Expansionstext dürfen dagegen nach jeder Analyse neu sein.
+
+`Validator.analyze()` übergibt diese Vorkommen als Metadaten in
+`AnalysisResult.includeOccurrences`. Es wird weiterhin **genau ein**
+expandierter Text, Parserlauf, AST und semantischer Kontext pro
+Übersetzungseinheit erzeugt. `SourceValue.lexicalLocation` enthält bereits
+die Position im expandierten Text, während `location` auf die physische
+Quelle verweist; diese Unterscheidung bildet die Grundlage für eine spätere
+vorkommensbezogene Positionssuche.
+
+Die Ergänzung der vorkommensbezogenen CodeLens und AST-Lookup-Grenze ist
+in Paket 06 umgesetzt; verbleibende Besonderheiten der Präprozessorindizes
+und Diagnoseveröffentlichung sind oben ausdrücklich als offen dokumentiert.
+
+Referenzimplementierungen:
+- `/src/server/preproc/includeOccurrence.ts`
+- `/src/server/preproc/preprocessor.ts`
+- `/src/server/preproc/preprocessorContext.ts`
+- `/src/server/source/expandedSource.ts`
+- `/src/server/validation/analysisResult.ts`
+- `/src/server/preproc/tests/includeOccurrences.test.ts`
+- `/src/server/utility/tests/includeOccurrenceSelection.test.ts`
+- `/src/server/core/sourceValue.ts`
+- `/src/server/semanticTokens/sourceHighlightMapper.ts`
 
 Referenzimplementierungen:
 - `/src/server/utility/documentRegistry.ts`

@@ -193,17 +193,34 @@ function refreshIncludeCodeLenses(): void {
   });
 }
 
+/** A complete include path is required for nested duplicates with equal inner sites. */
+function includeOptionLabel(option: { unitUri: string; occurrence?: {
+  sites: readonly { includingUri: string; directiveOffset: number }[]
+} }): string {
+  const folder = workspaceManager.getWorkspaceFolderForUri(option.unitUri);
+  const base = folder ? filePathFromUri(folder.uri) : undefined;
+  const fileLabel = (uri: string) => base
+    ? path.relative(base, filePathFromUri(uri))
+    : filePathFromUri(uri);
+  const sites = option.occurrence?.sites.map(site => {
+    const doc = documentRegistry.get(site.includingUri);
+    const line = doc ? doc.positionAt(site.directiveOffset).line + 1 : '?';
+    return `${fileLabel(site.includingUri)}:${line}`;
+  });
+  return sites?.length ? sites.join(' → ') : fileLabel(option.unitUri);
+}
+
 connection.onCodeLens(params => {
   const uri = params.textDocument.uri;
   const document = documents.get(uri);
   if (!document) return [];
-  const candidates = documentRegistry.getIncludeContextCandidates(uri, document.version);
-  if (candidates.length < 2) return [];
+  const options = documentRegistry.getIncludeContextOptions(uri, document.version);
+  if (options.length < 2) return [];
 
-  const selected = documentRegistry.getSelectedIncludeContext(uri, document.version);
+  const selected = documentRegistry.getSelectedIncludeContextOption(uri, document.version);
   const title = selected
-    ? `PEARL: Include-Kontext ${path.basename(filePathFromUri(selected))} (wechseln)`
-    : `PEARL: Include-Kontext auswählen (${candidates.length} Module)`;
+    ? `PEARL: Include-Kontext ${includeOptionLabel(selected)} (wechseln)`
+    : `PEARL: Include-Kontext auswählen (${options.length} Vorkommen)`;
   const lens: CodeLens = {
     range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
     command: {
@@ -221,32 +238,32 @@ connection.onExecuteCommand(async params => {
   if (typeof uri !== 'string') return;
   const document = documents.get(uri);
   if (!document) return;
-  const candidates = documentRegistry.getIncludeContextCandidates(uri, document.version);
-  if (candidates.length < 2) return;
+  const options = documentRegistry.getIncludeContextOptions(uri, document.version);
+  if (options.length < 2) return;
 
-  // Include file names can collide in multi-folder workspaces. Display paths
-  // relative to their workspace folder, or full paths if outside a folder.
-  const choices = candidates.map(unitUri => {
-    const folder = workspaceManager.getWorkspaceFolderForUri(unitUri);
-    const fullPath = filePathFromUri(unitUri);
-    const label = folder
-      ? `${path.basename(filePathFromUri(folder.uri))}/${path.relative(filePathFromUri(folder.uri), fullPath)}`
-      : fullPath;
-    return { unitUri, label };
-  });
+  const choices = options.map((option, index) => ({
+    option,
+    // The index guarantees an unambiguous action even if labels coincide.
+    title: `${index + 1}. ${includeOptionLabel(option)}`
+  }));
   const answer = await connection.window.showInformationMessage(
     `PEARL: Einbindungskontext für ${path.basename(filePathFromUri(uri))} auswählen`,
-    ...choices.map(choice => ({ title: choice.label }))
+    ...choices.map(choice => ({ title: choice.title }))
   );
   if (!answer) return;
-  const selected = choices.find(choice => choice.label === answer.title);
-  if (!selected || !documentRegistry.selectIncludeContext(uri, document.version, selected.unitUri)) {
+  const selected = choices.find(choice => choice.title === answer.title)?.option;
+  if (!selected || !documentRegistry.selectIncludeContextOption(
+    uri, document.version, selected.unitUri, selected.occurrence?.id
+  )) {
     logger.warn(`Include context selection is no longer valid for ${uri}`);
     return;
   }
 
-  diagnosticPublicationManager.selectContext(uri, selected.unitUri);
-  logger.debug(`Include context ${uri} -> ${selected.unitUri}`);
+  // Unit-level diagnostics remain separate. Multiple occurrences *within*
+  // that unit cannot yet be distinguished in Problem.location; those
+  // diagnostics are not claimed to be occurrence-specific.
+  diagnosticPublicationManager.selectContext(uri, selected.unitUri, selected.occurrence?.id);
+  logger.debug(`Include context ${uri} -> ${selected.unitUri} / ${selected.occurrence?.id ?? 'legacy'}`);
   refreshIncludeCodeLenses();
   if (clientSupportsSemanticTokenRefresh) {
     void connection.languages.semanticTokens.refresh().catch((error: unknown) => {
@@ -271,15 +288,21 @@ connection.onHover(params => {
       return undefined;
     }
 
-    const position: SourceOffset = {
-        uri: params.textDocument.uri,
-        offset: document.offsetAt(params.position)
-    };
+    const position = documentRegistry.getSourceLookupPosition(
+        params.textDocument.uri, document.version, document.offsetAt(params.position)
+    );
+
+    // Preprocessor ranges are still indexed by physical URI; for repeated
+    // includes they cannot yet be attributed to one execution. Never display
+    // an arbitrary result when the selected occurrence would be ambiguous.
+    const repeatedInclude = documentRegistry.hasRepeatedSourceOccurrences(
+        position.uri, document.version
+    );
 
     //
     // Compiler-Options
     //
-    const option = CompilerOptionLookup.lookupAt(analysisResult.rootAnalysis.blockComments, position);
+    const option = repeatedInclude ? undefined : CompilerOptionLookup.lookupAt(analysisResult.rootAnalysis.blockComments, position);
     if (option) {
         return createHover( CompilerOptionDocumentationProvider.getDocumentation(option) );
     }
@@ -287,7 +310,7 @@ connection.onHover(params => {
     //
     // Preprocessor conditionals
     //
-    const conditional =
+    const conditional = repeatedInclude ? undefined :
         PreprocessorConditionalBlockLookup.lookup(
             analysisResult.rootAnalysis.preprocessorConditionalBlocks,
             position
@@ -299,7 +322,7 @@ connection.onHover(params => {
     //
     // Macro hover
     //
-    const macro = analysisResult.lookupMacro(position);
+    const macro = repeatedInclude ? undefined : analysisResult.lookupMacro(position);
     if (macro) {
         const markdown = MacroDocumentationProvider.getDocumentation(macro);
         return createHover(appendIncludeOriginDocumentation(
@@ -354,7 +377,7 @@ connection.onDefinition(params => {
         navigationTrace(id, 'END reason=analysis-unavailable');
         return undefined;
     }
-    const position: SourceOffset = { uri, offset: document.offsetAt(params.position) };
+    const position = documentRegistry.getSourceLookupPosition(uri, document.version, document.offsetAt(params.position));
     // BEGIN TEMP-MACRO-NAV-DIAG: inspect the macro index before the AST fallback.
     // Remove the entire marked section after investigating the Boundary regression.
     const macroIndex = analysisResult.rootAnalysis.macroOccurrences;
@@ -384,10 +407,13 @@ connection.onDefinition(params => {
     // END TEMP-MACRO-NAV-DIAG
     const fallbackCursor = identifierEndFallbackPosition(document, params.position);
     const fallbackPosition: SourceOffset | undefined = fallbackCursor
-        ? { uri, offset: document.offsetAt(fallbackCursor) }
+        ? documentRegistry.getSourceLookupPosition(uri, document.version, document.offsetAt(fallbackCursor))
         : undefined;
-    const macro = analysisResult.lookupMacro(position)
-        ?? (fallbackPosition ? analysisResult.lookupMacro(fallbackPosition) : undefined);
+    const repeatedInclude = documentRegistry.hasRepeatedSourceOccurrences(uri, document.version);
+    const macro = repeatedInclude ? undefined : (
+        analysisResult.lookupMacro(position)
+        ?? (fallbackPosition ? analysisResult.lookupMacro(fallbackPosition) : undefined)
+    );
     // BEGIN TEMP-MACRO-NAV-DIAG: report HIT/MISS separately from AST lookup.
     navigationTrace(id, `macroLookup=${macro ? 'HIT' : 'MISS'} macroName=${macro?.definition.name ?? 'missing'} macroDefinitionLocation=${formatMacroLocation(macro?.definition.location)}`);
     // END TEMP-MACRO-NAV-DIAG
@@ -460,10 +486,9 @@ connection.onDeclaration(params => {
         return undefined;
     }
 
-    const position: SourceOffset = {
-        uri: params.textDocument.uri,
-        offset: document.offsetAt(params.position)
-    };
+    const position = documentRegistry.getSourceLookupPosition(
+        params.textDocument.uri, document.version, document.offsetAt(params.position)
+    );
     const lookup = analysisResult.rootAnalysis.ast.lookupSourceValue(position);
     const semanticContext = analysisResult.rootAnalysis.semanticContext;
     if (!lookup || !semanticContext) {
@@ -501,10 +526,12 @@ connection.onReferences(params => {
         navigationTrace(id, 'END count=0 reason=analysis-unavailable');
         return [];
     }
-    const macros = findMacroReferences(
-        analysisResult.rootAnalysis.macroOccurrences,
-        uri, params.position, params.context.includeDeclaration, documentRegistry
-    );
+    const macros = documentRegistry.hasRepeatedSourceOccurrences(uri, document.version)
+        ? undefined
+        : findMacroReferences(
+            analysisResult.rootAnalysis.macroOccurrences,
+            uri, params.position, params.context.includeDeclaration, documentRegistry
+        );
     if (macros !== undefined) {
         navigationTrace(id, `END count=${macros.length} reason=macro`);
         return macros;
@@ -513,7 +540,8 @@ connection.onReferences(params => {
         analysisResult.rootAnalysis,
         uri, params.position, params.context.includeDeclaration,
         documentRegistry,
-        message => navigationTrace(id, message)
+        message => navigationTrace(id, message),
+        documentRegistry.getSelectedIncludeContextOption(uri, document.version)?.occurrence?.expandedSpan
     );
     navigationTrace(id, `END count=${refs.length} reason=semantic`);
     return refs;
@@ -534,10 +562,9 @@ connection.onSignatureHelp(params => {
     );
     if (!analysisResult) return undefined;
 
-    const position: SourceOffset = {
-        uri: params.textDocument.uri,
-        offset: document.offsetAt(params.position)
-    };
+    const position = documentRegistry.getSourceLookupPosition(
+        params.textDocument.uri, document.version, document.offsetAt(params.position)
+    );
     const context = analysisResult.rootAnalysis.callSignatureHelp?.lookup(position);
     return context ? createSignatureHelp(context) : undefined;
 });
@@ -661,7 +688,8 @@ async function validateAndPublish(document: TextDocument): Promise<void> {
     diagnosticPublicationManager.publish(
         snapshot.uri,
         diagnosticsByUri,
-        [...result.files.keys(), ...(result.includedSourceUris ?? [])]
+        [...result.files.keys(), ...(result.includedSourceUris ?? [])],
+        result.includeOccurrences
     );
     // The first completed include analysis may create a new CodeLens for an
     // already-open header; no editor text change is required for that.

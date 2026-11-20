@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import type { TextDocument } from 'vscode-languageserver-textdocument';
+import type { Span } from '../core/span';
 import { mapToOriginalLocation } from '../core/sourceOffset';
 import {
     SourceHighlightAttribute,
@@ -35,13 +36,18 @@ interface PositionedToken {
 export class SourceHighlightMapper {
     constructor(private readonly legend: TokenLegend) {}
 
-    map(document: TextDocument, highlights: readonly SourceHighlight[]): EncodedSemanticTokens {
+    map(document: TextDocument, highlights: readonly SourceHighlight[], occurrenceSpan?: Readonly<Span>): EncodedSemanticTokens {
         const text = document.getText();
         const raw: PositionedToken[] = [];
 
         for (const highlight of highlights) {
             const element = highlight.element;
             if (!element.location) continue;
+            if (occurrenceSpan) {
+                const lexical = element.lexicalLocation?.span;
+                if (!lexical || lexical.start < occurrenceSpan.start
+                    || lexical.end > occurrenceSpan.end) continue;
+            }
 
             const location = mapToOriginalLocation(element.location);
             if (location.source.uri !== document.uri) continue;

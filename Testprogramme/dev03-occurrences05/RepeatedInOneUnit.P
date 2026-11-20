@@ -1,0 +1,19 @@
+P=MPC603;
+SC=2000;
+MODULE RepeatedInOneUnit;
+PROBLEM;
+
+First: PROC;
+#define MYTYPE "FIXED"
+#include "HSharedVar.h"
+    Var := 3;
+END;
+
+Second: PROC;
+#undef MYTYPE
+#define MYTYPE "FLOAT"
+#include "HSharedVar.h"
+    Var := 3.5;
+END;
+
+MODEND;

@@ -3,6 +3,7 @@
 
 import type { Location as LspLocation, Position } from 'vscode-languageserver';
 import type { SourceValue } from '../core/sourceValue';
+import type { Span } from '../core/span';
 import type { SymbolOccurrences } from '../semantic/symbolOccurrenceIndex';
 import type { Analysis } from '../validation/analysis';
 import type { DocumentRegistry } from '../utility/documentRegistry';
@@ -20,7 +21,8 @@ export function findReferences(
     includeDeclaration: boolean,
     registry: DocumentRegistry,
     // TEMP-NAV-DEBUG: optional trace callback; remove together with the added comma
-    trace?: (message: string) => void
+    trace?: (message: string) => void,
+    occurrenceSpan?: Readonly<Span>
 ): LspLocation[] {
     const index = analysis.symbolOccurrences;
     const candidates: SymbolOccurrences[] = [];
@@ -29,7 +31,7 @@ export function findReferences(
     // lookup too; the occurrence index preserves semantic identity here.
     for (const group of index.all) {
         const occurrences = [...group.declarations, ...group.references];
-        if (occurrences.some(value => atCursor(value, uri, position, registry))) {
+        if (occurrences.some(value => atCursor(value, uri, position, registry, occurrenceSpan))) {
             candidates.push(group);
         }
     }
@@ -43,7 +45,7 @@ export function findReferences(
         if (fallback) {
             for (const group of index.all) {
                 const occurrences = [...group.declarations, ...group.references];
-                if (occurrences.some(value => atCursor(value, uri, fallback, registry))) {
+                if (occurrences.some(value => atCursor(value, uri, fallback, registry, occurrenceSpan))) {
                     candidates.push(group);
                 }
             }
@@ -94,8 +96,13 @@ function atCursor(
     source: SourceValue<string>,
     uri: string,
     position: Position,
-    registry: DocumentRegistry
+    registry: DocumentRegistry,
+    occurrenceSpan?: Readonly<Span>
 ): boolean {
+    if (occurrenceSpan) {
+        const lexical = source.lexicalLocation?.span;
+        if (!lexical || lexical.start < occurrenceSpan.start || lexical.end > occurrenceSpan.end) return false;
+    }
     const location = source.location && mapLspLocation(source.location, registry);
     return !!location && location.uri === uri &&
         comparePositions(location.range.start, position) <= 0 &&

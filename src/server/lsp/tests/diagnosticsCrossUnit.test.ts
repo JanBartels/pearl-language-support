@@ -5,6 +5,8 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { Diagnostic, DiagnosticSeverity } from 'vscode-languageserver/node';
 import { DiagnosticPublicationManager } from '../diagnosticPublicationManager';
+import type { IncludeOccurrence } from '../../preproc/includeOccurrence';
+import { includeOccurrenceId } from '../../preproc/includeOccurrence';
 
 const moduleA = 'file:///project/Module1.P';
 const moduleB = 'file:///project/Module2.P';
@@ -160,4 +162,52 @@ test('diagnostic context falls back to remaining parent when the chosen unit clo
         { uri: moduleB, diagnostics: [] },
         { uri: include, diagnostics: [first] }
     ]);
+});
+
+
+const scopedOccurrences: IncludeOccurrence[] = [10, 20].map((directiveOffset, index) => {
+    const sites = [{ includingUri: moduleA, directiveOffset, includedUri: include }];
+    return {
+        id: includeOccurrenceId(sites), sourceUri: include, sites,
+        expandedSpan: { start: index * 100, end: index * 100 + 40 }
+    };
+});
+
+function inactiveHint(occurrenceId: string): Diagnostic & { includeOccurrenceId: string } {
+    return { ...diagnostic('Inaktiver Code (Präprozessor).'),
+        includeOccurrenceId: occurrenceId };
+}
+
+test('include guard hint belongs to the second execution, not the first', () => {
+    const { publisher, sent } = fixture();
+    const ordinary = diagnostic('Real compiler diagnostic');
+    const disabled = inactiveHint(scopedOccurrences[1]!.id);
+    publisher.publish(moduleA, new Map([[include, [ordinary, disabled]]]),
+        [include], scopedOccurrences);
+    // No execution has yet been chosen: only context-independent problems appear.
+    assert.deepEqual(sent.at(-1), { uri: include, diagnostics: [ordinary] });
+
+    sent.length = 0;
+    assert.equal(publisher.selectContext(include, moduleA, scopedOccurrences[0]!.id), true);
+    assert.deepEqual(sent, [{ uri: include, diagnostics: [ordinary] }]);
+    sent.length = 0;
+    assert.equal(publisher.selectContext(include, moduleA, scopedOccurrences[1]!.id), true);
+    assert.deepEqual(sent, [{ uri: include, diagnostics: [ordinary, diagnostic(disabled.message)] }]);
+    assert.equal('includeOccurrenceId' in sent[0]!.diagnostics[1]!, false);
+});
+
+test('chosen execution is retained across reanalysis, and stale scope does not leak', () => {
+    const { publisher, sent } = fixture();
+    const second = scopedOccurrences[1]!.id;
+    publisher.publish(moduleA, new Map([[include, [inactiveHint(second)]]]),
+        [include], scopedOccurrences);
+    publisher.selectContext(include, moduleA, second);
+    sent.length = 0;
+    publisher.publish(moduleA, new Map([[include, [inactiveHint(second)]]]),
+        [include], scopedOccurrences);
+    assert.deepEqual(sent.at(-1), { uri: include, diagnostics: [diagnostic('Inaktiver Code (Präprozessor).')] });
+    sent.length = 0;
+    publisher.publish(moduleA, new Map([[include, [diagnostic('Other')]]]),
+        [include], scopedOccurrences.slice(0, 1));
+    assert.deepEqual(sent.at(-1), { uri: include, diagnostics: [diagnostic('Other')] });
 });

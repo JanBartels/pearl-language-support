@@ -6,6 +6,7 @@ import { DocumentRegistry } from '../utility/documentRegistry';
 import { Logger } from '../utility/logging/logger';
 import { TokenLegend } from './tokenLegend';
 import { SourceHighlightMapper } from './sourceHighlightMapper';
+import { SourceHighlightKind } from '../semantic/sourceHighlight';
 
 /** Presentation only: compiler-owned classifications are mapped to LSP here. */
 export class SemanticTokenService {
@@ -31,6 +32,15 @@ export class SemanticTokenService {
         if (!result) return { data: [] };
 
         this.logger.debug?.(`Mapping semantic tokens for ${uri}`);
-        return this.mapper.map(document, result.rootAnalysis.sourceHighlights);
+        const repeated = this.documentRegistry.hasRepeatedSourceOccurrences?.(uri, document.version) ?? false;
+        const selected = repeated
+            ? this.documentRegistry.getSelectedIncludeContextOption?.(uri, document.version)
+            : undefined;
+        // Preprocessor macro highlights lack a reliable expanded-text origin.
+        // Do not map them onto an arbitrarily selected execution.
+        const highlights = repeated
+            ? result.rootAnalysis.sourceHighlights.filter(item => item.kind !== SourceHighlightKind.Macro)
+            : result.rootAnalysis.sourceHighlights;
+        return this.mapper.map(document, highlights, selected?.occurrence?.expandedSpan);
     }
 }

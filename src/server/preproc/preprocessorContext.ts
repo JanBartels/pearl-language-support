@@ -7,6 +7,7 @@ import { ConditionalStack } from './conditionalStack';
 import { PreprocessorConditionalBlockStack } from './preprocessorConditionalBlockStack';
 import type { MacroDefinition } from './macroDefinition';
 import type { CommentToken } from '../lexer/token';
+import type { IncludeOccurrence } from './includeOccurrence';
 
 export class PreprocessorContext {
 
@@ -22,6 +23,9 @@ export class PreprocessorContext {
 
   /** Active include source URIs in this particular preprocessor run. */
   readonly includedSourceUris = new Set<string>();
+
+  /** Every executed include, not deduplicated by physical URI. */
+  readonly includeOccurrences: IncludeOccurrence[] = [];
 
   constructor(
 

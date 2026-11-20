@@ -137,12 +137,15 @@ export class Validator {
 
         // Inactive source ranges are editor metadata produced by the preprocessor.
         // No disabled text is parsed or semantically analyzed.
-        const inactiveRegions = new PreprocessorInactiveRegionCollector().collect(
+        const inactiveRegions = new PreprocessorInactiveRegionCollector().collectWithOrigins(
             preprocessorConditionalBlocks
         );
-        for (const location of inactiveRegions) {
-            problems.hint(location, 'Inaktiver Code (Präprozessor).', {
-                tags: [ProblemTag.Unnecessary]
+        for (const region of inactiveRegions) {
+            problems.hint(region.location, 'Inaktiver Code (Präprozessor).', {
+                tags: [ProblemTag.Unnecessary],
+                ...(region.includeOccurrenceId === undefined ? {} : {
+                    includeOccurrenceId: region.includeOccurrenceId
+                })
             });
         }
 
@@ -255,7 +258,8 @@ export class Validator {
         return AnalysisResult.create(
             analysis,
             [analysis],
-            [...context.includedSourceUris]
+            [...context.includedSourceUris],
+            context.includeOccurrences
         );
     }
 

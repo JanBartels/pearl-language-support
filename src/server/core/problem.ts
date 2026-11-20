@@ -8,6 +8,8 @@ import { ProblemTag } from './problemTag';
 export interface ProblemOptions {
   readonly code?: string;
   readonly tags?: readonly ProblemTag[];
+  /** Execution provenance for a preprocessor-derived, occurrence-scoped hint. */
+  readonly includeOccurrenceId?: string;
 }
 
 export class Problem {
@@ -17,6 +19,7 @@ export class Problem {
   readonly severity: Severity;
   readonly code?: string | undefined;
   readonly tags?: readonly ProblemTag[] | undefined;
+  readonly includeOccurrenceId?: string | undefined;
 
   private constructor(
     location: Location,
@@ -29,6 +32,7 @@ export class Problem {
     this.severity = severity;
     this.code = options?.code;
     this.tags = options?.tags;
+    this.includeOccurrenceId = options?.includeOccurrenceId;
   }
 
   private static create(

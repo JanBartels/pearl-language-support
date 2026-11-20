@@ -40,6 +40,11 @@ export class ExternalPreprocessorResultBuilder {
         this.output = new ExpandedSourceBuilder(root);
     }
 
+    /** Position in the output, shared by all recursive include preprocessors. */
+    get length(): number {
+        return this.output.length;
+    }
+
     /** Copy an unchanged range, including any original whitespace. */
     appendOriginal(location: Location): void {
         this.output.appendOriginal(location);

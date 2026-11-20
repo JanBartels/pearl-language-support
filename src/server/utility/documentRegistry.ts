@@ -7,6 +7,16 @@ import * as fs from 'fs';
 import * as path from "path";
 import { filePathFromUri, uriFromFilePath } from './uriUtils'
 import { AnalysisResult } from '../validation/analysisResult';
+import type { IncludeOccurrence } from '../preproc/includeOccurrence';
+import type { SourceOffset } from '../core/sourceOffset';
+
+/** One selectable semantic context of a physical include file. */
+export interface IncludeContextOption {
+    readonly unitUri: string;
+    /** Absent only for legacy analyses without include occurrence metadata. */
+    readonly occurrence?: IncludeOccurrence;
+}
+
 
 export class DocumentRegistry {
   private documents: TextDocuments<TextDocument>;
@@ -41,6 +51,8 @@ export class DocumentRegistry {
 
   /** User-selected translation unit for a multiply included source. */
   private readonly preferredUnitBySource = new Map<string, string>();
+  /** The include directive chain, not an expanded-text offset, is stable across edits. */
+  private readonly preferredOccurrenceBySource = new Map<string, string>();
 
   constructor(documents: TextDocuments<TextDocument>) {
     this.documents = documents;
@@ -112,7 +124,10 @@ export class DocumentRegistry {
 
   closeTranslationUnit(uri: string): void {
       for (const [sourceUri, selectedUnit] of this.preferredUnitBySource) {
-          if (selectedUnit === uri) this.preferredUnitBySource.delete(sourceUri);
+          if (selectedUnit === uri) {
+              this.preferredUnitBySource.delete(sourceUri);
+              this.preferredOccurrenceBySource.delete(sourceUri);
+          }
       }
       this.translationUnits.delete(uri);
       this.bumpRequestId(uri);
@@ -241,6 +256,7 @@ export class DocumentRegistry {
       for (const sourceUri of previousSources ?? []) {
           if (!sources.has(sourceUri) && this.preferredUnitBySource.get(sourceUri) === uri) {
               this.preferredUnitBySource.delete(sourceUri);
+              this.preferredOccurrenceBySource.delete(sourceUri);
           }
       }
       this.sourcesByUnit.set(uri, sources);
@@ -304,37 +320,101 @@ export class DocumentRegistry {
       return candidates.sort();
   }
 
-  /** Current choice, or the only available context for a uniquely included file. */
-  getSelectedIncludeContext(uri: string, version: number): string | undefined {
-      const candidates = this.getIncludeContextCandidates(uri, version);
-      const preferred = this.preferredUnitBySource.get(uri);
-      if (preferred) return candidates.includes(preferred) ? preferred : undefined;
-      // One completed analysis does not mean an unambiguous context when
-      // other owners are known but still being reanalyzed.
-      const owners = this.unitsBySource.get(uri);
-      return owners?.size === 1 && candidates.length === 1
-          ? candidates[0] : undefined;
+  /** One option per actual #include execution, including repeated nested sites. */
+  getIncludeContextOptions(uri: string, version: number): IncludeContextOption[] {
+      const options: IncludeContextOption[] = [];
+      for (const unitUri of this.getIncludeContextCandidates(uri, version)) {
+          const result = this.analysisResults.get(unitUri)?.result;
+          if (!result) continue;
+          const occurrences = result.includeOccurrences.filter(item => item.sourceUri === uri);
+          if (occurrences.length === 0) {
+              // Synthetic analyses and legacy tests have no occurrence metadata.
+              options.push({ unitUri });
+          } else {
+              for (const occurrence of occurrences) options.push({ unitUri, occurrence });
+          }
+      }
+      return options.sort((a, b) => a.unitUri.localeCompare(b.unitUri)
+          || (a.occurrence?.expandedSpan.start ?? 0) - (b.occurrence?.expandedSpan.start ?? 0));
   }
 
-  /** A selection is only accepted for an actually analyzed including unit. */
+  /** Never choose one occurrence arbitrarily, even within a single parent. */
+  getSelectedIncludeContextOption(uri: string, version: number): IncludeContextOption | undefined {
+      // A source opened and successfully analyzed as a root owns its result.
+      // Include occurrences from other roots must not constrain its offsets.
+      if (this.getAnalysisResult(uri, version)) return undefined;
+      const options = this.getIncludeContextOptions(uri, version);
+      const preferred = this.preferredUnitBySource.get(uri);
+      if (preferred) {
+          const selectedOccurrence = this.preferredOccurrenceBySource.get(uri);
+          if (selectedOccurrence !== undefined) {
+              return options.find(option => option.unitUri === preferred
+                  && option.occurrence?.id === selectedOccurrence);
+          }
+          const matching = options.filter(option => option.unitUri === preferred);
+          return matching.length === 1 ? matching[0] : undefined;
+      }
+      // In-flight analyses must not let the first completed includer win.
+      const owners = this.unitsBySource.get(uri);
+      return owners?.size === 1 && options.length === 1 ? options[0] : undefined;
+  }
+
+  getSelectedIncludeContext(uri: string, version: number): string | undefined {
+      return this.getSelectedIncludeContextOption(uri, version)?.unitUri;
+  }
+
+  /** Retain the existing unit-level API for exactly one occurrence in that unit. */
   selectIncludeContext(uri: string, version: number, unitUri: string): boolean {
-      if (!this.getIncludeContextCandidates(uri, version).includes(unitUri)) return false;
+      const matching = this.getIncludeContextOptions(uri, version)
+          .filter(option => option.unitUri === unitUri);
+      if (matching.length !== 1) return false;
+      return this.selectIncludeContextOption(uri, version, unitUri, matching[0].occurrence?.id);
+  }
+
+  selectIncludeContextOption(
+      uri: string, version: number, unitUri: string, occurrenceId?: string
+  ): boolean {
+      const matching = this.getIncludeContextOptions(uri, version)
+          .filter(option => option.unitUri === unitUri
+              && option.occurrence?.id === occurrenceId);
+      if (matching.length !== 1) return false;
       this.preferredUnitBySource.set(uri, unitUri);
+      if (occurrenceId === undefined) this.preferredOccurrenceBySource.delete(uri);
+      else this.preferredOccurrenceBySource.set(uri, occurrenceId);
       return true;
   }
 
   /** Clearing an explicit choice returns a shared include to its ambiguous state. */
   clearIncludeContext(uri: string): void {
       this.preferredUnitBySource.delete(uri);
+      this.preferredOccurrenceBySource.delete(uri);
+  }
+
+  /** True when an unscoped physical lookup could conflate two executions. */
+  hasRepeatedSourceOccurrences(uri: string, version: number): boolean {
+      const selected = this.getSelectedIncludeContextOption(uri, version);
+      if (!selected?.occurrence) return false;
+      const result = this.analysisResults.get(selected.unitUri)?.result;
+      return (result?.includeOccurrences.filter(item => item.sourceUri === uri).length ?? 0) > 1;
+  }
+
+  /** A physical cursor scoped to the selected occurrence's expanded range. */
+  getSourceLookupPosition(uri: string, version: number, offset: number): SourceOffset {
+      const selected = this.getSelectedIncludeContextOption(uri, version);
+      if (!selected?.occurrence) return { uri, offset };
+      // A unique occurrence within its unit is already unambiguous. Leave
+      // existing lexical/macro lookups unchanged in that common case.
+      if (!this.hasRepeatedSourceOccurrences(uri, version)) return { uri, offset };
+      return { uri, offset, occurrenceSpan: selected.occurrence.expandedSpan };
   }
 
   getAnalysisResultForSource(uri: string, version: number): AnalysisResult | undefined {
       const own = this.getAnalysisResult(uri, version);
       if (own) return own;
-      const selected = this.getSelectedIncludeContext(uri, version);
+      const selected = this.getSelectedIncludeContextOption(uri, version);
       if (!selected) return undefined;
-      const entry = this.analysisResults.get(selected);
-      return entry && this.getAnalysisResult(selected, entry.version);
+      const entry = this.analysisResults.get(selected.unitUri);
+      return entry && this.getAnalysisResult(selected.unitUri, entry.version);
   }
 
   // BEGIN TEMP-NAV-DEBUG: read-only analysis version snapshot

@@ -1,0 +1,6 @@
+{
+  "files.associations": {
+    "*.h": "pearl"
+  },
+  "editor.codeLens": true
+}

@@ -8,6 +8,7 @@ import { NameSegmentNode } from '../ast/problem/expressions/nameSegmentNode';
 import { NameArgumentListNode } from '../ast/problem/expressions/nameArgumentListNode';
 import { ActualParameterListNode } from '../ast/problem/statements/actualParameterListNode';
 import type { SourceOffset } from '../core/sourceOffset';
+import type { Span } from '../core/span';
 import { mapToOriginalLocation } from '../core/sourceOffset';
 import type { SourceValue } from '../core/sourceValue';
 import { CallSignatureIndex } from './callSignatureIndex';
@@ -29,6 +30,7 @@ interface CallSite {
     readonly end: number;
     readonly endInclusive: boolean;
     readonly commas: readonly number[];
+    readonly lexicalSpan?: Readonly<Span>;
 }
 
 /**
@@ -73,6 +75,9 @@ export class CallSignatureHelpIndex {
         let result: CallSignatureHelpContext | undefined;
         let selected: CallSite | undefined;
         for (const site of this.sites) {
+            if (position.occurrenceSpan && (!site.lexicalSpan
+                || site.lexicalSpan.start < position.occurrenceSpan.start
+                || site.lexicalSpan.end > position.occurrenceSpan.end)) continue;
             if (position.uri !== site.uri || position.offset < site.start ||
                 (site.endInclusive ? position.offset > site.end : position.offset >= site.end)) {
                 continue;
@@ -155,10 +160,16 @@ function siteFromDelimiters(
             }
         }
     }
+    const lexicalOpening = list.openParenthesis.lexicalLocation;
+    const lexicalClosing = (list.closeParenthesis ?? recovery)?.lexicalLocation;
+    const lexicalSpan = lexicalOpening && lexicalClosing
+        && lexicalOpening.source === lexicalClosing.source
+        ? {start: lexicalOpening.span.start, end: lexicalClosing.span.end}
+        : undefined;
     return {
         call, signatures, uri: opening.uri, start: opening.end,
         end: closing.start, endInclusive: !!list.closeParenthesis ||
-            recovery?.value === '', commas: commaEnds
+            recovery?.value === '', commas: commaEnds, lexicalSpan
     };
 }
 

@@ -2,12 +2,15 @@
 // Copyright (C) 2026 Jan Bartels
 
 import type { Diagnostic } from 'vscode-languageserver/node';
+import type { IncludeOccurrence } from '../preproc/includeOccurrence';
+import type { MappedDiagnostic } from './diagnosticMapper';
 
 interface UnitDiagnostics {
     /** Source files participating in this translation unit. */
     readonly sources: ReadonlySet<string>;
     /** A missing entry means that this source has no diagnostics in this unit. */
-    readonly diagnostics: ReadonlyMap<string, readonly Diagnostic[]>;
+    readonly diagnostics: ReadonlyMap<string, readonly MappedDiagnostic[]>;
+    readonly occurrences: ReadonlyMap<string, ReadonlySet<string>>;
 }
 
 /**
@@ -26,6 +29,7 @@ interface UnitDiagnostics {
 export class DiagnosticPublicationManager {
     private readonly units = new Map<string, UnitDiagnostics>();
     private readonly selectedUnitBySource = new Map<string, string>();
+    private readonly selectedOccurrenceBySource = new Map<string, string>();
 
     constructor(
         private readonly send: (uri: string, diagnostics: Diagnostic[]) => void
@@ -34,19 +38,29 @@ export class DiagnosticPublicationManager {
     /** Replace one unit's complete diagnostic result. */
     publish(
         unitUri: string,
-        diagnostics: ReadonlyMap<string, readonly Diagnostic[]>,
-        sourceUris: Iterable<string> = []
+        diagnostics: ReadonlyMap<string, readonly MappedDiagnostic[]>,
+        sourceUris: Iterable<string> = [],
+        includeOccurrences: readonly IncludeOccurrence[] = []
     ): void {
         const previous = this.units.get(unitUri);
         const sources = new Set<string>([unitUri, ...sourceUris]);
-        const snapshot = new Map<string, readonly Diagnostic[]>();
+        const snapshot = new Map<string, readonly MappedDiagnostic[]>();
+        const occurrences = new Map<string, Set<string>>();
+        for (const occurrence of includeOccurrences) {
+            let ids = occurrences.get(occurrence.sourceUri);
+            if (!ids) {
+                ids = new Set<string>();
+                occurrences.set(occurrence.sourceUri, ids);
+            }
+            ids.add(occurrence.id);
+        }
 
         for (const [uri, items] of diagnostics) {
             sources.add(uri);
             snapshot.set(uri, [...items]);
         }
 
-        this.units.set(unitUri, { sources, diagnostics: snapshot });
+        this.units.set(unitUri, { sources, diagnostics: snapshot, occurrences });
 
         // The previous result may contain a source which is no longer included.
         const affected = new Set<string>([...(previous?.sources ?? []), ...sources]);
@@ -59,10 +73,16 @@ export class DiagnosticPublicationManager {
      * Switch the visible diagnostics of a shared source to its explicit
      * semantic context. Neither unit's diagnostics are merged.
      */
-    selectContext(sourceUri: string, unitUri: string): boolean {
-        if (!this.units.get(unitUri)?.sources.has(sourceUri)) return false;
+    selectContext(sourceUri: string, unitUri: string, occurrenceId?: string): boolean {
+        const unit = this.units.get(unitUri);
+        if (!unit?.sources.has(sourceUri)) return false;
+        if (occurrenceId !== undefined && !unit.occurrences.get(sourceUri)?.has(occurrenceId)) {
+            return false;
+        }
         this.selectedUnitBySource.set(sourceUri, unitUri);
-        this.send(sourceUri, [...(this.units.get(unitUri)!.diagnostics.get(sourceUri) ?? [])]);
+        if (occurrenceId === undefined) this.selectedOccurrenceBySource.delete(sourceUri);
+        else this.selectedOccurrenceBySource.set(sourceUri, occurrenceId);
+        this.send(sourceUri, this.visibleDiagnostics(sourceUri, unitUri));
         return true;
     }
 
@@ -75,6 +95,20 @@ export class DiagnosticPublicationManager {
         for (const sourceUri of previous.sources) {
             this.refreshSource(sourceUri);
         }
+    }
+
+    /** Never publish inactive hints from another execution of the same file. */
+    private visibleDiagnostics(sourceUri: string, unitUri: string): Diagnostic[] {
+        const unit = this.units.get(unitUri)!;
+        const occurrenceIds = unit.occurrences.get(sourceUri);
+        const preferred = this.selectedOccurrenceBySource.get(sourceUri);
+        const currentOccurrence = preferred !== undefined
+            ? (occurrenceIds?.has(preferred) ? preferred : undefined)
+            : occurrenceIds?.size === 1 ? [...occurrenceIds][0] : undefined;
+        return (unit.diagnostics.get(sourceUri) ?? [])
+            .filter(diagnostic => diagnostic.includeOccurrenceId === undefined
+                || diagnostic.includeOccurrenceId === currentOccurrence)
+            .map(({ includeOccurrenceId: _unused, ...diagnostic }) => diagnostic);
     }
 
     private refreshSource(sourceUri: string, updatedUnitUri?: string): void {
@@ -95,6 +129,7 @@ export class DiagnosticPublicationManager {
         if (!selectedUnit) {
             if (previousSelection !== undefined) {
                 this.selectedUnitBySource.delete(sourceUri);
+                this.selectedOccurrenceBySource.delete(sourceUri);
                 this.send(sourceUri, []);
             }
             return;
@@ -102,9 +137,11 @@ export class DiagnosticPublicationManager {
 
         // A different unit's analysis has no effect on the visible context.
         if (selectedUnit !== previousSelection || selectedUnit === updatedUnitUri) {
+            if (selectedUnit !== previousSelection) {
+                this.selectedOccurrenceBySource.delete(sourceUri);
+            }
             this.selectedUnitBySource.set(sourceUri, selectedUnit);
-            const items = this.units.get(selectedUnit)!.diagnostics.get(sourceUri) ?? [];
-            this.send(sourceUri, [...items]);
+            this.send(sourceUri, this.visibleDiagnostics(sourceUri, selectedUnit));
         }
     }
 }

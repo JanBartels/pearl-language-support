@@ -95,3 +95,24 @@ test('Caret fallback: recognizes PEARL identifier boundaries, not the interior o
     assert.equal(identifierEndFallbackPosition(document, { line: 0, character: 6 }), undefined);
     assert.equal(identifierEndFallbackPosition(document, { line: 0, character: 0 }), undefined);
 });
+
+test('Find References selects the semantic group of a repeated include occurrence', () => {
+    const { source, registry } = fixture('name;');
+    const expanded = new FileSource('file:///expanded', 'name;'.repeat(20));
+    const declare = (expandedStart: number) => new SourceValue('name', {
+        source, span: {start: 0, end: 4}
+    }, {source: expanded, span: {start: expandedStart, end: expandedStart + 4}});
+    const first = declare(0);
+    const second = declare(50);
+    const analysis = {symbolOccurrences: {all: [
+        {declaration: first, declarations: [first], references: []},
+        {declaration: second, declarations: [second], references: []}
+    ]}} as unknown as Analysis;
+    assert.deepEqual(findReferences(analysis, uri, {line: 0, character: 1}, true, registry), []);
+    assert.equal(findReferences(analysis, uri, {line: 0, character: 1}, true,
+        registry, undefined, {start: 0, end: 10}).length, 1);
+    assert.equal(findReferences(analysis, uri, {line: 0, character: 1}, true,
+        registry, undefined, {start: 50, end: 60}).length, 1);
+    assert.deepEqual(findReferences(analysis, uri, {line: 0, character: 1}, true,
+        registry, undefined, {start: 100, end: 110}), []);
+});

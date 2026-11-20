@@ -2,12 +2,15 @@
 // Copyright (C) 2026 Jan Bartels
 
 import type { Location } from './location';
+import type { Span } from './span';
 import { contains } from './span';
 
 /** A position in a physical editor document, not an offset in an expansion. */
 export interface SourceOffset {
     readonly uri: string;
     readonly offset: number;
+    /** Optional expanded-text region of a selected include occurrence. */
+    readonly occurrenceSpan?: Readonly<Span>;
 }
 
 /** Explicitly map a compiler location through its full Source chain. */

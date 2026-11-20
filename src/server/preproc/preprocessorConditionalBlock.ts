@@ -42,7 +42,10 @@ export class PreprocessorConditionalBlock {
         /**
          * Bedingung von #ifdef/#ifndef erfüllt?
          */
-        readonly conditionSatisfied: boolean
+        readonly conditionSatisfied: boolean,
+
+        /** Include execution that evaluated this conditional, if any. */
+        readonly includeOccurrenceId?: string
 
     ) {}
 

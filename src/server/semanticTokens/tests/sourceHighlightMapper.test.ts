@@ -169,3 +169,20 @@ test('service returns no classifications when no matching analysis exists yet', 
         {info() {}, warn() {}, error() {}}, legend);
     assert.deepEqual((await service.handleFull({textDocument: {uri}})).data, []);
 });
+
+test('selected include occurrence filters conflicting semantic classifications', () => {
+    const { source, document } = fixture('Name');
+    const lexicalSource = new FileSource('file:///expanded', 'Name '.repeat(20));
+    const at = (offset: number) => new SourceValue('Name', {
+        source, span: { start: 0, end: 4 }
+    }, { source: lexicalSource, span: { start: offset, end: offset + 4 } });
+    const highlights: SourceHighlight[] = [
+        { element: at(0), kind: Kind.DataObject },
+        { element: at(40), kind: Kind.Type }
+    ];
+    assert.deepEqual(mapper.map(document, highlights).data, []);
+    assert.deepEqual(mapper.map(document, highlights, {start: 0, end: 10}).data,
+        [0, 0, 4, legend.getType('variable'), 0]);
+    assert.deepEqual(mapper.map(document, highlights, {start: 40, end: 50}).data,
+        [0, 0, 4, legend.getType('type'), 0]);
+});

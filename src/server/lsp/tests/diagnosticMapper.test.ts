@@ -134,3 +134,21 @@ test('unnecessary tag is mapped to LSP without changing existing severity', () =
         start: { line: 0, character: 4 }, end: { line: 0, character: 10 }
     });
 });
+
+
+test('preprocessor inactive hint retains include execution provenance for publisher filtering', () => {
+    const text = '#ifndef GUARD\nDCL First FIXED;\n#endif\n';
+    const source = new FileSource(includeUri, text);
+    const problems = new ProblemCollection();
+    const start = text.indexOf('DCL First');
+    problems.hint({ source, span: { start, end: start + 'DCL First FIXED;'.length } },
+        'Inaktiver Code (Präprozessor).', {
+            tags: [ProblemTag.Unnecessary],
+            includeOccurrenceId: 'execution-of-second-include'
+        });
+    const diagnostic = mapDiagnostics(problems, documents(new Map([[includeUri, text]])))
+        .get(includeUri)?.[0];
+    assert.equal(diagnostic?.includeOccurrenceId, 'execution-of-second-include');
+    assert.deepEqual(diagnostic?.tags, [DiagnosticTag.Unnecessary]);
+    assert.equal(diagnostic?.severity, DiagnosticSeverity.Hint);
+});

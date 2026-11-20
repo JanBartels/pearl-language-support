@@ -30,6 +30,14 @@ export class SourceValue<T> {
     }
 
     contains(position: SourceOffset): boolean {
-        return containsSourceOffset(this.location, position);
+        if (!containsSourceOffset(this.location, position)) return false;
+        if (!position.occurrenceSpan) return true;
+        // A physical header offset may occur many times in one translation unit.
+        // Only the parser token's lexical position identifies the actual AST
+        // occurrence. Fail closed for source values without that information.
+        const lexical = this.lexicalLocation?.span;
+        return !!lexical
+            && lexical.start >= position.occurrenceSpan.start
+            && lexical.end <= position.occurrenceSpan.end;
     }    
 }

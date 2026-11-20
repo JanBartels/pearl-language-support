@@ -243,3 +243,20 @@ test('neighboring generated invocations remain distinct even when their source s
     assert.deepEqual(mapToOriginalLocations({source: expanded, span: {start: 0, end: 2}}),
         [loc(root, 0, 1), loc(root, 1, 2)]);
 });
+
+test('builder length tracks direct and generated output without altering source mapping', () => {
+    const root = new FileSource('file:///root.P', 'abcdef');
+    const builder = new ExpandedSourceBuilder(root);
+    assert.equal(builder.length, 0);
+    builder.appendOriginal({ source: root, span: { start: 1, end: 3 } });
+    assert.equal(builder.length, 2);
+    builder.appendExpansion('XYZ', { source: root, span: { start: 3, end: 4 } });
+    assert.equal(builder.length, 5);
+    builder.appendOriginal({ source: root, span: { start: 4, end: 4 } });
+    assert.equal(builder.length, 5);
+    const expanded = builder.build();
+    assert.equal(expanded.text, 'bcXYZ');
+    assert.equal(expanded.length, builder.length);
+    assert.deepEqual(mapToOriginalLocation({ source: expanded, span: { start: 0, end: 2 } }),
+        { source: root, span: { start: 1, end: 3 } });
+});
