@@ -4,7 +4,7 @@ Dieses Dokument beschreibt die Architektur des Projekts.
 
 Die Implementierung befindet sich im öffentlichen GitHub-Repository:
 
-https://github.com/JanBartels/pearl-language-support/tree/Dev_0_2
+https://github.com/JanBartels/pearl-language-support/tree/Dev_0_3
 
 Die hier genannten Referenzimplementierungen sind Einstiegspunkte in den
 Quellcode und gelten als maßgebliche Beispiele für die jeweiligen
@@ -1326,10 +1326,11 @@ Jeder AST-Knoten implementiert
 lookupSourceValue(position: SourceOffset): AstLookupResult | undefined
 ```
 
-`SourceOffset` enthält die URI des physischen Editor-Dokuments und dessen
-Offset. Das Lookup bezieht die Originalquellen-Zuordnung über `SourceValue`
-ein und darf nicht allein anhand eines Offsets Treffer aus einer anderen
-Includedatei akzeptieren.
+`SourceOffset` enthält die URI der physischen Quelldatei und einen Offset
+innerhalb dieser Datei. Ein gleich großer Offset in einer anderen Includedatei
+ist **kein** gültiger Treffer. `SourceValue` und das Herkunfts-Mapping
+ermöglichen diese quellbewusste Suche auch innerhalb eines gemeinsam
+präprozessierten AST.
 
 Diese Methode entscheidet
 
@@ -1620,125 +1621,175 @@ Compilerphasen realisierbar sein.
 Compiler und LSP werden daher nicht als zwei getrennte Systeme betrachtet,
 sondern als zwei unterschiedliche Sichten auf dieselbe Programmanalyse.
 
-# Analyseverwaltung und Dokumentlebenszyklus
+# Analyseverwaltung und Open Folder (Dev_0_3)
 
-## Nachweisbarer Ist-Zustand vor Dev_0_3
+## Übersetzungseinheiten statt isolierter Includes
 
-Dieser Abschnitt dokumentiert den Implementierungsstand aus dem Quellarchiv
-`PreInclude.tar.gz` als Ausgangsbasis für Dev_0_3. Er formuliert **keine**
-bereits beschlossenen Zielentscheidungen für die neue Projektverwaltung.
+Eine **Übersetzungseinheit** beginnt bei einer vollständigen PEARL-Hauptdatei.
+Sie wird als Ganzes vorverarbeitet, geparst und semantisch analysiert.
+Includedateien sind Teile dieser Übersetzungseinheit; sie benötigen weder
+einen künstlichen `MODULE`-/`PROBLEM`-Rahmen noch einen eigenen Fragmentparser.
+Die Compilerpipeline bleibt unabhängig davon, ob die Analyse durch „Open File“
+oder durch einen geöffneten Ordner ausgelöst wurde.
 
-### Übersetzungseinheit und Analyseergebnis
+`Validator.analyze()` liefert ein `AnalysisResult` mit `rootAnalysis`,
+aggregierten Problemen und Präprozessorinformationen sowie den tatsächlich
+aktiven Includes (`includedSourceUris`). Die derzeitige `files`-Zuordnung
+enthält im regulären Validatorlauf eine `Analysis` für die Hauptdatei; sie
+ist **keine** eigene AST- oder Semantikanalyse je Include-Datei. Die
+physische Herkunft eingebundener Sprachelemente wird durch das bestehende
+Source-Mapping erhalten.
 
-`Validator.analyze(document, settings)` erstellt eine vollständige Analyse
-ausgehend von einem übergebenen Dokument. Die Verarbeitung umfasst Lexer,
-externe textuelle Präprozessierung, zweiten Lexer, Parser und semantische
-Auswertungen. Die Include-Inhalte gehen in den expandierten Quelltext ein;
-der Parser sieht eine gemeinsame Übersetzungseinheit.
-
-Die bestehenden Typen `Analysis` und `AnalysisResult` sind zu unterscheiden:
-
-- `Analysis` enthält den AST, Probleme, Makro- und Präprozessorinformationen,
-  Semantik und weitere compilerseitige Indizes einer Analyse.
-- `AnalysisResult` enthält `rootAnalysis`, eine `files`-Zuordnung und
-  aggregierte Informationen. Im derzeitigen `Validator` wird es mit
-  `AnalysisResult.create(analysis, [analysis])` erzeugt. Die `files`-Zuordnung
-  enthält daher derzeit nur diesen einen `Analysis`-Eintrag, **nicht** bereits
-  separate Analyseobjekte für jede Includedatei.
-- Die einzelnen Quelltextursprünge der Include-Inhalte bleiben dennoch über
-  `ExpandedSource`, `FileSource` und das Location-Mapping erhalten.
-
-Referenzimplementierung:
+Referenzimplementierungen:
 - `/src/server/validation/validator.ts`
 - `/src/server/validation/analysis.ts`
 - `/src/server/validation/analysisResult.ts`
 
-### Dokumente, Include-Beziehungen und Analyse-Cache
+---
 
-`DocumentRegistry` stellt zuerst offene Editor-Dokumente bereit und lädt
-andere Dateien bei Bedarf vom Dateisystem. Für geladene Include-Dateien besteht
-ein Cache anhand des Dateizeitstempels.
+## Verantwortlichkeiten der Infrastruktur
 
-Die Registry speichert Include-Beziehungen in beiden Richtungen (`includes`
-und `includedBy`). Zusätzlich speichert sie Analyseergebnisse unter der URI
-der analysierten Ausgangsdatei und deren Dokumentversion.
+Die Verwaltung von Analyseergebnissen, Dateibeziehungen und LSP-Darstellung
+ist getrennt:
 
-`getAnalysisResultForSource()` kann eine Anfrage für eine Include-URI auf eine
-Analyse eines einbindenden Dokuments zurückführen, **sofern genau ein
-geeigneter Analysekontext gefunden wird**. Bei mehreren verschiedenen
-Analysekontexten wird bewusst keiner willkürlich ausgewählt. Eine aktive
-Kontextauswahl für mehrfach eingebundene Dateien existiert noch nicht.
+- **`DocumentRegistry`** stellt offene Editor-Dokumente und bei Bedarf Dateien
+  vom Dateisystem bereit. Sie verwaltet Analyseergebnisse pro Hauptdatei,
+  Versionen, aktive Include-Abhängigkeiten, Invalidierung und die Auswahl des
+  semantischen Include-Kontexts.
+- **`FolderTranslationUnitIndex`** erkennt vollständige `.P`-Hauptdateien
+  direkt in den vom `WorkspaceManager` gelieferten Ordnern. Er untersucht
+  weder PEARL-Grammatik noch Include-Anweisungen und besitzt keine
+  Analyseergebnisse.
+- **`DiagnosticPublicationManager`** verwaltet die an den Editor gemeldeten
+  Diagnosen getrennt nach Übersetzungseinheit und physischer Quelldatei.
+  Seine Aufgabe ist Veröffentlichung, nicht syntaktische oder semantische
+  Analyse.
+- **`server.ts`** verbindet diese Komponenten mit dem LSP-Lebenszyklus.
+  Compilerphasen und AST kennen weder Workspace-Ordner noch CodeLens oder
+  die Darstellung von Diagnosen.
 
-Der gespeicherte Versionsschlüssel gehört derzeit zur Ausgangsdatei. Eine
-vollständige Gültigkeitsprüfung gegen die Versionen aller eingebundenen
-Dokumente ist damit nicht gewährleistet.
+Eine zusätzliche, parallele Compilerpipeline für Includedateien oder eine
+zweite unabhängige Analyseverwaltung darf daraus nicht entstehen.
 
-Referenzimplementierung:
+Referenzimplementierungen:
 - `/src/server/utility/documentRegistry.ts`
-- `/src/server/ast/tests/sourceAwareLookup.test.ts`
-
-### Workspace-Unterstützung
-
-`WorkspaceManager` kennt bereits vom LSP-Client übergebene Workspace-Folder,
-reagiert auf Änderungen dieser Folder-Liste und kann daraus ein
-Arbeitsverzeichnis ableiten. Eine automatische Ermittlung aller PEARL-
-Übersetzungseinheiten und ihrer Einbindungskontexte im geöffneten Verzeichnis
-ist damit derzeit **nicht** implementiert.
-
-Die Unterscheidung zwischen bisheriger Dateianalyse und späterer
-projektweiter Analyse darf nicht mit einer zweiten Compilerpipeline
-verwechselt werden.
-
-Referenzimplementierung:
+- `/src/server/utility/folderTranslationUnitIndex.ts`
 - `/src/server/utility/workspace.ts`
-
-### Auslösung und Veröffentlichung von Analysen
-
-`server.ts` löst beim Öffnen und bei Textänderungen eines Dokuments die
-Validierung aus. `validateAndPublish()` verwendet einen Textsnapshot und
-verhindert das Speichern beziehungsweise Veröffentlichen, wenn inzwischen eine
-andere Dokumentversion vorliegt. Die Ergebnisse werden für Hover, Navigation,
-Signaturhilfe, Folding und Semantic Tokens wiederverwendet.
-
-Die Diagnoseveröffentlichung verwendet derzeit eine **globale** Menge der
-zuletzt gemeldeten Dokument-URIs. Nicht im zuletzt verarbeiteten Ergebnis
-enthaltene URIs erhalten leere Diagnosen. Diese bisherige Veröffentlichungs-
-strategie ist nicht auf mehrere unabhängig gleichzeitig analysierte
-Übersetzungseinheiten und kontextabhängige Includedateien ausgelegt.
-
-Ein direkt geöffnetes Include wird aktuell ebenfalls zunächst als eigener
-Analyse-Ausgangspunkt validiert. Die bereits vorhandene Rückwärtssuche nach
-einem Include-Kontext wird in den Anfragehandlern genutzt, verhindert diesen
-separaten Validierungslauf aber nicht.
-
-Referenzimplementierung:
+- `/src/server/lsp/diagnosticPublicationManager.ts`
 - `/src/server/server.ts`
-- `/src/server/lsp/diagnosticMapper.ts`
-- `/src/server/semanticTokens/semanticTokenService.ts`
 
-## Für Dev_0_3 zu entscheidende Erweiterungen
+---
 
-Die folgenden Punkte sind **offene Architekturaufgaben** und werden erst nach
-der gemeinsamen Entwurfsentscheidung verbindliche Soll-Vorgaben:
+## Include-Abhängigkeiten und Gültigkeit der Analyse
 
-- Eigenständige Identität und Gültigkeitsverwaltung der Übersetzungseinheiten
-  einschließlich aller beteiligten Dokumentversionen und Konfigurationen.
-- Trennung von gespeicherten Analyseergebnissen und je Datei veröffentlichten
-  Diagnosen, sodass ein Analyselauf die Diagnoseanzeige anderer Einheiten
-  nicht unbeabsichtigt löscht.
-- Konsistente Invalidierung und Neuanalyse beim Ändern von Includes;
-  Aktualisierung der Include-Abhängigkeiten auch nach Umstrukturierungen.
-- Entscheidung über die Auswahl eines aktiven Analysekontextes, wenn dieselbe
-  physische Datei in mehreren Modulen mit verschiedenen Makrozuständen
-  vorkommt.
-- Verzeichniserkennung für „Open Folder“ bei unverändertem „Open File“ und
-  späterer Erweiterbarkeit auf mehrere Workspace-Verzeichnisse.
-- Verhalten bei konkurrierenden Analyseanforderungen und verspäteten Ergebnissen.
+Die aktive Include-Menge wird vom Präprozessor **für den jeweiligen
+Analyselauf** gesammelt. Nur tatsächlich ausgeführte `#include`-Anweisungen
+zählen; Includes aus inaktiven `#ifdef`-Zweigen nicht. Nach Abschluss der
+Analyse ersetzt `DocumentRegistry` die Abhängigkeiten dieser
+Übersetzungseinheit einschließlich ihrer Rückwärtszuordnung. Werden
+Includes entfernt, dürfen keine alten Beziehungen bestehen bleiben.
 
-Die bestehenden Compilerphasen, der quellbewusste AST-Lookup und die explizite
-Herkunftsabbildung sollen dabei weiterverwendet werden. Ein zusätzlicher
-Fragmentparser oder eine parallele sprachspezifische LSP-Analyse ist aus den
-bisherigen Befunden nicht erforderlich.
+Bei der Änderung einer Quelldatei werden die Analysen aller bekannten
+einbindenden Übersetzungseinheiten invalidiert und neu angefordert. Das
+gilt auch für indirekte Includes und ungespeicherte Änderungen in geöffneten
+PEARL-Dokumenten. Eine Includedatei wird dafür **nicht** als vollständiges
+Hauptmodul geparst.
+
+Analyseergebnisse werden anhand der Hauptdokumentversion und der erfassten
+Quellversionen auf Gültigkeit geprüft. Änderungen an offenen Dokumenten
+sowie Dateisystem- und Konfigurationsereignisse führen zur Invalidierung.
+Eine monoton fortgeschriebene Anforderungskennung verhindert, dass ein
+überholter asynchroner Analyselauf sein Ergebnis nachträglich veröffentlicht.
+Die Gültigkeitsprüfung darf nicht durch bloßes Umschalten zwischen Tabs
+ersetzt werden.
+
+Die Registry behält `addInclude()` für ältere, synthetische Tests bei.
+Solche Include-Beziehungen können ohne zugängliches physisches Dokument
+existieren; fehlt ihre Quellversion, ist dies nicht automatisch ein
+Versionskonflikt. **Bekannte**, abweichende Versionen sind dagegen
+zurückzuweisen.
+
+Referenzimplementierungen:
+- `/src/server/preproc/preprocessorContext.ts`
+- `/src/server/preproc/preprocessor.ts`
+- `/src/server/utility/documentRegistry.ts`
+- `/src/server/server.ts`
+
+---
+
+## Open File und Open Folder
+
+„Open File“ behält die bisherige Analyse einer einzeln geöffneten PEARL-Datei
+bei. Im Modus „Open Folder“ werden `.P`-Dateien **unmittelbar im geöffneten
+Ordner** automatisch als Hauptdateien erkannt und analysiert, auch wenn sie
+nicht als Editor-Tab geöffnet sind. Ihre Analysen bleiben nach dem Schließen
+des Tabs erhalten, solange sie zum Ordner gehören.
+
+Eine im Ordner geöffnete `.h`-Includedatei wird nicht allein deshalb zu
+einer eigenständigen Übersetzungseinheit. Ihre Sprachinformationen stammen
+aus einer einbindenden Hauptdatei. Hinzukommende oder entfernte `.P`-Dateien
+werden über die Ordneraktualisierung berücksichtigt; Änderungen bekannter
+Quellen über Editor- oder Dateisystemereignisse.
+
+Die Ordnererkennung ist derzeit **nicht rekursiv**. Eine umfassende
+Projekt-/Workspace-Konfiguration mit mehreren Quellverzeichnissen ist noch
+keine implementierte Architekturentscheidung. Der `WorkspaceManager`
+kennt jedoch bereits vom LSP-Client gelieferte Workspace-Folder.
+
+Für korrektes LSP-Feedback muss VS Code eine bearbeitete Includedatei im
+Sprachmodus **PEARL** öffnen. Insbesondere wird die Dateiendung `.h`
+bewusst nicht global der Sprache PEARL zugeordnet; Testordner können dafür
+lokale `.vscode/settings.json` mit `files.associations` bereitstellen.
+
+Referenzimplementierungen:
+- `/src/server/utility/folderTranslationUnitIndex.ts`
+- `/src/server/utility/workspace.ts`
+- `/src/server/server.ts`
+
+---
+
+## Mehrere Einbindungskontexte derselben Datei
+
+Eine physische Includedatei kann in mehreren Übersetzungseinheiten mit
+**unterschiedlichen Makrodefinitionen** vorkommen. Ihre AST- und
+Semantikergebnisse sind daher kontextabhängig. Es darf weder eine
+willkürliche gemeinsame Semantik noch eine Vereinigung dieser Ergebnisse
+geben.
+
+`DocumentRegistry.getAnalysisResultForSource()` liefert für eine Include-URI
+nur einen gültigen, eindeutigen beziehungsweise **explizit ausgewählten**
+Kontext. Bei mehreren möglichen, noch nicht ausgewählten Kontexten gibt sie
+kein beliebiges Analyseergebnis zurück. Solange eine ausdrücklich gewählte
+Übersetzungseinheit nach einer Quelländerung erneut analysiert wird, darf die
+Anfrage nicht vorübergehend auf eine andere umschalten.
+
+Für mehrfach eingebundene Dateien stellt der LSP eine **CodeLens** bereit.
+Über `pearl.selectIncludeContext` und eine Auswahlliste kann eine einbindende
+`.P`-Datei ausgewählt oder die Wahl geändert werden. Die Auswahl gilt pro
+physischer Include-URI und wird von Hover, Navigation und Semantic Tokens
+beachtet. Sie bleibt erhalten, solange die gewählte Einbindung gültig ist.
+Bei nur einem Einbindungskontext erfolgt die Auswahl automatisch.
+
+Die Diagnoseveröffentlichung erfolgt ebenfalls getrennt nach
+Übersetzungseinheit. Ein neuer Analyselauf darf Diagnosen eines anderen
+Moduls nicht löschen. Für eine mehrfach eingebundene Quelldatei werden
+Meldungen **eines** Kontextes dargestellt, niemals Diagnosen verschiedener
+Makrokontexte zusammengeführt. Nach einer expliziten CodeLens-Auswahl wird
+auch der anzuzeigende Diagnosekontext entsprechend umgeschaltet.
+Vor einer expliziten Auswahl kann die Diagnoseverwaltung bereits einen
+stabilen Veröffentlichungskontext besitzen, während semantische
+Editoranfragen aus Mehrdeutigkeitsgründen noch kein Ergebnis liefern.
+
+Die derzeitige Auswahl unterscheidet **einbindende Übersetzungseinheiten**,
+nicht mehrere mögliche Einbindungsstellen derselben Datei innerhalb einer
+einzigen Übersetzungseinheit. Für einen solchen Spezialfall ist noch keine
+weitergehende Kontextregel festgelegt.
+
+Referenzimplementierungen:
+- `/src/server/utility/documentRegistry.ts`
+- `/src/server/lsp/diagnosticPublicationManager.ts`
+- `/src/server/server.ts`
+- `/src/server/utility/tests/includeContextSelection.test.ts`
 
 ---
 

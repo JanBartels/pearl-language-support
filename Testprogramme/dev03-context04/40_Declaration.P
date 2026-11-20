@@ -1,0 +1,14 @@
+P=MPC603;
+SC=2000;
+MODULE Dev03Declaration;
+PROBLEM;
+
+#define DEKLARATIONEN
+#include "H42_Variables.h"
+
+P: PROC;
+  DCL L FIXED;
+  L := Var(1);
+END;
+
+MODEND;

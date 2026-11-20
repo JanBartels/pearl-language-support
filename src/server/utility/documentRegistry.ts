@@ -39,6 +39,9 @@ export class DocumentRegistry {
   /** Monotonically changing request identities reject superseded results. */
   private readonly requestIds = new Map<string, number>();
 
+  /** User-selected translation unit for a multiply included source. */
+  private readonly preferredUnitBySource = new Map<string, string>();
+
   constructor(documents: TextDocuments<TextDocument>) {
     this.documents = documents;
   }
@@ -108,6 +111,9 @@ export class DocumentRegistry {
   }
 
   closeTranslationUnit(uri: string): void {
+      for (const [sourceUri, selectedUnit] of this.preferredUnitBySource) {
+          if (selectedUnit === uri) this.preferredUnitBySource.delete(sourceUri);
+      }
       this.translationUnits.delete(uri);
       this.bumpRequestId(uri);
       this.clearAnalysisResult(uri);
@@ -228,7 +234,15 @@ export class DocumentRegistry {
           if (document) sourceVersions.set(sourceUri, document.version);
       }
 
+      const previousSources = this.sourcesByUnit.get(uri);
       this.removeUnitSources(uri);
+      // The chosen root may stop including a file after a #ifdef change.
+      // Only then discard the previous explicit choice for that source.
+      for (const sourceUri of previousSources ?? []) {
+          if (!sources.has(sourceUri) && this.preferredUnitBySource.get(sourceUri) === uri) {
+              this.preferredUnitBySource.delete(sourceUri);
+          }
+      }
       this.sourcesByUnit.set(uri, sources);
       for (const sourceUri of sources) {
           let units = this.unitsBySource.get(sourceUri);
@@ -239,6 +253,12 @@ export class DocumentRegistry {
           units.add(uri);
       }
       this.analysisResults.set(uri, { version, result, sourceVersions });
+  }
+
+  /** Read-only dependency snapshot for LSP presentation refreshes. */
+  getIncludedSourcesOfUnit(unitUri: string): string[] {
+      return [...(this.sourcesByUnit.get(unitUri) ?? [])]
+          .filter(sourceUri => sourceUri !== unitUri);
   }
 
   /** Open document versions are checked without filesystem I/O per request. */
@@ -263,22 +283,58 @@ export class DocumentRegistry {
       this.analysisResults.delete(uri);
   }
 
-  /** No arbitrary choice among multiple contexts of a shared include. */
-  getAnalysisResultForSource(uri: string, version: number): AnalysisResult | undefined {
-      const own = this.getAnalysisResult(uri, version);
-      if (own) return own;
-
-      const candidates = new Set<AnalysisResult>();
+  /**
+   * Available, current translation-unit contexts of an included source.
+   * The dependency graph comes from actual preprocessor include expansion.
+   * No root is chosen implicitly when there are multiple candidates.
+   */
+  getIncludeContextCandidates(uri: string, version: number): string[] {
+      const candidates: string[] = [];
       for (const unitUri of this.unitsBySource.get(uri) ?? []) {
           if (unitUri === uri) continue;
           const entry = this.analysisResults.get(unitUri);
           if (!entry) continue;
+          // Synthetic/legacy include edges may have no readable document and
+          // therefore no recorded version. Preserve their previously supported
+          // lookup behavior, but reject any known mismatching source version.
           const sourceVersion = entry.sourceVersions.get(uri);
           if (sourceVersion !== undefined && sourceVersion !== version) continue;
-          const result = this.getAnalysisResult(unitUri, entry.version);
-          if (result) candidates.add(result);
+          if (this.getAnalysisResult(unitUri, entry.version)) candidates.push(unitUri);
       }
-      return candidates.size === 1 ? [...candidates][0] : undefined;
+      return candidates.sort();
+  }
+
+  /** Current choice, or the only available context for a uniquely included file. */
+  getSelectedIncludeContext(uri: string, version: number): string | undefined {
+      const candidates = this.getIncludeContextCandidates(uri, version);
+      const preferred = this.preferredUnitBySource.get(uri);
+      if (preferred) return candidates.includes(preferred) ? preferred : undefined;
+      // One completed analysis does not mean an unambiguous context when
+      // other owners are known but still being reanalyzed.
+      const owners = this.unitsBySource.get(uri);
+      return owners?.size === 1 && candidates.length === 1
+          ? candidates[0] : undefined;
+  }
+
+  /** A selection is only accepted for an actually analyzed including unit. */
+  selectIncludeContext(uri: string, version: number, unitUri: string): boolean {
+      if (!this.getIncludeContextCandidates(uri, version).includes(unitUri)) return false;
+      this.preferredUnitBySource.set(uri, unitUri);
+      return true;
+  }
+
+  /** Clearing an explicit choice returns a shared include to its ambiguous state. */
+  clearIncludeContext(uri: string): void {
+      this.preferredUnitBySource.delete(uri);
+  }
+
+  getAnalysisResultForSource(uri: string, version: number): AnalysisResult | undefined {
+      const own = this.getAnalysisResult(uri, version);
+      if (own) return own;
+      const selected = this.getSelectedIncludeContext(uri, version);
+      if (!selected) return undefined;
+      const entry = this.analysisResults.get(selected);
+      return entry && this.getAnalysisResult(selected, entry.version);
   }
 
   // BEGIN TEMP-NAV-DEBUG: read-only analysis version snapshot

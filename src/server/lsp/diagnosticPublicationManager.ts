@@ -55,6 +55,17 @@ export class DiagnosticPublicationManager {
         }
     }
 
+    /**
+     * Switch the visible diagnostics of a shared source to its explicit
+     * semantic context. Neither unit's diagnostics are merged.
+     */
+    selectContext(sourceUri: string, unitUri: string): boolean {
+        if (!this.units.get(unitUri)?.sources.has(sourceUri)) return false;
+        this.selectedUnitBySource.set(sourceUri, unitUri);
+        this.send(sourceUri, [...(this.units.get(unitUri)!.diagnostics.get(sourceUri) ?? [])]);
+        return true;
+    }
+
     /** Remove a translation unit, retaining contributions from other units. */
     removeUnit(unitUri: string): void {
         const previous = this.units.get(unitUri);

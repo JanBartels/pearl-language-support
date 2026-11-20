@@ -42,11 +42,12 @@ export class WorkspaceManager {
     }
   }
 
-    registerWorkspaceFolderListener(connection: Connection): void {
+    registerWorkspaceFolderListener(connection: Connection, onChange?: () => void): void {
     if (!this.hasWorkspaceFolderCapability) return;
 
     connection.workspace.onDidChangeWorkspaceFolders(event => {
         this.updateWorkspaceFolders(event);
+        onChange?.();
     });
     }
 
@@ -107,6 +108,14 @@ export class WorkspaceManager {
     }
 
     return path.dirname(filePathFromUri(docUri));
+  }
+
+  /** Filesystem folders supplied by the client; no implicit folder in Open File mode. */
+  getWorkspaceRoots(): string[] {
+    if (this.workspaceFolders?.length) {
+      return this.workspaceFolders.map(folder => filePathFromUri(folder.uri));
+    }
+    return this.legacyRootUri ? [filePathFromUri(this.legacyRootUri)] : [];
   }
 
   getAnyWorkspaceRoot(): string | undefined {

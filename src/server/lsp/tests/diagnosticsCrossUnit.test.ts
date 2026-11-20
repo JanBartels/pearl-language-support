@@ -116,3 +116,48 @@ test('removing a formerly included file clears only diagnostics from its unit', 
         { uri: include, diagnostics: [] }
     ]);
 });
+
+test('explicit include selection switches only its diagnostics', () => {
+    const { publisher, sent } = fixture();
+    const fromA = diagnostic('Declaration diagnostic');
+    const fromB = diagnostic('Specification diagnostic');
+    publisher.publish(moduleA, new Map([[include, [fromA]]]), [include]);
+    publisher.publish(moduleB, new Map([[include, [fromB]]]), [include]);
+
+    sent.length = 0;
+    assert.equal(publisher.selectContext(include, moduleB), true);
+    assert.deepEqual(sent, [{ uri: include, diagnostics: [fromB] }]);
+
+    sent.length = 0;
+    publisher.publish(moduleA, new Map([[include, [diagnostic('Revised declaration')]]]), [include]);
+    assert.deepEqual(sent, [{ uri: moduleA, diagnostics: [] }]);
+    publisher.publish(moduleB, new Map([[include, [diagnostic('Revised specification')]]]), [include]);
+    assert.deepEqual(sent.at(-1), {
+        uri: include,
+        diagnostics: [diagnostic('Revised specification')]
+    });
+});
+
+test('invalid explicit diagnostic context does not alter publication', () => {
+    const { publisher, sent } = fixture();
+    publisher.publish(moduleA, new Map([[include, [diagnostic('Declaration')]]]), [include]);
+    publisher.publish(moduleB, new Map([[moduleB, [diagnostic('Other')]]]), [moduleB]);
+    sent.length = 0;
+    assert.equal(publisher.selectContext(include, moduleB), false);
+    assert.deepEqual(sent, []);
+});
+
+test('diagnostic context falls back to remaining parent when the chosen unit closes', () => {
+    const { publisher, sent } = fixture();
+    const first = diagnostic('Declaration');
+    const second = diagnostic('Specification');
+    publisher.publish(moduleA, new Map([[include, [first]]]), [include]);
+    publisher.publish(moduleB, new Map([[include, [second]]]), [include]);
+    publisher.selectContext(include, moduleB);
+    sent.length = 0;
+    publisher.removeUnit(moduleB);
+    assert.deepEqual(sent, [
+        { uri: moduleB, diagnostics: [] },
+        { uri: include, diagnostics: [first] }
+    ]);
+});

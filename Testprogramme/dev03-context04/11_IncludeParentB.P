@@ -1,0 +1,9 @@
+P=MPC603;
+SC=2000;
+MODULE Dev03IncludeB;
+PROBLEM;
+
+#include "H12_SharedTypes.h"
+DCL FromB SharedScalar GLOBAL;
+
+MODEND;

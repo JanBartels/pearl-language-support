@@ -27,10 +27,12 @@ import {
   InitializeParams,
   WorkspaceFolder,
   DidChangeConfigurationNotification,
+  DidChangeWatchedFilesNotification,
   TextDocumentSyncKind,
   DiagnosticSeverity,
   DiagnosticTag,
   Hover,
+  CodeLens,
   FoldingRange,
   MarkupKind
 } from 'vscode-languageserver/node';
@@ -41,6 +43,7 @@ import * as path from 'path';
 import { DocumentRegistry } from './utility/documentRegistry';
 import { filePathFromUri, uriFromFilePath } from './utility/uriUtils';
 import { WorkspaceManager } from './utility/workspace';
+import { FolderTranslationUnitIndex } from './utility/folderTranslationUnitIndex';
 import { PearlSettings, defaultSettings } from './settings/pearlSettings';
 import { SettingsManager } from './settings/settingsManager';
 import { Validator } from './validation/validator';
@@ -89,6 +92,7 @@ function navigationTrace(id: number, message: string): void {
 // END TEMP-NAV-DEBUG
 
 const workspaceManager = new WorkspaceManager();
+const folderTranslationUnits = new FolderTranslationUnitIndex();
 const settingsManager = new SettingsManager(connection);
 
 const documents = new TextDocuments(TextDocument);
@@ -104,6 +108,8 @@ const validator = new Validator(
 );
 
 let clientSupportsSemanticTokenRefresh = false;
+let clientSupportsCodeLensRefresh = false;
+let clientSupportsDynamicFileWatches = false;
 
 const tokenLegend = new TokenLegend();
 const semanticTokenService = new SemanticTokenService(
@@ -119,6 +125,10 @@ connection.onInitialize((params: InitializeParams) => {
   settingsManager.initialize(params);
   clientSupportsSemanticTokenRefresh =
     params.capabilities.workspace?.semanticTokens?.refreshSupport === true;
+  clientSupportsCodeLensRefresh =
+    params.capabilities.workspace?.codeLens?.refreshSupport === true;
+  clientSupportsDynamicFileWatches =
+    params.capabilities.workspace?.didChangeWatchedFiles?.dynamicRegistration === true;
 
   return {
     capabilities: {
@@ -131,6 +141,8 @@ connection.onInitialize((params: InitializeParams) => {
       },      
 //      completionProvider: { resolveProvider: true },
       hoverProvider: true,
+      codeLensProvider: { resolveProvider: false },
+      executeCommandProvider: { commands: ['pearl.selectIncludeContext'] },
       definitionProvider: true,
       declarationProvider: true,
       referencesProvider: true,
@@ -149,8 +161,98 @@ connection.onInitialize((params: InitializeParams) => {
 });
 
 connection.onInitialized(() => {
-  workspaceManager.registerWorkspaceFolderListener(connection);
+  workspaceManager.registerWorkspaceFolderListener(connection, refreshFolderTranslationUnits);
   settingsManager.registerConfigurationListener();
+  refreshFolderTranslationUnits();
+
+  // VS Code may not otherwise watch PEARL roots or headers. Register only
+  // when the client advertises dynamic file-watching support.
+  if (clientSupportsDynamicFileWatches) {
+    void connection.client.register(DidChangeWatchedFilesNotification.type, {
+      watchers: [
+        { globPattern: '**/*.P' },
+        { globPattern: '**/*.p' },
+        { globPattern: '**/*.h' },
+        { globPattern: '**/*.H' }
+      ]
+    }).catch((error: unknown) => {
+      logger.warn(`Could not register PEARL file watchers: ${String(error)}`);
+    });
+  }
+});
+
+// ------------------------------
+// Include context selection (LSP-only; no editor extension command needed)
+// ------------------------------
+
+/** Refresh the CodeLens display when the include graph or selection changes. */
+function refreshIncludeCodeLenses(): void {
+  if (!clientSupportsCodeLensRefresh) return;
+  void connection.sendRequest('workspace/codeLens/refresh').catch((error: unknown) => {
+    logger.warn(`Include context CodeLens refresh failed: ${String(error)}`);
+  });
+}
+
+connection.onCodeLens(params => {
+  const uri = params.textDocument.uri;
+  const document = documents.get(uri);
+  if (!document) return [];
+  const candidates = documentRegistry.getIncludeContextCandidates(uri, document.version);
+  if (candidates.length < 2) return [];
+
+  const selected = documentRegistry.getSelectedIncludeContext(uri, document.version);
+  const title = selected
+    ? `PEARL: Include-Kontext ${path.basename(filePathFromUri(selected))} (wechseln)`
+    : `PEARL: Include-Kontext auswählen (${candidates.length} Module)`;
+  const lens: CodeLens = {
+    range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+    command: {
+      title,
+      command: 'pearl.selectIncludeContext',
+      arguments: [uri]
+    }
+  };
+  return [lens];
+});
+
+connection.onExecuteCommand(async params => {
+  if (params.command !== 'pearl.selectIncludeContext') return;
+  const uri = params.arguments?.[0];
+  if (typeof uri !== 'string') return;
+  const document = documents.get(uri);
+  if (!document) return;
+  const candidates = documentRegistry.getIncludeContextCandidates(uri, document.version);
+  if (candidates.length < 2) return;
+
+  // Include file names can collide in multi-folder workspaces. Display paths
+  // relative to their workspace folder, or full paths if outside a folder.
+  const choices = candidates.map(unitUri => {
+    const folder = workspaceManager.getWorkspaceFolderForUri(unitUri);
+    const fullPath = filePathFromUri(unitUri);
+    const label = folder
+      ? `${path.basename(filePathFromUri(folder.uri))}/${path.relative(filePathFromUri(folder.uri), fullPath)}`
+      : fullPath;
+    return { unitUri, label };
+  });
+  const answer = await connection.window.showInformationMessage(
+    `PEARL: Einbindungskontext für ${path.basename(filePathFromUri(uri))} auswählen`,
+    ...choices.map(choice => ({ title: choice.label }))
+  );
+  if (!answer) return;
+  const selected = choices.find(choice => choice.label === answer.title);
+  if (!selected || !documentRegistry.selectIncludeContext(uri, document.version, selected.unitUri)) {
+    logger.warn(`Include context selection is no longer valid for ${uri}`);
+    return;
+  }
+
+  diagnosticPublicationManager.selectContext(uri, selected.unitUri);
+  logger.debug(`Include context ${uri} -> ${selected.unitUri}`);
+  refreshIncludeCodeLenses();
+  if (clientSupportsSemanticTokenRefresh) {
+    void connection.languages.semanticTokens.refresh().catch((error: unknown) => {
+      logger.warn(`Semantic-token refresh failed: ${String(error)}`);
+    });
+  }
 });
 
 // ------------------------------
@@ -542,6 +644,7 @@ async function validateAndPublish(document: TextDocument): Promise<void> {
     }
 
     // Analyse für spätere LSP-Features zwischenspeichern.
+    const previousIncludes = documentRegistry.getIncludedSourcesOfUnit(snapshot.uri);
     documentRegistry.setAnalysisResult(snapshot.uri, snapshot.version, result);
 
     // An early semantic-token request may have seen no completed analysis.
@@ -560,6 +663,13 @@ async function validateAndPublish(document: TextDocument): Promise<void> {
         diagnosticsByUri,
         [...result.files.keys(), ...(result.includedSourceUris ?? [])]
     );
+    // The first completed include analysis may create a new CodeLens for an
+    // already-open header; no editor text change is required for that.
+    if ([...previousIncludes, ...(result.includedSourceUris ?? [])].some(
+        sourceUri => !!documents.get(sourceUri)
+    )) {
+      refreshIncludeCodeLenses();
+    }
   } catch (err) {
     if (err instanceof Error) {
         logger.error(`Validation error in ${document.uri}: ${err.message}`);
@@ -571,14 +681,45 @@ async function validateAndPublish(document: TextDocument): Promise<void> {
 }
 
 /**
+ * Discover complete .P translation units in the currently opened folders.
+ * The preprocessor, not this folder index, establishes include dependencies.
+ * A file already open as an independent document keeps that analysis when a
+ * folder is removed; unopened roots are removed from the analysis registry.
+ */
+function refreshFolderTranslationUnits(): void {
+  const changes = folderTranslationUnits.refresh(workspaceManager.getWorkspaceRoots());
+  for (const uri of changes.removed) {
+    if (!documents.get(uri)) {
+      documentRegistry.closeTranslationUnit(uri);
+      diagnosticPublicationManager.removeUnit(uri);
+    }
+  }
+  const activeRoots = new Set(documentRegistry.getActiveTranslationUnits());
+  for (const uri of changes.added) {
+    if (activeRoots.has(uri)) continue;
+    const document = documentRegistry.get(uri);
+    if (document) void validateAndPublish(document);
+  }
+}
+
+/**
  * Invalidate first, then reanalyze the affected roots using current document
  * snapshots. This also handles unsaved edits in an included source.
+ *
+ * In Open Folder mode, a newly opened header is not a translation unit.
+ * When its including roots have already been discovered, their analyses
+ * provide the header's language features instead.
  */
 function revalidateChangedSource(uri: string, fallback?: TextDocument): void {
   const affectedRoots = documentRegistry.invalidateUri(uri);
   if (affectedRoots.length === 0 && fallback) {
-    // In Open File mode a source with no known including root is a new unit.
-    void validateAndPublish(fallback);
+    if (folderTranslationUnits.shouldAnalyzeAsRoot(uri)) {
+      // Preserve the existing Open File workflow (no workspace folder).
+      void validateAndPublish(fallback);
+    } else {
+      // An include without a known parent has no syntactic context yet.
+      logger.debug(`No including translation unit available for ${uri}`);
+    }
     return;
   }
   for (const rootUri of affectedRoots) {
@@ -600,17 +741,23 @@ documents.onDidClose((event) => {
   logger.info(`onDidClose ${uri}`);
   settingsManager.clearDocument(uri);
   const affectedRoots = documentRegistry.invalidateUri(uri);
-  documentRegistry.closeTranslationUnit(uri);
-  diagnosticPublicationManager.removeUnit(uri);
+  // Discovered folder units remain active even without an editor tab.
+  // Include files never own an analysis of their own in folder mode.
+  if (!folderTranslationUnits.hasRoot(uri)) {
+    documentRegistry.closeTranslationUnit(uri);
+    diagnosticPublicationManager.removeUnit(uri);
+  }
   // The included source now comes from disk, not the editor buffer.
   for (const rootUri of affectedRoots) {
-    if (rootUri === uri) continue;
+    if (rootUri === uri && !folderTranslationUnits.hasRoot(uri)) continue;
     const root = documentRegistry.get(rootUri);
     if (root) void validateAndPublish(root);
   }
 });
 
 connection.onDidChangeWatchedFiles((event) => {
+  // React to additions/removals of .P files as well as include content changes.
+  refreshFolderTranslationUnits();
   const roots = new Set<string>();
   for (const change of event.changes) {
     for (const uri of documentRegistry.invalidateUri(change.uri)) roots.add(uri);

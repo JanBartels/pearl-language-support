@@ -1,0 +1,15 @@
+P=MPC603;
+SC=2000;
+MODULE Dev03Conditional;
+PROBLEM;
+
+#define USE_FIXED
+#ifdef USE_FIXED
+#include "H21_FixedTypes.h"
+#else
+#include "H22_FloatTypes.h"
+#endif
+
+DCL SelectedValue SelectedScalar GLOBAL;
+
+MODEND;
