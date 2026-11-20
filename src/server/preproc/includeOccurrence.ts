@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Jan Bartels
 
 import type { Span } from '../core/span';
+import type { Source } from '../source/source';
 
 /**
  * One physical #include directive along a path from a translation unit.
@@ -27,6 +28,8 @@ export interface IncludeSite {
 export interface IncludeOccurrence {
     readonly id: string;
     readonly sourceUri: string;
+    /** Exact physical Source instance used for this execution. */
+    readonly source?: Source;
     readonly sites: readonly IncludeSite[];
     readonly expandedSpan: Readonly<Span>;
 }

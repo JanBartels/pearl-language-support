@@ -33,7 +33,6 @@ import {
   DiagnosticTag,
   Hover,
   CodeLens,
-  FoldingRange,
   MarkupKind
 } from 'vscode-languageserver/node';
 
@@ -67,11 +66,8 @@ import { AstLookupResultDocumentationProvider } from './documentation/astLookupR
 import { lookupSymbolDefinition, lookupBoundSymbol } from './semantic/bindingIndex';
 import { appendIncludeOriginDocumentation } from './documentation/includeOriginDocumentation';
 import { lookupLocalSpecificationRelation } from './semantic/localSpecificationRelation';
-import { FoldingRegionCollection } from './folding/foldingRegionCollection';
-import { mapFoldingRegion } from './lsp/foldingMapper';
-import { CommentFoldingCollector } from './lexer/commentFoldingCollector';
-import { PreprocessorFoldingCollector } from './preproc/preprocessorFoldingCollector';
-import { AstFoldingCollector } from './ast/astFoldingCollector';
+import { createFoldingRangesForDocument } from './lsp/createFoldingRangesForDocument';
+import { FoldingRangeRefreshController } from './lsp/foldingRangeRefreshController';
 import { SourceOffset, mapToOriginalLocation, containsSourceOffset } from './core/sourceOffset';
 import { createSignatureHelp } from './lsp/createSignatureHelp';
 
@@ -111,6 +107,11 @@ let clientSupportsSemanticTokenRefresh = false;
 let clientSupportsCodeLensRefresh = false;
 let clientSupportsDynamicFileWatches = false;
 
+const foldingRangeRefresh = new FoldingRangeRefreshController(
+  () => connection.sendRequest('workspace/foldingRange/refresh'),
+  (error: unknown) => logger.warn(`Folding-range refresh failed: ${String(error)}`)
+);
+
 const tokenLegend = new TokenLegend();
 const semanticTokenService = new SemanticTokenService(
   documentRegistry,
@@ -129,6 +130,12 @@ connection.onInitialize((params: InitializeParams) => {
     params.capabilities.workspace?.codeLens?.refreshSupport === true;
   clientSupportsDynamicFileWatches =
     params.capabilities.workspace?.didChangeWatchedFiles?.dynamicRegistration === true;
+  // This capability was introduced with LSP 3.18.
+  const foldingWorkspaceCapability = params.capabilities.workspace as
+    ({ foldingRange?: { refreshSupport?: boolean } } | undefined);
+  const foldingRefreshSupported = foldingWorkspaceCapability?.foldingRange?.refreshSupport === true;
+  foldingRangeRefresh.setSupported(foldingRefreshSupported);
+  logger.debug(`[FoldingRefresh] client refreshSupport=${foldingRefreshSupported}`);
 
   return {
     capabilities: {
@@ -265,6 +272,8 @@ connection.onExecuteCommand(async params => {
   diagnosticPublicationManager.selectContext(uri, selected.unitUri, selected.occurrence?.id);
   logger.debug(`Include context ${uri} -> ${selected.unitUri} / ${selected.occurrence?.id ?? 'legacy'}`);
   refreshIncludeCodeLenses();
+  // The selected context changes folding ranges without a document edit.
+  foldingRangeRefresh.schedule();
   if (clientSupportsSemanticTokenRefresh) {
     void connection.languages.semanticTokens.refresh().catch((error: unknown) => {
       logger.warn(`Semantic-token refresh failed: ${String(error)}`);
@@ -292,9 +301,8 @@ connection.onHover(params => {
         params.textDocument.uri, document.version, document.offsetAt(params.position)
     );
 
-    // Preprocessor ranges are still indexed by physical URI; for repeated
-    // includes they cannot yet be attributed to one execution. Never display
-    // an arbitrary result when the selected occurrence would be ambiguous.
+    // Some preprocessor metadata lacks execution provenance. Do not expose
+    // an arbitrary interpretation for those features in a repeated include.
     const repeatedInclude = documentRegistry.hasRepeatedSourceOccurrences(
         position.uri, document.version
     );
@@ -310,11 +318,13 @@ connection.onHover(params => {
     //
     // Preprocessor conditionals
     //
-    const conditional = repeatedInclude ? undefined :
-        PreprocessorConditionalBlockLookup.lookup(
-            analysisResult.rootAnalysis.preprocessorConditionalBlocks,
-            position
-        );
+    const conditional = PreprocessorConditionalBlockLookup.lookup(
+        analysisResult.rootAnalysis.preprocessorConditionalBlocks,
+        position,
+        documentRegistry.getSelectedIncludeContextOption(
+            params.textDocument.uri, document.version
+        )?.occurrence?.id
+    );
     if (conditional) {
         return createHover( PreprocessorConditionalBlockDocumentationProvider.getDocumentation(conditional) );
     }
@@ -580,54 +590,23 @@ connection.onFoldingRanges((params) => {
         return [];
     }
 
+    // Physical folding must be available even before the include context
+    // has been selected or the parent translation unit has finished.
     const analysisResult =
         documentRegistry.getAnalysisResultForSource(params.textDocument.uri, document.version);
-    if (!analysisResult) {
-        return [];
+
+    const ranges = createFoldingRangesForDocument(
+        document,
+        analysisResult,
+        documentRegistry.getSelectedIncludeContextOption(
+            params.textDocument.uri, document.version
+        )?.occurrence,
+        logger
+    );
+    if (/\.h$/i.test(document.uri)) {
+        logger.debug(`[FoldingRefresh] folding ${document.uri}: ${ranges.length} ranges`);
     }
-
-    const regions = new FoldingRegionCollection();
-
-    //
-    // Block comments
-    //
-    CommentFoldingCollector.collect(
-        analysisResult.rootAnalysis.source,
-        analysisResult.rootAnalysis.blockComments,
-        regions
-    );
-
-    //
-    // Präprozessor
-    //
-    PreprocessorFoldingCollector.collect(
-        analysisResult.rootAnalysis.source,
-        analysisResult.rootAnalysis.preprocessorConditionalBlocks,
-        regions
-    );
-
-    //
-    // AST
-    //
-    AstFoldingCollector.collect(
-        analysisResult.rootAnalysis.source,
-        analysisResult.rootAnalysis.ast,
-        regions
-    );
-
-    //
-    // Map to LSP
-    //
-    const result: FoldingRange[] = [];
-    for (const region of regions) {
-        const folding = mapFoldingRegion(document, region);
-
-        if (folding) {
-            result.push(folding);
-        }
-    }    
-
-    return result;
+    return ranges;
 });
 
 // ------------------------------
@@ -697,6 +676,8 @@ async function validateAndPublish(document: TextDocument): Promise<void> {
         sourceUri => !!documents.get(sourceUri)
     )) {
       refreshIncludeCodeLenses();
+      // A folding request could have received [] while analysis was pending.
+      foldingRangeRefresh.schedule();
     }
   } catch (err) {
     if (err instanceof Error) {
@@ -804,6 +785,8 @@ connection.onDidChangeConfiguration((event) => {
     if (root) void validateAndPublish(root);
   }
 });
+
+connection.onShutdown(() => foldingRangeRefresh.dispose());
 
 documents.listen(connection);
 connection.listen();

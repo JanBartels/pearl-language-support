@@ -12,6 +12,9 @@ import { DocumentationProvider } from "../../../documentation/documentationProvi
 import { StructTypeDocumentationProvider } from "../../../documentation/problem/types/structTypeDocumentationProvider";
 
 import { StructComponentNode } from "./structComponentNode";
+import { Source } from "../../../source/source";
+import { FoldingRegionCollection } from "../../../folding/foldingRegionCollection";
+import { createInclusiveFoldingRegion } from "../../../folding/foldingRegion";
 
 export class StructTypeNode extends AstNode {
 
@@ -21,7 +24,9 @@ export class StructTypeNode extends AstNode {
     constructor(
         public readonly keyword: SourceValue<string>,
         public readonly components:
-            readonly StructComponentNode[]
+            readonly StructComponentNode[],
+        /** The closing bracket is retained for source-accurate STRUCT folding. */
+        public readonly closingBracket?: SourceValue<string>
     ) {
         super(AstKind.StructType);
 
@@ -61,6 +66,19 @@ export class StructTypeNode extends AstNode {
         }
 
         return undefined;
+    }
+
+    override addFoldingRegionsTo(
+        source: Source,
+        regions: FoldingRegionCollection
+    ): void {
+        const start = this.keyword.location;
+        const end = this.closingBracket?.location;
+        if (!start || !end || start.source !== source || end.source !== source) {
+            return;
+        }
+        const region = createInclusiveFoldingRegion(start, end);
+        if (region) regions.add(region);
     }
 
     public override dumpLabel(): string {

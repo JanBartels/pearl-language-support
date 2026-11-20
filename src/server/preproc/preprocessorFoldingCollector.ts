@@ -12,12 +12,18 @@ export class PreprocessorFoldingCollector {
     static collect(
         source: Source,
         blocks: PreprocessorConditionalBlockCollection,
-        regions: FoldingRegionCollection
+        regions: FoldingRegionCollection,
+        includeOccurrenceId?: string
     ): void {
 
         for (const block of blocks) {
 
-            if (block.ifLocation.source !== source) {
+            if (includeOccurrenceId !== undefined
+                && block.includeOccurrenceId !== includeOccurrenceId) continue;
+
+            // A repeated include creates a new FileSource for each execution.
+            // Match the editor's physical URI, not the FileSource object identity.
+            if (block.ifLocation.source.uri !== source.uri) {
                 continue;
             }
 

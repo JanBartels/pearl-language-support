@@ -865,6 +865,7 @@ export class Preprocessor {
         this.context.includeOccurrences.push({
             id: includeOccurrenceId(sites),
             sourceUri: document.uri,
+            source: fileSource,
             sites,
             expandedSpan: { start, end: this.textOutput.length }
         });

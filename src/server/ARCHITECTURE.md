@@ -1555,15 +1555,36 @@ Referenzimplementierungen:
 
 ## Folding
 
-Folding arbeitet auf den Analyseergebnissen.
+Folding hat zwei voneinander getrennte Informationsquellen:
 
-Mögliche Informationsquellen sind
+- **Physische Quelltextstruktur:** Mehrzeilige Blockkommentare und die
+  syntaktische Schachtelung von `#ifdef`, `#ifndef`, `#else` und `#endif`
+  werden lexikalisch aus dem *geöffneten Dokument* ermittelt, unabhängig
+  von einer Übersetzungseinheit, der Makroauswertung oder einem ausgewählten
+  Include-Vorkommen. Das funktioniert bereits vor Abschluss einer Analyse.
+- **AST-Struktur:** Sprachkonstrukte wie Prozeduren werden aus dem AST
+  ergänzt, sofern ein gültiger Analysekontext vorliegt. Bei einer mehrfach
+  eingebundenen Datei muss dafür das konkrete Include-Vorkommen bekannt sein.
 
-- AST
-- Blockkommentare
+  Mehrzeilige `STRUCT [...]`-Typen (`TYPE`, `DCL` und verschachtelte
+  Strukturen) liefern ebenfalls AST-Faltungsbereiche. `StructTypeParser`
+  bewahrt dafür neben dem `STRUCT`-Schlüsselwort auch die Originalposition
+  der schließenden `]` als `SourceValue` auf; `StructTypeNode` erzeugt den
+  Faltungsbereich nur, wenn beide Grenzen zur angefragten `Source` gehören.
+  Ohne schließende Klammer oder bei inaktiver Expansion entsteht keine
+  AST-Faltungsregion. Ein Include-Guard bleibt unabhängig davon physisch
+  faltbar.
 
-Dadurch können strukturelle und kommentarbezogene Faltungsbereiche
-einheitlich behandelt werden.
+Die Bedingungsauswertung eines Include-Guards beeinflusst die Abdunklung,
+**nicht** die Faltbarkeit seiner Direktiven. Für die physischen Bereiche
+wird die bereits vorhandene `Lexer`-Infrastruktur verwendet; es gibt keinen
+zweiten Parserlauf. Beide Arten von Faltungsbereichen werden auf die
+Originalpositionen abgebildet und vor der LSP-Antwort dedupliziert.
+
+Eine Folding-Anfrage darf nicht allein wegen eines fehlenden
+`AnalysisResult` oder einer fehlenden CodeLens-Auswahl mit `[]`
+beantwortet werden. Der Folding-Refresh wird weiterhin benötigt, wenn
+nachträglich kontextabhängige AST-Bereiche hinzukommen.
 
 ---
 
@@ -1821,12 +1842,32 @@ nicht veröffentlicht; normale Compilerdiagnosen bleiben erhalten. Damit
 wird eine beim ersten Include aktive `#ifndef`-Region nicht wegen eines
 späteren, durch den Guard unterdrückten Includes fälschlich abgedunkelt.
 
-**Noch offen:** Sonstige Präprozessorindizes, Hover-/Navigationsantworten
-und allgemeine Compilerdiagnosen besitzen nicht durchgängig eine
-vorkommensbezogene Herkunft. Bei wiederholten Includes werden mehrdeutige
-präprozessorbezogene Hover-/Navigationsantworten deshalb weiterhin
-unterdrückt. Die neuen Inaktivitätsmarkierungen sind eine gezielte Ausnahme;
-weitere Diagnosen dürfen nicht ohne ausreichenden Herkunftsnachweis einem
+**Vorkommensbezogener Präprozessor-Hover und Folding (Paket 08):**
+`PreprocessorConditionalBlockLookup` filtert die bereits mit
+`includeOccurrenceId` versehenen Bedingungsblöcke nach dem explizit
+gewählten Include-Vorkommen. Dadurch zeigen `#ifdef`, `#ifndef`, `#else`
+und `#endif` im Hover die Auswertung des tatsächlich ausgewählten
+Präprozessorlaufs, statt eine Auswertung eines anderen Vorkommens zu
+übernehmen. Der bestehende DocumentationProvider bleibt unverändert.
+
+Folding verwendet die **physische URI des angefragten Dokuments**.
+Die syntaktischen `#ifdef`/`#ifndef`-Regionen und Blockkommentare werden
+für jedes Editor-Dokument unabhängig von der Include-Ausführung lexikalisch
+gesammelt; hierzu dient `PhysicalPreprocessorFoldingCollector`. Der
+bisherige `PreprocessorFoldingCollector`, der evaluierte Bedingungsblöcke
+verarbeitet, ist für diese kontextfreie Editorfunktion nicht erforderlich.
+`IncludeOccurrence.source` hält die originale `FileSource`-Instanz des
+ausgeführten Includes fest; damit kann `AstFoldingCollector` zusätzlich
+Faltungsregionen aus genau diesem Vorkommen ermitteln. Für den AST findet
+kein zweiter Parserlauf statt. Vor der LSP-Umsetzung werden Bereiche
+anderer physischer Quelldateien ausgeschlossen und doppelte Zeilenbereiche
+entfernt.
+
+**Weiterhin offen:** Andere Präprozessorindizes (insbesondere Makro- und
+Compiler-Options-Hover) und allgemeine Compilerdiagnosen besitzen nicht
+durchgängig eine vorkommensbezogene Herkunft. Diese Funktionen dürfen bei
+wiederholten Includes keine beliebige Auswertung präsentieren. Weitere
+Diagnosen dürfen nicht ohne ausreichenden Herkunftsnachweis einem
 beliebigen Include-Vorkommen zugeordnet werden.
 
 ### Identität einzelner Include-Vorkommen (Infrastruktur ab Dev_0_3, Paket 05)

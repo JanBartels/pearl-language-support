@@ -9,10 +9,15 @@ export class PreprocessorConditionalBlockLookup {
 
     static lookup(
         blocks: PreprocessorConditionalBlockCollection,
-        position: SourceOffset
+        position: SourceOffset,
+        includeOccurrenceId?: string
     ): PreprocessorConditionalLookupResult | undefined {
 
         for (const block of blocks) {
+            // Physical positions in a header can occur in several executions.
+            // The selected include occurrence determines which condition was evaluated.
+            if (includeOccurrenceId !== undefined
+                && block.includeOccurrenceId !== includeOccurrenceId) continue;
 
             if (containsSourceOffset(block.ifLocation, position)) {
                 return {

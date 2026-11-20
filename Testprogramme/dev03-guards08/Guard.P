@@ -1,0 +1,11 @@
+MODULE Dev03Guard;
+PROBLEM;
+
+#include "HGuard.h"
+#include "HGuard.h"
+#include "HGuard.h"
+#include "HGuard.h"
+
+DCL TestValue GuardedType;
+
+MODEND;

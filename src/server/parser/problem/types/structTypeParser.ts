@@ -7,6 +7,7 @@ import { StructTypeNode } from "../../../ast/problem/types/structTypeNode";
 import { StructComponentNode } from "../../../ast/problem/types/structComponentNode";
 
 import { StructComponentParser } from "./structComponentParser";
+import { SourceValue } from "../../../core/sourceValue";
 
 export class StructTypeParser extends ParserBase {
 
@@ -38,11 +39,12 @@ export class StructTypeParser extends ParserBase {
         const components:
             StructComponentNode[] = [];
 
-        if (this.acceptRightBracket()) {
-
+        let closingBracket = this.acceptClosingBracket();
+        if (closingBracket) {
             return new StructTypeNode(
                 this.tokenValue(keyword),
-                components
+                components,
+                closingBracket
             );
         }
 
@@ -63,7 +65,8 @@ export class StructTypeParser extends ParserBase {
                 ]);
             }
 
-            if (this.acceptRightBracket()) {
+            closingBracket = this.acceptClosingBracket();
+            if (closingBracket) {
                 break;
             }
 
@@ -81,7 +84,8 @@ export class StructTypeParser extends ParserBase {
                 "]"
             ]);
 
-            if (this.acceptRightBracket()) {
+            closingBracket = this.acceptClosingBracket();
+            if (closingBracket) {
                 break;
             }
 
@@ -94,7 +98,16 @@ export class StructTypeParser extends ParserBase {
 
         return new StructTypeNode(
             this.tokenValue(keyword),
-            components
+            components,
+            closingBracket
         );
+    }
+
+    /** Like acceptRightBracket(), but preserves the token's physical location. */
+    private acceptClosingBracket(): SourceValue<string> | undefined {
+        this.skipTrivia();
+        const token = this.acceptOperator(']');
+        this.skipTrivia();
+        return token ? this.tokenValue(token) : undefined;
     }
 }
