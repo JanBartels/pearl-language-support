@@ -1,0 +1,9 @@
+P=MPC603;
+SC=2000;
+MODULE NavTestA;
+PROBLEM;
+#define InclDir "../Library"
+#define NAV_TYPE "FIXED"
+#include "InclDir/H0/lib1.inc"
+DCL FromA NavType;
+MODEND;

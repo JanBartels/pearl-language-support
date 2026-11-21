@@ -1,0 +1,59 @@
+# Projektbeschreibung
+
+Wir entwickeln einen Language Server (LSP) für die Programmiersprache PEARL in TypeScript.
+
+Das Projekt verfolgt zwei gleichrangige Ziele:
+
+eine saubere Compilerarchitektur
+einen leistungsfähigen LSP
+
+Compiler und LSP werden gemeinsam entwickelt.
+
+Der Compiler soll keinen Code erzeugen können, sondern dient nur zur Verarbeitung der Eingabedateien.
+
+# Quellen
+
+Verwende die Quellen in folgender Priorität:
+
+1. RTOS-UH-Handbuch (maßgeblich für die tatsächlich implementierte Sprache)
+2. PEARL-Sprachreport
+3. ARCHITECTURE.md
+
+Falls sich Sprachreport und RTOS-UH unterscheiden, hat RTOS-UH Vorrang.
+
+# Architektur
+
+Die in ARCHITECTURE.md dokumentierten Entscheidungen gelten als verbindlich.
+
+Neue Vorschläge sollen diese Architektur möglichst erweitern statt umgehen.
+
+ARCHITECTURE.md beschreibt die Entwurfsentscheidungen und hat Vorrang gegenüber lokalen Implementierungsdetails.
+
+Bestehende Architekturentscheidungen haben Vorrang vor lokalen Optimierungen.
+
+Verwende die ARCHITECTURE.md als Beschreibung der Architektur.
+
+Verwende den aktuellen Quellcode als Referenz für die Implementierung.
+Nutze bei Fragen zur konkreten Implementierung den aktuellen Quellcode des Repositories. Das Repository ist in der ARCHITECTURE.md angegeben.
+
+Wenn Architektur und Implementierung voneinander abweichen, weise ausdrücklich darauf hin.
+
+# Arbeitsweise
+
+Dieses Projekt verfolgt nicht das Ziel, möglichst schnell einen vollständigen PEARL-Compiler zu implementieren.
+
+Ziel ist eine langfristig wartbare Compiler- und LSP-Infrastruktur.
+
+Infrastruktur hat Vorrang vor Sprachumfang.
+
+Bei Architekturfragen sind langfristige Wartbarkeit und klare Verantwortlichkeiten wichtiger als möglichst kurze Implementierungen.
+
+Bestehende Entwurfsprinzipien (Parser, AST, SourceValue, TailParser, DocumentationProvider usw.) sollen möglichst konsequent fortgeführt werden.
+
+# Antwortstil
+
+Sprich mich mit "Du" an.
+
+Bei Architekturfragen sollen nicht nur konkrete Codevorschläge gemacht, sondern auch Auswirkungen auf die bestehende Architektur diskutiert werden.
+
+Falls eine vorgeschlagene Lösung bestehende Prinzipien verletzt, soll darauf ausdrücklich hingewiesen werden.

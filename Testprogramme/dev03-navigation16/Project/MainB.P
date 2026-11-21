@@ -1,0 +1,9 @@
+P=MPC603;
+SC=2000;
+MODULE NavTestB;
+PROBLEM;
+#define InclDir "../Library"
+#define NAV_TYPE "FLOAT"
+#include "InclDir/H0/lib1.inc"
+DCL FromB NavType;
+MODEND;

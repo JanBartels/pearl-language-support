@@ -70,6 +70,8 @@ import { createFoldingRangesForDocument } from './lsp/createFoldingRangesForDocu
 import { FoldingRangeRefreshController } from './lsp/foldingRangeRefreshController';
 import { SourceOffset, mapToOriginalLocation, containsSourceOffset } from './core/sourceOffset';
 import { createSignatureHelp } from './lsp/createSignatureHelp';
+import { definitionNavigationContext, matchesDefinitionTarget } from './lsp/definitionNavigationContext';
+import type { DefinitionNavigationContextRequest } from './lsp/definitionNavigationContext';
 
 const connection = createConnection(ProposedFeatures.all);
 
@@ -200,6 +202,24 @@ function refreshIncludeCodeLenses(): void {
   });
 }
 
+/** Apply the already validated context through the same path as CodeLens. */
+function activateIncludeContext(uri: string, unitUri: string, occurrenceId?: string): boolean {
+  const document = documentRegistry.get(uri);
+  if (!document || !documentRegistry.selectIncludeContextOption(
+    uri, document.version, unitUri, occurrenceId
+  )) return false;
+
+  diagnosticPublicationManager.selectContext(uri, unitUri, occurrenceId);
+  refreshIncludeCodeLenses();
+  foldingRangeRefresh.schedule();
+  if (clientSupportsSemanticTokenRefresh) {
+    void connection.languages.semanticTokens.refresh().catch((error: unknown) => {
+      logger.warn(`Semantic-token refresh failed: ${String(error)}`);
+    });
+  }
+  return true;
+}
+
 /** A complete include path is required for nested duplicates with equal inner sites. */
 function includeOptionLabel(option: { unitUri: string; occurrence?: {
   sites: readonly { includingUri: string; directiveOffset: number }[]
@@ -259,26 +279,13 @@ connection.onExecuteCommand(async params => {
   );
   if (!answer) return;
   const selected = choices.find(choice => choice.title === answer.title)?.option;
-  if (!selected || !documentRegistry.selectIncludeContextOption(
-    uri, document.version, selected.unitUri, selected.occurrence?.id
+  if (!selected || !activateIncludeContext(
+    uri, selected.unitUri, selected.occurrence?.id
   )) {
     logger.warn(`Include context selection is no longer valid for ${uri}`);
     return;
   }
-
-  // The publisher follows the same unit and include execution as semantic
-  // requests. Only diagnostics with proven lexical provenance are scoped;
-  // diagnostics without that provenance remain explicitly unclassified.
-  diagnosticPublicationManager.selectContext(uri, selected.unitUri, selected.occurrence?.id);
   logger.debug(`Include context ${uri} -> ${selected.unitUri} / ${selected.occurrence?.id ?? 'legacy'}`);
-  refreshIncludeCodeLenses();
-  // The selected context changes folding ranges without a document edit.
-  foldingRangeRefresh.schedule();
-  if (clientSupportsSemanticTokenRefresh) {
-    void connection.languages.semanticTokens.refresh().catch((error: unknown) => {
-      logger.warn(`Semantic-token refresh failed: ${String(error)}`);
-    });
-  }
 });
 
 // ------------------------------
@@ -478,6 +485,50 @@ connection.onDefinition(params => {
 
 // ------------------------------
 // END TEMP-NAV-DEBUG
+
+/**
+ * The VS Code client asks for provenance after a normal definition request.
+ * This request is read-only: Peek and other definition queries MUST NOT
+ * change the stored context of a physical include document.
+ */
+connection.onRequest('pearl/resolveDefinitionContext', (request: DefinitionNavigationContextRequest) => {
+  const source = documentRegistry.get(request.textDocument.uri);
+  if (!source) return null;
+  const result = documentRegistry.getAnalysisResultForSource(source.uri, source.version);
+  const semantic = result?.rootAnalysis.semanticContext;
+  if (!result || !semantic) return null;
+
+  const position = documentRegistry.getSourceLookupPosition(
+    source.uri, source.version, source.offsetAt(request.position)
+  );
+  const fallback = identifierEndFallbackPosition(source, request.position);
+  const positions: SourceOffset[] = [position];
+  if (fallback) positions.push(documentRegistry.getSourceLookupPosition(
+    source.uri, source.version, source.offsetAt(fallback)
+  ));
+  for (const candidate of positions) {
+    const lookup = result.rootAnalysis.ast.lookupSourceValue(candidate);
+    if (!lookup) continue;
+    const relation = lookupLocalSpecificationRelation(
+      semantic.localSpecificationRelations, lookup.element
+    );
+    const definition = relation?.definition
+      ?? lookupSymbolDefinition(semantic.bindings, lookup.element);
+    if (!definition?.location || !matchesDefinitionTarget(definition, request, documentRegistry)) continue;
+    return definitionNavigationContext(result, definition, request.targetUri) ?? null;
+  }
+  return null;
+});
+
+/** Only a real editor navigation may call this operation. */
+connection.onRequest('pearl/activateNavigationContext', (selection: {
+  uri: string; unitUri: string; occurrenceId: string
+}) => {
+  if (!selection || typeof selection.uri !== 'string'
+      || typeof selection.unitUri !== 'string'
+      || typeof selection.occurrenceId !== 'string') return false;
+  return activateIncludeContext(selection.uri, selection.unitUri, selection.occurrenceId);
+});
 
 // Goto Declaration (local SPC -> PROC/TASK relation)
 // ------------------------------

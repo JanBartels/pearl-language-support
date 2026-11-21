@@ -1977,6 +1977,70 @@ Referenzimplementierungen:
 - `/src/server/server.ts`
 - `/src/server/utility/tests/includeContextSelection.test.ts`
 
+### Navigationsbezogene Include-Kontextübernahme (Dev_0_3, Paket 16)
+
+Die bestehende CodeLens-Auswahl ist ein **expliziter** Nutzerzustand pro
+physischer Includedatei. Eine reine `textDocument/definition`-Abfrage darf
+diesen Zustand nicht verändern, weil VS Code denselben Request auch für
+Peek Definition verwendet.
+
+Der Compiler ermittelt die Definition einschließlich ihrer
+`SourceValue.lexicalLocation`. Der Server kann daraus über
+`IncludeOccurrence` die vollständige Einbindungskette und ihre stabile ID
+bestimmen. Die read-only Anfrage `pearl/resolveDefinitionContext` liefert
+nur dann ein Ergebnis, wenn der tatsächliche Definitionsort und die
+konkrete Einbindung eindeutig übereinstimmen. Der Client merkt sich dieses
+Ergebnis kurzzeitig und aktiviert es über `pearl/activateNavigationContext`
+erst nach einem zum Definitionsziel passenden Wechsel in den aktiven Editor.
+Die Aktivierung verwendet dieselbe Registry- und Refresh-Funktion wie die
+manuelle CodeLens-Auswahl; der Compiler bleibt davon unabhängig.
+
+Der Herkunftsnachweis folgt **der tatsächlichen Include-Kette**, unabhängig
+von Dateiendungen oder Workspace-Grenzen. Beim Navigieren in eine bekannte
+externe Includedatei kann der Client gezielt deren Dokument-Sprachmodus auf
+PEARL setzen. Er ordnet aber **nicht** pauschal alle Dateien mit einer
+bestimmten Endung zu. Die Behandlung von direktem Öffnen unbekannter
+Dateien sowie die Überwachung externer Dateien ohne geöffneten Editor
+sind davon getrennte Aufgaben und mit Paket 16 nicht gelöst.
+
+### Native Peek Definition: bewusst akzeptierte Einschränkung (Dev_0_3 / 0.3.1)
+
+Die native Peek-Ansicht von VS Code verwendet für die Definition dieselbe
+physische Datei und dieselbe URI wie ein regulärer Editor. Eine
+`textDocument/definition`-Anfrage unterscheidet nicht zuverlässig zwischen
+*Go to Definition* und *Peek Definition*. Auch anschließende semantische
+LSP-Anfragen (beispielsweise Hover und Referenzen) übermitteln keine
+Identität der jeweiligen Peek-Ansicht oder die Herkunft des aufrufenden
+Include-Vorkommens.
+
+Unsere Include-Kontextauswahl ist dagegen bewusst an die physische Datei
+und das konkrete `IncludeOccurrence` gebunden. Sie kann deshalb für ein
+Peek-Fenster keinen eigenständigen, gleichzeitig zu einem normalen Editor
+abweichenden Kontext garantieren. Daraus folgt die verbindliche Regel:
+**Eine Definitionsabfrage allein darf den gespeicherten Include-Kontext
+nicht verändern.** Erst die tatsächliche Navigation in einen regulären
+Ziel-Editor darf den ermittelten Herkunftskontext automatisch aktivieren.
+
+Bei einer direkt geöffneten, mehrfach eingebundenen Datei ohne gewählten
+Kontext bleiben semantische Funktionen in Peek gegebenenfalls eingeschränkt.
+Das ist kein Fehler in der Compileranalyse und wird nicht durch die Wahl
+eines beliebigen Parent-Moduls kaschiert. Der vorgesehene Weg ist, die
+Includedatei regulär zu öffnen und über die CodeLens den passenden
+Einbindungskontext auszuwählen. Anschließend können auch die semantischen
+Informationen der Peek-Ansicht diesen Kontext verwenden. Ein direkter
+*Go to Definition*-Sprung übernimmt den bekannten Herkunftskontext wie
+oben beschrieben.
+
+Für Dev_0_3 / 0.3.1 wird **bewusst keine Peek-Sonderlösung** eingeführt:
+kein temporäres Umschalten des global gespeicherten Kontexts bei einer
+Definitionsanfrage, keine künstlichen virtuellen Kopien physischer Dateien
+und keine eigene Peek-Oberfläche. Diese Ansätze würden zusätzliche Zustände,
+Source-Mapping und Aktualisierungslogik erfordern beziehungsweise andere
+Editoransichten beeinflussen. Der Aufwand und das Stabilitätsrisiko stehen
+zurzeit in keinem angemessenen Verhältnis zum Nutzen. Die Entscheidung kann
+neu bewertet werden, falls VS Code/LSP künftig eine belastbare,
+ansichtsspezifische Kontextübergabe ermöglicht.
+
 ---
 
 # Folding
