@@ -1,0 +1,6 @@
+P=MPC603;
+SC=$00002000,CODE=$FA0000,VAR=$3000;
+MODULE MemoryWidth25;
+/*+R=$FFFFFFFF reserve working memory */
+PROBLEM;
+MODEND;

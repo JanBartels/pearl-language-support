@@ -10,6 +10,8 @@ export interface IncludeWatchSnapshot {
   readonly sessionId?: string;
   readonly revision: number;
   readonly uris: readonly string[];
+  /** Successfully executed includes; unlike uris, excludes missing targets. */
+  readonly includedUris?: readonly string[];
 }
 
 /** LSP FileChangeType: Created=1, Changed=2, Deleted=3. */

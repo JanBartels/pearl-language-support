@@ -30,6 +30,12 @@ export class PreprocessorConditionalBlock {
         readonly ifLocation: Location,
 
         /**
+         * Physische Position des Makronamens direkt nach #ifdef/#ifndef.
+         * Eigenständiger Hover-Bereich: kein Hover auf dem Leerraum dazwischen.
+         */
+        readonly macroLocation: Location,
+
+        /**
          * Position von #else.
          */
         readonly elseLocation: Location | undefined,

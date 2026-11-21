@@ -1,0 +1,9 @@
+P=MPC603; SC=20ABCDE0;
+MODULE HexLengths;
+SYSTEM;
+    EventOne: EV(1);
+    EventEight: EV(FFFFFFFF);
+    PortShort: /A1/Dialog(AI=$3C) <->;
+    PortLong: /A1/Dialog(MB=$80,AI=$3C00) <->;
+PROBLEM;
+MODEND;

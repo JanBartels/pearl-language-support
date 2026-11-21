@@ -129,6 +129,7 @@ export enum SemanticDiagnosticCode {
     InvalidProcessorOption = 'semantic.invalid-processor-option',
     InvalidFpuRegisterCount = 'semantic.invalid-fpu-register-count',
     InvalidCompilerSettingValue = 'semantic.invalid-compiler-setting-value',
+    InvalidRCompilerOptionLength = 'semantic.invalid-r-compiler-option-length',
     DuplicateCompilerSetting = 'semantic.duplicate-compiler-setting',
     PreferScModuleSize = 'semantic.prefer-sc-module-size',
     MissingProcessorSetting = 'semantic.missing-processor-setting',

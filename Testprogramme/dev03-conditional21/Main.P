@@ -1,0 +1,7 @@
+MODULE ConditionalHover21;
+PROBLEM;
+#define MODE
+#include "HConditional.h"
+#undef MODE
+#include "HConditional.h"
+MODEND;

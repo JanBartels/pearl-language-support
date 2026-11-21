@@ -32,6 +32,7 @@ export class InterruptSystemObjectParser extends TailParser {
         } else {
             this.validateHexDigitSequenceLength(
                 mask,
+                1,
                 8,
                 "event mask"
             );

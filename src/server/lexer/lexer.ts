@@ -80,6 +80,8 @@ export class Lexer {
   // Its double-quoted text is opaque until the preprocessor expands it.
   private inDefineDirective = false;
   private inDefineReplacement = false;
+  // File-name fragments following #include are not PEARL numeric literals.
+  private inIncludeDirective = false;
 
   constructor(
     source: Source,
@@ -177,6 +179,7 @@ export class Lexer {
     if (ch === 10 /* \n */ || ch === 13 /* \r */) {
       this.inDefineDirective = false;
       this.inDefineReplacement = false;
+      this.inIncludeDirective = false;
       return this.lexNewline();
     }
 
@@ -217,6 +220,14 @@ export class Lexer {
     // Identifier
     if (isIdentifierStart(ch)) {
       return this.lexIdentifier();
+    }
+
+    // Digits in an #include path belong to a file-name fragment. The
+    // preprocessor will concatenate these fragments and expand identifiers.
+    // Never validate such fragments as PEARL numeric literals.
+    if (this.inIncludeDirective &&
+        (isDigit(ch) || (ch === 46 /* . */ && isDigit(this.stream.peek(1))))) {
+      return this.lexIncludeNumericPathFragment();
     }
 
     // Number
@@ -322,14 +333,29 @@ export class Lexer {
   private lexIdentifier(): Token {
 
     const start = this.stream.mark();
+    let hexDigitIdentifier = isHexDigit(this.stream.peek());
 
     this.stream.next();
 
     while (isIdentifierPart(this.stream.peek())) {
+      if (!isHexDigit(this.stream.peek())) {
+        hexDigitIdentifier = false;
+      }
       this.stream.next();
     }
 
-    return this.createTokenFromSpan(TokenKind.Identifier, start);
+    // A-F-leading hex addresses are indistinguishable from identifiers
+    // without the surrounding grammar. Keep Identifier as the token kind;
+    // preserve only the lexically determined alternative for the parser.
+    return this.createTokenFromSpan(TokenKind.Identifier, start, hexDigitIdentifier);
+  }
+
+  /** Opaque digit-led path fragment, preserving adjacent macro identifiers. */
+  private lexIncludeNumericPathFragment(): Token {
+    const start = this.stream.mark();
+    if (this.stream.peek() === 46 /* . */) this.stream.next();
+    while (isIdentifierPart(this.stream.peek())) this.stream.next();
+    return this.createTokenFromSpan(TokenKind.PreprocessorText, start);
   }
 
   private lexNumber(): Token {
@@ -695,6 +721,8 @@ export class Lexer {
     const directive = this.stream.getText({ start, end: this.stream.offset });
     if (directive === '#define') {
       this.inDefineDirective = true;
+    } else if (directive === '#include') {
+      this.inIncludeDirective = true;
     }
     return this.createTokenFromSpan(
       TokenKind.PreprocessorDirective,
@@ -776,8 +804,12 @@ export class Lexer {
     return createToken(kind, this.location(this.stream.offset, this.stream.offset));
   }
 
-  private createTokenFromSpan(kind: TokenKind, start: number): Token {
-    return createToken(kind, this.location(start));
+  private createTokenFromSpan(
+    kind: TokenKind,
+    start: number,
+    hexDigitIdentifier = false
+  ): Token {
+    return createToken(kind, this.location(start), hexDigitIdentifier);
   }
 
   private createCommentTokenFromSpan(

@@ -104,19 +104,24 @@ const diagnosticPublicationManager = new DiagnosticPublicationManager(
  * The revision also prevents a delayed initial snapshot from undoing an update. */
 const includeWatchSession = randomUUID();
 let includeWatchRevision = 0;
-let lastIncludeWatchUris = '[]';
-function includeWatchSnapshot(): { sessionId: string; revision: number; uris: string[] } {
+let lastIncludeSnapshotContent = '';
+function includeWatchSnapshot(): {
+  sessionId: string; revision: number; uris: string[]; includedUris: string[]
+} {
   return {
     sessionId: includeWatchSession,
     revision: includeWatchRevision,
-    uris: documentRegistry.getWatchedIncludeUris()
+    uris: documentRegistry.getWatchedIncludeUris(),
+    includedUris: documentRegistry.getKnownIncludedSourceUris()
   };
 }
 function publishIncludeWatchSnapshot(): void {
   const snapshot = includeWatchSnapshot();
-  const next = JSON.stringify(snapshot.uris);
-  if (next === lastIncludeWatchUris) return;
-  lastIncludeWatchUris = next;
+  // The watch targets can stay identical when a missing include is restored.
+  // Its semantic source membership nevertheless changes and must be published.
+  const next = JSON.stringify([snapshot.uris, snapshot.includedUris]);
+  if (next === lastIncludeSnapshotContent) return;
+  lastIncludeSnapshotContent = next;
   includeWatchRevision++;
   logger.debug(`[IncludeWatch] targets revision=${includeWatchRevision} count=${snapshot.uris.length}`);
   void connection.sendNotification('pearl/includeWatchTargets', includeWatchSnapshot());

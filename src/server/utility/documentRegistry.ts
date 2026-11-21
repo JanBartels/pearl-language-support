@@ -240,6 +240,21 @@ export class DocumentRegistry {
       }
   }
 
+  /**
+   * Source files successfully included by an accepted translation-unit analysis.
+   * A missing attempted include is a watch dependency, never a PEARL document.
+   * Roots themselves are excluded; the LanguageClient already knows .P files.
+   */
+  getKnownIncludedSourceUris(): string[] {
+      const included = new Set<string>();
+      for (const [unitUri, sources] of this.sourcesByUnit) {
+          for (const sourceUri of sources) {
+              if (sourceUri !== unitUri) included.add(sourceUri);
+          }
+      }
+      return [...included].sort();
+  }
+
   /** Complete subscription set, including missing include targets. */
   getWatchedIncludeUris(): string[] {
       return [...this.unitsByWatchedInclude.keys()].sort();

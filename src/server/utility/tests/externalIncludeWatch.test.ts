@@ -153,3 +153,53 @@ test('shared include stays watched until the last parent translation unit closes
     assert.deepEqual(f.registry.getWatchedIncludeUris(), []);
   } finally { f.cleanup(); }
 });
+
+test('known included sources contain executed includes, not missing watch targets', () => {
+  const f = fixture();
+  try {
+    const existing = path.join(f.lib, 'existing.def');
+    const missing = path.join(f.lib, 'missing.xyz');
+    fs.writeFileSync(existing, 'TYPE ExtScalar FIXED;\n');
+    f.analyze(`#include ${existing}\n#include ${missing}\n`);
+    assert.deepEqual(f.registry.getKnownIncludedSourceUris(), [uriFromFilePath(existing)]);
+    assert.deepEqual(new Set(f.registry.getWatchedIncludeUris()),
+      new Set([uriFromFilePath(existing), uriFromFilePath(missing)]));
+  } finally { f.cleanup(); }
+});
+
+test('known included source list changes when preprocessor takes another include branch', () => {
+  const f = fixture();
+  try {
+    const first = path.join(f.lib, 'A.inc');
+    const second = path.join(f.lib, 'B.def');
+    fs.writeFileSync(first, 'TYPE A FIXED;\n');
+    fs.writeFileSync(second, 'TYPE B FLOAT;\n');
+    const input = `#ifdef USE_A\n#include ${first}\n#else\n#include ${second}\n#endif\n`;
+    f.analyze(input, { USE_A: null });
+    assert.deepEqual(f.registry.getKnownIncludedSourceUris(), [uriFromFilePath(first)]);
+    f.analyze(input);
+    assert.deepEqual(f.registry.getKnownIncludedSourceUris(), [uriFromFilePath(second)]);
+  } finally { f.cleanup(); }
+});
+
+test('known included source remains classified while another translation unit uses it', () => {
+  const f = fixture();
+  try {
+    const shared = path.join(f.lib, 'shared.inc');
+    fs.writeFileSync(shared, 'TYPE Common FIXED;\n');
+    f.analyze(`#include ${shared}\n`);
+    const second = uriFromFilePath(path.join(f.project, 'Second.P'));
+    const secondSource = new FileSource(second, 'MODULE; PROBLEM; MODEND;');
+    const secondAnalysis = new Analysis(secondSource, [], new TranslationUnitNode(),
+      new ProblemCollection(), [], new PreprocessorConditionalBlockCollection());
+    f.registry.beginAnalysis(second);
+    f.registry.setAnalysisResult(second, 0, AnalysisResult.create(
+      secondAnalysis, [secondAnalysis], [uriFromFilePath(shared)], [], [uriFromFilePath(shared)]
+    ));
+    assert.deepEqual(f.registry.getKnownIncludedSourceUris(), [uriFromFilePath(shared)]);
+    f.registry.closeTranslationUnit(f.main);
+    assert.deepEqual(f.registry.getKnownIncludedSourceUris(), [uriFromFilePath(shared)]);
+    f.registry.closeTranslationUnit(second);
+    assert.deepEqual(f.registry.getKnownIncludedSourceUris(), []);
+  } finally { f.cleanup(); }
+});

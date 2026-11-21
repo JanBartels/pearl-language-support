@@ -145,7 +145,7 @@ export class AlphicDationSystemObjectParser extends TailParser {
         }
 
         if (this.acceptKeyword('AI')) {
-            ai = this.parseHexParameter('AI', 4);
+            ai = this.parseHexParameter('AI', [2, 4]);
         }
 
         if (this.isIdentifier()) {
@@ -203,7 +203,7 @@ export class AlphicDationSystemObjectParser extends TailParser {
 
     private parseHexParameter(
         name: string,
-        digits: number
+        digits: number | readonly number[]
     ): SourceValue<string> | undefined {
 
         if (!this.expectEquals()) {
@@ -211,8 +211,11 @@ export class AlphicDationSystemObjectParser extends TailParser {
             return undefined;
         }
 
+        const digitDescription = typeof digits === 'number'
+            ? `${digits}-digit`
+            : `${digits.join('- or ')}-digit`;
         const token = this.expectHexLiteral(
-            `Expected ${digits}-digit hexadecimal number as ${name}.`
+            `Expected ${digitDescription} hexadecimal number as ${name}.`
         );
         if (!token) {
             this.synchronizeParameter();

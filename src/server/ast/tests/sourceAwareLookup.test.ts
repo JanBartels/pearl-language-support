@@ -81,7 +81,7 @@ test('conditional hover matches each directive against its own source location',
     const main = new FileSource('file:///main.p', '#ifdef X\n#else\n#endif');
     const include = new FileSource('file:///included.inc', '#ifdef X\n#else\n#endif');
     const block = new PreprocessorConditionalBlock(true, 'X', undefined,
-        at(include, 0, 6), at(include, 9, 5), at(include, 15, 6), true);
+        at(include, 0, 6), at(include, 7, 1), at(include, 9, 5), at(include, 15, 6), true);
     const blocks = new PreprocessorConditionalBlockCollection();
     blocks.add(block);
 

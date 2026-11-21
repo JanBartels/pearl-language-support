@@ -22,6 +22,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { PendingNavigationIntent, type NavigationIntent } from './navigationIntent';
 import { IncludeDependencyWatcher, type IncludeWatchSnapshot } from './includeDependencyWatcher';
+import { KnownIncludedSources } from './knownIncludedSources';
 import {
   LanguageClient,
   TransportKind,
@@ -31,6 +32,42 @@ import {
 
 let client: LanguageClient | undefined;
 const pendingDefinition = new PendingNavigationIntent();
+const knownIncludedSources = new KnownIncludedSources();
+const languageUpdates = new Set<string>();
+
+/** Shared by direct include opening and proven Go to Definition navigation. */
+async function ensurePearlDocumentLanguage(document: vscode.TextDocument): Promise<void> {
+  const uri = document.uri.toString();
+  if (document.uri.scheme !== 'file' || document.languageId === 'pearl'
+      || languageUpdates.has(uri)) return;
+  languageUpdates.add(uri);
+  try {
+    // This sends didClose/didOpen through the LanguageClient. The server will
+    // re-use the owning translation unit, not parse the include as a root.
+    await vscode.languages.setTextDocumentLanguage(document, 'pearl');
+  } catch (error) {
+    console.warn('PEARL include language could not be assigned:', error);
+  } finally {
+    languageUpdates.delete(uri);
+  }
+}
+
+/** VS Code does not infer PEARL for an included .def/.inc/.h file. */
+function assignKnownIncludeLanguage(document: vscode.TextDocument): void {
+  if (knownIncludedSources.includes(document.uri.toString())) {
+    void ensurePearlDocumentLanguage(document);
+  }
+}
+
+function acceptIncludeSnapshot(snapshot: IncludeWatchSnapshot, watchers: IncludeDependencyWatcher): void {
+  watchers.update(snapshot);
+  if (!knownIncludedSources.update(snapshot)) return;
+  // Also cover documents opened while the initial folder analysis was running
+  // or before the LanguageClient finished starting.
+  for (const document of vscode.workspace.textDocuments) {
+    void assignKnownIncludeLanguage(document);
+  }
+}
 
 interface DefinitionContextReply {
   readonly uri: string;
@@ -62,11 +99,10 @@ async function activateTarget(editor: vscode.TextEditor): Promise<void> {
     const accepted = await client.sendRequest<boolean>('pearl/activateNavigationContext', {
       uri: intent.uri, unitUri: intent.unitUri, occurrenceId: intent.occurrenceId
     });
-    if (accepted && editor.document.languageId !== 'pearl') {
-      // Includes can have any extension and lie outside the workspace. Only a
-      // proven #include navigation may change their language, never a blanket
-      // *.h association. setTextDocumentLanguage produces new document events.
-      await vscode.languages.setTextDocumentLanguage(editor.document, 'pearl');
+    if (accepted) {
+      // Navigation may precede the next include snapshot; share the language
+      // transition guard with the direct-open path.
+      await ensurePearlDocumentLanguage(editor.document);
     }
   } catch (error) {
     console.warn('PEARL navigation context could not be activated:', error);
@@ -147,8 +183,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     clientOptions
   );
 
-  // The server reports executed include targets, including paths whose files
-  // have temporarily disappeared. Watch only their parent directories, not
+  // The server reports attempted include paths, including files temporarily
+  // missing on disk. Watch only their parent directories, not
   // the user's whole library tree. The glob '*' is nonrecursive.
   const dependencyWatchers = new IncludeDependencyWatcher((directory, onChange) => {
     const watcher = vscode.workspace.createFileSystemWatcher(
@@ -184,11 +220,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
   context.subscriptions.push({ dispose: () => dependencyWatchers.dispose() });
 
+  // A directly opened known include may have no registered PEARL file suffix.
+  // The Open-Folder snapshot also reconciles documents opened before startup.
+  context.subscriptions.push(vscode.workspace.onDidOpenTextDocument(document => {
+    void assignKnownIncludeLanguage(document);
+  }));
+
   // Register before starting the client. The snapshot request below covers
   // any initial compilation that completed before this handler was ready.
   context.subscriptions.push(client.onNotification(
     'pearl/includeWatchTargets', (snapshot: IncludeWatchSnapshot) => {
-      dependencyWatchers.update(snapshot);
+      acceptIncludeSnapshot(snapshot, dependencyWatchers);
     }
   ));
 
@@ -197,7 +239,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     const snapshot = await client.sendRequest<IncludeWatchSnapshot>(
       'pearl/getIncludeWatchTargets'
     );
-    dependencyWatchers.update(snapshot);
+    acceptIncludeSnapshot(snapshot, dependencyWatchers);
   } catch (error) {
     console.warn('PEARL include watchers could not be initialized:', error);
   }

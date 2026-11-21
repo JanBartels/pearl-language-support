@@ -468,7 +468,7 @@ export abstract class ParserBase {
 
     protected validateHexLiteralLength(
         literal: SourceValue<string> | undefined,
-        digits: number,
+        digits: number | readonly number[],
         name: string
     ): boolean {
 
@@ -476,10 +476,17 @@ export abstract class ParserBase {
             return false;
         }
 
-        if (literal.value.length !== digits + 1) {
+        // '$' ist Teil des Quelltexts, aber keine Hexziffer.
+        const count = literal.value.length - 1;
+        const allowed = typeof digits === 'number' ? [digits] : digits;
+
+        if (!allowed.includes(count)) {
+            const requirement = allowed.length === 1
+                ? `exactly ${allowed[0]}`
+                : allowed.join(' or ');
             this.problems.error(
                 literal.location!,
-                `${name} requires exactly ${digits} hexadecimal digits.`
+                `${name} requires ${requirement} hexadecimal digits.`
             );
             return false;
         }
@@ -491,7 +498,12 @@ export abstract class ParserBase {
         token: Token = this.current()
     ): boolean {
 
-        return this.tokenKind(token) === TokenKind.HexDigitSequence;
+        // FF0F0006 and BEEF are identifiers lexically, but the lexer also
+        // marks their all-hex spelling. Only grammar positions using this
+        // helper treat them as hexadecimal values.
+        return this.tokenKind(token) === TokenKind.HexDigitSequence
+            || (this.tokenKind(token) === TokenKind.Identifier
+                && token.hexDigitIdentifier === true);
     }
 
     /**
@@ -499,6 +511,7 @@ export abstract class ParserBase {
      *
      * Dieses Token ist kein reguläres PEARL-Literal, sondern wird ausschließlich
      * für die historischen Hexzahlen in BU(...) und EV(...) verwendet.
+     * Auch Identifier mit lexikalischer Hex-Alternative werden hier akzeptiert.
      */
     protected acceptHexDigitSequence(): Token | undefined {
 
@@ -518,6 +531,7 @@ export abstract class ParserBase {
      *
      * Dieses Token ist kein reguläres PEARL-Literal, sondern wird ausschließlich
      * für die historischen Hexzahlen in BU(...) und EV(...) verwendet.
+     * Auch Identifier mit lexikalischer Hex-Alternative werden hier akzeptiert.
      */
     protected expectHexDigitSequence(
         message?: string
@@ -540,7 +554,8 @@ export abstract class ParserBase {
 
     protected validateHexDigitSequenceLength(
         literal: SourceValue<string> | undefined,
-        digits: number,
+        minimumDigits: number,
+        maximumDigits: number,
         name: string
     ): boolean {
 
@@ -548,10 +563,11 @@ export abstract class ParserBase {
             return false;
         }
 
-        if (literal.value.length !== digits) {
+        const count = literal.value.length;
+        if (count < minimumDigits || count > maximumDigits) {
             this.problems.error(
                 literal.location!,
-                `${name} must consist of ${digits} hexadecimal digits.`
+                `${name} must consist of ${minimumDigits} to ${maximumDigits} hexadecimal digits.`
             );
             return false;
         }
@@ -833,7 +849,8 @@ export abstract class ParserBase {
      *
      * PEARL erlaubt an diesen Stellen Hexzahlen ohne '$'-Präfix.
      * Daher werden numerische Literale über acceptNumberLiteral()
-     * sowie HexDigitSequence (enthält A...F) akzeptiert.
+     * sowie HexDigitSequence und lexikalisch mehrdeutige Identifier mit
+     * ausschließlich A...F / 0...9 akzeptiert.
      */
     protected parseHexNumber(
         message?: string

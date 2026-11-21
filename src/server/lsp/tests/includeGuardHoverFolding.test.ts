@@ -11,6 +11,7 @@ import { Parser } from '../../parser/parser';
 import { Preprocessor } from '../../preproc/preprocessor';
 import { PreprocessorContext } from '../../preproc/preprocessorContext';
 import { PreprocessorConditionalBlockLookup } from '../../preproc/preprocessorConditionalBlockLookup';
+import { PreprocessorDirectiveKind } from '../../preproc/preprocessorConditionalLookupResult';
 import { PreprocessorConditionalBlockCollection } from '../../preproc/preprocessorConditionalBlockCollection';
 import { PreprocessorConditionalBlockStack } from '../../preproc/preprocessorConditionalBlockStack';
 import { MacroTable } from '../../preproc/macroTable';
@@ -111,4 +112,85 @@ test('conditional lookup does not borrow a different include occurrence', () => 
     const { blocks } = fixture();
     assert.equal(PreprocessorConditionalBlockLookup.lookup(blocks,
         { uri: headerUri, offset: 1 }, 'missing-occurrence'), undefined);
+});
+
+
+test('conditional hover on #ifndef operand uses the selected include execution', () => {
+    const { blocks, occurrences } = fixture();
+    const nameOffset = headerText.indexOf('_guard_');
+    assert.ok(nameOffset > 0);
+    const directiveOffset = headerText.indexOf('#ifndef') + 2;
+
+    for (const [index, occurrence] of occurrences.entries()) {
+        const directive = PreprocessorConditionalBlockLookup.lookup(
+            blocks, { uri: headerUri, offset: directiveOffset }, occurrence.id
+        );
+        assert.ok(directive);
+        const expected = index === 0;
+        assert.equal(directive.block.conditionSatisfied, expected);
+
+        for (let i = 0; i < '_guard_'.length; i++) {
+            const name = PreprocessorConditionalBlockLookup.lookup(
+                blocks, { uri: headerUri, offset: nameOffset + i }, occurrence.id
+            );
+            assert.ok(name, `missing #ifndef operand hover at character ${i}`);
+            assert.equal(name.block, directive.block);
+            assert.equal(name.directive, directive.directive);
+            assert.match(
+                PreprocessorConditionalBlockDocumentationProvider.getDocumentation(name),
+                expected ? /Bedingung erfüllt/ : /Bedingung nicht erfüllt/
+            );
+        }
+    }
+});
+
+test('conditional hover does not claim spaces or the #define operand', () => {
+    const { blocks, occurrences } = fixture();
+    const nameOffset = headerText.indexOf('_guard_');
+    const occurrenceId = occurrences[0]!.id;
+    const lookup = (offset: number, uri = headerUri) =>
+        PreprocessorConditionalBlockLookup.lookup(blocks, { uri, offset }, occurrenceId);
+
+    assert.equal(lookup(nameOffset - 1), undefined); // space after #ifndef
+    assert.equal(lookup(nameOffset + '_guard_'.length), undefined); // newline
+    assert.equal(lookup(headerText.lastIndexOf('_guard_')), undefined); // #define operand
+    assert.equal(lookup(nameOffset, rootUri), undefined);
+    assert.equal(lookup(nameOffset, headerUri)?.directive, PreprocessorDirectiveKind.Ifndef);
+    assert.equal(lookup(nameOffset, 'file:///tests/unrelated.inc'), undefined);
+    assert.equal(PreprocessorConditionalBlockLookup.lookup(
+        blocks, { uri: headerUri, offset: nameOffset }, 'not-an-occurrence'), undefined);
+});
+
+test('conditional hover on #ifdef operand distinguishes defined and undefined macros', () => {
+    const text = `#define ENABLED
+#ifdef ENABLED
+#endif
+#ifdef DISABLED
+#endif
+MODULE Hover; PROBLEM; MODEND;`;
+    const uri = 'file:///tests/Ifdef.P';
+    const source = new FileSource(uri, text);
+    const problems = new ProblemCollection();
+    const tokens = new Lexer(source, problems, quiet).tokenize();
+    const registry = { resolveInclude: () => null } as unknown as DocumentRegistry;
+    const context = new PreprocessorContext(registry, new MacroTable(),
+        new ConditionalStack(), new PreprocessorConditionalBlockStack());
+    const blocks = new PreprocessorConditionalBlockCollection();
+    Preprocessor.createExpanded(tokens, source, context, problems, [], blocks, quiet);
+    assert.equal(problems.size(), 0);
+
+    for (const [name, isDefined] of [['ENABLED', true], ['DISABLED', false]] as const) {
+        const nameOffset = text.indexOf(name, text.indexOf(`#ifdef ${name}`));
+        const directiveOffset = text.indexOf(`#ifdef ${name}`) + 2;
+        const macro = PreprocessorConditionalBlockLookup.lookup(blocks, { uri, offset: nameOffset });
+        const directive = PreprocessorConditionalBlockLookup.lookup(blocks, { uri, offset: directiveOffset });
+        assert.ok(macro);
+        assert.ok(directive);
+        assert.equal(macro.block, directive.block);
+        assert.equal(macro.block.conditionSatisfied, isDefined);
+        assert.match(PreprocessorConditionalBlockDocumentationProvider.getDocumentation(macro),
+            isDefined ? /Bedingung erfüllt/ : /Bedingung nicht erfüllt/);
+        assert.equal(PreprocessorConditionalBlockLookup.lookup(blocks,
+            { uri, offset: nameOffset + name.length }), undefined);
+    }
 });

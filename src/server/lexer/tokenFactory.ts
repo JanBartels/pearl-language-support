@@ -12,12 +12,14 @@ import { Location } from '../core/location';
 
 export function createToken(
   kind: TokenKind,
-  location: Location
+  location: Location,
+  hexDigitIdentifier = false
 ): Token {
 
   return Object.freeze({
     kind,
-    location
+    location,
+    ...(hexDigitIdentifier ? { hexDigitIdentifier: true } : {})
   });
 }
 

@@ -19,6 +19,12 @@
       "include": "#strings"
     },
     {
+      "include": "#moduleHexHeader"
+    },
+    {
+      "include": "#systemHexParameters"
+    },
+    {
       "include": "#numbers"
     },
     {
@@ -80,6 +86,16 @@
         {
           "name": "comment.line.exclamation.pearl",
           "match": "!.*$"
+        },
+        {
+          "name": "comment.block.pearl",
+          "begin": "(/\\*)([+-]R=?)(\\$?[0-9A-F]{1,8})(?=[ \\t])",
+          "beginCaptures": {
+            "3": {
+              "name": "constant.numeric.hex.pearl"
+            }
+          },
+          "end": "\\*/"
         },
         {
           "name": "comment.block.pearl",
@@ -369,6 +385,69 @@
         {
           "name": "constant.language.pearl",
           "match": "\\b(TRUE|FALSE|ON|OFF|NOW|DATE)\\b"
+        }
+      ]
+    },
+    "systemHexParameters": {
+      "patterns": [
+        {
+          "match": "\\b(EV|BU)([ \\t]*\\([ \\t]*)([0-9A-F]{1,8})(?=[ \\t]*[,\\)])",
+          "captures": {
+            "1": {
+              "name": "variable.other.pearl"
+            },
+            "3": {
+              "name": "constant.numeric.hex.pearl"
+            }
+          }
+        }
+      ]
+    },
+    "moduleHexHeader": {
+      "patterns": [
+        {
+          "name": "meta.module.header.hex.pearl",
+          "begin": "^([ \\t]*)(S|SC)([ \\t]*=[ \\t]*)(\\$?[0-9A-F]{1,8})(?=[ \\t]*[,;])",
+          "beginCaptures": {
+            "2": {
+              "name": "variable.other.pearl"
+            },
+            "4": {
+              "name": "constant.numeric.hex.pearl"
+            }
+          },
+          "end": ";",
+          "patterns": [
+            {
+              "match": "\\b(CODE|VAR)([ \\t]*=[ \\t]*)(\\$?[0-9A-F]{1,8})(?=[ \\t]*[,;])",
+              "captures": {
+                "1": {
+                  "name": "variable.other.pearl"
+                },
+                "3": {
+                  "name": "constant.numeric.hex.pearl"
+                }
+              }
+            },
+            {
+              "include": "#comments"
+            },
+            {
+              "include": "#strings"
+            },
+            {
+              "include": "#numbers"
+            },
+            {
+              "include": "#keywords"
+            },
+            {
+              "include": "#operators"
+            },
+            {
+              "include": "#identifiers"
+            }
+          ]
         }
       ]
     }

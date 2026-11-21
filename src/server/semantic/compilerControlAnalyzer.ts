@@ -60,6 +60,24 @@ export class CompilerControlAnalyzer {
                 continue;
             }
 
+            // The R option is a compiler control *comment*, not an AST node.
+            // RTOS-UH 5.4.8 permits 1..8 hex digits, with optional '=' and '$',
+            // for both +R and -R. Malformed control comments remain opaque;
+            // only a recognizable oversized value receives an LSP warning.
+            const reserve = /^R=?\$?([0-9A-Fa-f]+)(?=\s|$)/.exec(option.option);
+            if (reserve) {
+                if (reserve[1].length > 8) {
+                    diagnostics.push({
+                        code: SemanticDiagnosticCode.InvalidRCompilerOptionLength,
+                        severity: SemanticDiagnosticSeverity.Warning,
+                        location: comment.location,
+                        message: 'Compileroption R erlaubt maximal 8 Hexziffern (32 Bit). '
+                            + 'RTOS-UH kann eine ungueltige Steuerkommentar-Angabe ohne Warnung ignorieren.'
+                    });
+                }
+                continue;
+            }
+
             if (option.option.charAt(0) === 'G' && option.mode) {
                 this.analyzeGOption(root, comment, diagnostics, gProcedures);
                 continue;

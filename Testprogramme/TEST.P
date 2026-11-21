@@ -28,6 +28,7 @@ SYSTEM;
    A1;
    File: /ED/MyFile.txt.................................;
    MyEv: EV(12345678);
+   MyEvHex: EV(12AB5678);
 
 PROBLEM;
    SPC A1 DATION INOUT ALPHIC;

@@ -470,6 +470,7 @@ export class Preprocessor {
                 open.macro,
                 open.macroDefinition,
                 open.ifLocation,
+                open.macroLocation,
                 open.elseLocation,
                 directive.location,
                 open.conditionSatisfied,
@@ -507,7 +508,8 @@ export class Preprocessor {
         this.context.conditionalBlocks.enterIfdef(
             name,
             macroDefinition,
-            directive.location
+            directive.location,
+            token.location
         );        
         if ( macroDefinition ) {
             this.recordMacroReference(token, macroDefinition);
@@ -543,7 +545,8 @@ export class Preprocessor {
         this.context.conditionalBlocks.enterIfndef(
             name,
             macroDefinition,
-            directive.location
+            directive.location,
+            token.location
         );        
         if ( macroDefinition ) {
             this.recordMacroReference(token, macroDefinition);

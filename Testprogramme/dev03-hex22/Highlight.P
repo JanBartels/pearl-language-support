@@ -1,0 +1,15 @@
+S=$6500,CODE=$A000,VAR=$C000;
+MODULE HexHighlight;
+SYSTEM;
+  MyEv: EV(12345678);
+  MyEvHex: EV(12AB5678);
+  Port1: BU(FF0F0006,8) <->;
+  Port2: BU(0240FFFC) <-;
+  Terminal: /A1/Dialog (TFU=1,MB=$80,AI=$3C00) <->;
+
+PROBLEM;
+  /*+R=$5000 20 kByte vorhalten */
+  /*-R5000 Gleiche Wirkung */
+  DCL F FIXED INIT(12345678);
+  DCL Bits BIT(16) INIT('00AF'B4);
+MODEND;

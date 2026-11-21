@@ -65,6 +65,14 @@ export function resolveModuleControls(root: AstNode): ResolvedModuleControls {
             return undefined;
         }
         const digits = source.value.startsWith('$') ? source.value.slice(1) : source.value;
+        // RTOS-UH module sizes and CODE/VAR addresses are 32-bit values.
+        // Check written width, not just the numeric magnitude: nine digits
+        // are invalid even if they start with zero.
+        if (digits.length > 8) {
+            report(source, Code.InvalidCompilerSettingValue,
+                `${name} darf maximal 8 Hexziffern (32 Bit) enthalten.`);
+            return undefined;
+        }
         return BigInt('0x' + digits);
     }
 

@@ -702,6 +702,20 @@ Beispielsweise funktionieren beide Formen:
 Die vorhandene Behandlung der Begrenzungszeichen und der Pfadmakros ist von
 der lexikalischen Analyse des abschließenden PEARL-Texts unabhängig.
 
+Der **erste Lexer** erkennt `#include`-Pfadfragmente, die mit einer Ziffer
+beginnen (beispielsweise `12_SharedTypes.h`), als opaken
+`PreprocessorText` statt als PEARL-Zahlenliterale. Dies gilt bis zum
+Zeilenende der Direktive und auch für numerische Fragmente hinter einem Punkt.
+Der Präprozessor fügt diese Fragmente mit den übrigen Pfad-Tokens zusammen;
+gewöhnliche Bezeichner im Pfad bleiben für die Makroauflösung erhalten.
+Nach dem Zeilenende gelten wieder die normalen Lexerregeln.
+
+Die **PEARL-Zahlenliteralprüfung** wird dadurch nicht abgeschwächt. Der
+zweite Lexer prüft den expandierten PEARL-Text weiterhin uneingeschränkt.
+Die Korrektur findet weder im Parser noch in der Include-Dateisuche statt.
+
+Regressionstest: `/src/server/preproc/tests/numericIncludeFilename.test.ts`.
+
 Referenzimplementierung:
 - `/src/server/preproc/preprocessor.ts`
 - `/src/server/source/fileSource.ts`
@@ -909,6 +923,30 @@ Dadurch entfallen spätere Textanalysen oder reguläre Ausdrücke im Parser.
 
 Referenzimplementierung:
 - `/src/server/lexer/token.ts`
+
+### Mehrdeutige Hexziffernfolgen am Anfang eines Identifiers (0.3.2)
+
+Im RTOS-UH-SYSTEM-Teil sind unpräfixierte Hexwerte zulässig, die mit
+`A` bis `F` anfangen, beispielsweise `BU(FF0F0006,8)` (RTOS-UH 6.2)
+oder `EV(ABCDEF12)`. Diese Zeichenfolgen entsprechen zugleich der
+lexikalischen Schreibweise normaler Bezeichner (`DCL FACE FIXED;`).
+
+Ein globales Umtokenisieren in `HexDigitSequence` würde gültige Bezeichner
+zerstören und verstieße gegen die kontextfreie Lexerentscheidung.
+Daher gilt:
+
+- Der Lexer erzeugt weiterhin `TokenKind.Identifier` und kennzeichnet
+  ausschließlich lexikalisch, ob alle Zeichen Hexziffern sind
+  (`Token.hexDigitIdentifier`). `HexDigitSequence` für ziffernbeginnende
+  Hexfolgen bleibt bestehen.
+- Nur die Parserprimitive `acceptHexDigitSequence()` berücksichtigt bei
+  entsprechendem Grammatikbedarf auch diese gekennzeichneten Identifier.
+  `parseHexNumber()` bleibt die gemeinsame Schnittstelle für `BU` und `EV`.
+- Normale Identifier-Produktionen bleiben unverändert. Weder Parser noch
+  Semantik zerlegen dazu Tokens nachträglich oder verwenden reguläre
+  Ausdrücke zur Erkennung der Zeichenfolge.
+- Die TextMate-Farbgebung ist hiervon unabhängig und entscheidet nicht über
+  die syntaktische Zulässigkeit.
 
 ---
 
@@ -1758,9 +1796,27 @@ keine implementierte Architekturentscheidung. Der `WorkspaceManager`
 kennt jedoch bereits vom LSP-Client gelieferte Workspace-Folder.
 
 Für korrektes LSP-Feedback muss VS Code eine bearbeitete Includedatei im
-Sprachmodus **PEARL** öffnen. Insbesondere wird die Dateiendung `.h`
-bewusst nicht global der Sprache PEARL zugeordnet; Testordner können dafür
-lokale `.vscode/settings.json` mit `files.associations` bereitstellen.
+Sprachmodus **PEARL** öffnen. Der VS-Code-Client weist diesen Modus beim
+direkten Öffnen **bekannter, tatsächlich erfolgreich eingebundener Dateien**
+automatisch zu – auch außerhalb des Workspace und bei beliebigen Endungen.
+Diese Kenntnis stammt aus abgeschlossenen Übersetzungseinheitsanalysen, nicht
+aus Dateiendungen oder einem zusätzlichen Verzeichnisscan. Der Client holt die
+zugehörigen URIs zusammen mit den Include-Watch-Zielen ab und übernimmt sie
+auch bei späteren Aktualisierungen des Include-Graphen. Bereits geöffnete
+Dateien werden beim Erhalt eines neuen Snapshots ebenfalls berücksichtigt.
+
+**Versuchte, fehlgeschlagene Includes** bleiben reine Watch-Abhängigkeiten und
+berechtigen nicht zur PEARL-Sprachzuordnung. Die Sprachzuordnung setzt auch
+keinen semantischen Include-Kontext: Bei mehreren Einbindungskontexten muss
+die bestehende CodeLens-Auswahl verwendet werden. Die `.h`-Endung wird
+weiterhin nicht global PEARL zugeordnet. Testordner können zusätzlich lokale
+`.vscode/settings.json` mit `files.associations` bereitstellen.
+
+VS Code löst bei `setTextDocumentLanguage` einen Dokument-Schließen- und
+anschließend einen Dokument-Öffnen-Vorgang aus. Der Server verwendet dabei
+seine bekannten Include-Abhängigkeiten, statt eine solche Datei als eigene
+Übersetzungseinheit zu analysieren. Dateien ohne bekannte Einbindung werden
+nicht automatisch umklassifiziert.
 
 Referenzimplementierungen:
 - `/src/server/utility/folderTranslationUnitIndex.ts`
@@ -1800,7 +1856,11 @@ solange noch ein anderer Root darauf verweist.
 
 Der Language Server liefert dem VS-Code-Client die **vollständige Menge**
 aktuell bekannter Watch-Ziel-URIs über `pearl/getIncludeWatchTargets` und
-`pearl/includeWatchTargets`. Eine monoton steigende Revision verhindert,
+`pearl/includeWatchTargets`. Zusätzlich enthält derselbe Snapshot in
+`includedUris` ausschließlich erfolgreich eingebundene Quelldateien aus dem
+akzeptierten Include-Graphen. Änderungen dieser zweiten Menge erhöhen die
+Snapshot-Revision selbst dann, wenn die Watch-Pfade identisch bleiben (z. B.
+beim Wiederanlegen einer zuvor fehlenden Datei). Eine monoton steigende Revision verhindert,
 dass ein verspätet eingetroffener Anfangssnapshot eine neuere Menge
 überschreibt. Eine zusätzliche Server-Session-ID erlaubt die Neuinitialisierung
 nach einem Language-Server-Neustart. Der Client verwendet `vscode.RelativePattern` mit explizitem
@@ -1972,6 +2032,18 @@ und `#endif` im Hover die Auswertung des tatsächlich ausgewählten
 Präprozessorlaufs, statt eine Auswertung eines anderen Vorkommens zu
 übernehmen. Der bestehende DocumentationProvider bleibt unverändert.
 
+**Hover auf dem geprüften Makronamen (Paket 21):**
+Ein bedingter Präprozessorblock speichert neben der Position des
+`#ifdef`-/`#ifndef`-Direktivtokens auch die eigene physische
+`macroLocation` des geprüften Bezeichners. Der `PreprocessorConditionalBlockLookup`
+ordnet beide Positionen demselben Bedingungsblock zu und liefert denselben
+`PreprocessorConditionalBlockDocumentationProvider`. Leerraum zwischen den
+Tokens und andere Makrovorkommen gehören nicht zum Bedingungs-Hoverbereich.
+Die Herkunft nach `IncludeOccurrence.id` wird vor der Positionsprüfung
+gefiltert. Das funktioniert auch bei Makronamen ohne aktuelle Definition;
+die zuvor ausgewertete Bedingung bleibt maßgeblich. Für diese LSP-Funktion
+wird weder erneut präprozessiert noch ein alternativer Makroindex aufgebaut.
+
 Folding verwendet die **physische URI des angefragten Dokuments**.
 Die syntaktischen `#ifdef`/`#ifndef`-Regionen und Blockkommentare werden
 für jedes Editor-Dokument unabhängig von der Include-Ausführung lexikalisch
@@ -2107,3 +2179,71 @@ ansichtsspezifische Kontextübergabe ermöglicht.
 # Folding
 
 Folding-Regionen werden von dem AST-Knoten erzeugt, der die vollständige syntaktische Struktur kennt – nicht notwendigerweise von dem Knoten, der den gefalteten Bereich selbst repräsentiert.
+
+# Syntaxhervorhebung und RTOS-UH-Hexzahlen (Dev_0_3 / 0.3.2)
+
+Die TextMate-Grammatik (`syntaxes/pearl.tmLanguage.json`) dient ausschließlich
+der lexikalischen Darstellung im Editor. Sie ist weder Bestandteil der
+Compileranalyse noch die normative Quelle für die PEARL-Syntax.
+
+Fuer RTOS-UH-Hexzahlen ohne `$`-Präfix werden nur eng umrissene
+syntaktische Kontexte hervorgehoben: das Hexargument von `EV(...)`, das
+erste Argument von `BU(...)`, sowie die Kopfoptionen `S`/`SC`, `CODE`
+und `VAR`. Der nachgestellte Zugriffscode bei `BU(hexadresse,code)`
+bleibt dezimal. Die Werte von `MB=$...` und `AI=$...` erfasst bereits die
+allgemeine Regel für `$`-Hexzahlen. Die Sonderform `/*+R=hexwert ... */`
+(bzw. `/*-R... */`) wird innerhalb eines Compilerkommentars gesondert
+erkannt. BIT-Literale mit `B4` bleiben eigene Token.
+
+Alle diese Werte erhalten `constant.numeric.hex.pearl`. Eine pauschale
+Klassifizierung aller Ziffernfolgen mit Zeichen `A` bis `F` wäre falsch,
+da die Bedeutung vom syntaktischen Kontext abhängt. Lexer und Parser
+werden für Editorfarben nicht modifiziert. Die TextMate-Grammatik
+validiert keine Ausdruecke; verbindliche Diagnosen entstehen ausschließlich
+aus der Compileranalyse.
+
+## RTOS-UH: Längen von Hexwerten in SYSTEM-Deklarationen (0.3.2)
+
+Bei `EV(hexnum8)` gelten **1 bis 8** Hexziffern (RTOS-UH,
+Abschnitt 6.12; das zugrundeliegende Ereignismuster hat 32 Bit).
+Die Schreibweise muss weder links mit Nullen aufgefüllt werden noch exakt
+achtstellig sein. Die Prüfung verbleibt bei `InterruptSystemObjectParser`
+und verwendet die generische Bereichsprüfung im `ParserBase`.
+
+Bei alphanumerischen SYSTEM-DATIONs verwendet RTOS-UH (Abschnitt 5.5.1)
+`MB=$xx` mit **exakt 2** Hexziffern und `AI=$xx` bzw.
+`AI=$xxxx` mit **exakt 2 oder 4** Hexziffern. Drei Ziffern sind
+insbesondere **nicht** zulässig. `AlphicDationSystemObjectParser`
+benutzt dazu die gemeinsame Prüfung für explizit erlaubte Längen;
+das `$`-Präfix zählt nicht mit. Die `SourceValue`-Repräsentation
+bewahrt die ursprüngliche Schreibweise; es findet keine implizite
+Nullauffüllung oder neue Typsemantik statt. Die TextMate-Regeln
+sind von diesen Compilerprüfungen unabhängig.
+
+---
+
+## RTOS-UH: 32-Bit-Hexwerte bei Moduloptionen und R-Steuerkommentaren (0.3.2)
+
+Die Modul-Kopfeinstellungen `S=`, `SC=`, `CODE=` und `VAR=` tragen
+Modulgroessen bzw. Startadressen im 32-Bit-Format. Sie akzeptieren mit
+oder ohne `$`-Praefix **1 bis 8 Hexziffern**. Die achtstellige Grenze
+wird in `resolveModuleControls()` waehrend der semantischen Auswertung
+geprueft, nicht in der generischen Lexer- oder Parserprimitive.
+Dabei zaehlt das `$`-Praefix nicht mit; auch neun Stellen mit fuehrender
+Null sind unzulaessig. Bei Ueberschreitung entsteht
+`InvalidCompilerSettingValue`. Der AST bewahrt die Quellschreibweise;
+es findet weder Rundung noch Abschneiden auf 32 Bit statt.
+
+Der RTOS-UH-Steuerkommentar `/*+R...*/` bzw. `/*-R...*/` (Handbuch
+Abschnitt 5.4.8) ist explizit auf **maximal 8 Hexziffern** beschraenkt.
+Gleichheitszeichen und `$` sind optional (z.B. `/*+R=$5000 Text */`,
+`/*+R5000 Text */`). Compilersteuerkommentare bleiben lexikalische
+Information und werden nicht in den PEARL-AST ueberfuehrt.
+`CompilerControlAnalyzer` prueft bei erkennbaren R-Hexangaben deren
+Laenge. Er meldet eine zu lange Angabe als **LSP-Warnung**, nicht als
+Parser- oder Compilerfehler: RTOS-UH dokumentiert, dass fehlerhafte
+Steuerkommentare ohne Compilerwarnung wirkungslos bleiben koennen.
+Die Implementierung interpretiert die Speicherreservierung selbst nicht
+und aendert keine Kompilieroptionen.
+
+---

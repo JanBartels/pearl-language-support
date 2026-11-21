@@ -19,7 +19,11 @@ export class PreprocessorConditionalBlockLookup {
             if (includeOccurrenceId !== undefined
                 && block.includeOccurrenceId !== includeOccurrenceId) continue;
 
-            if (containsSourceOffset(block.ifLocation, position)) {
+            // Directive and tested macro are distinct physical tokens. The
+            // DocumentationProvider describes the same evaluated condition for
+            // either token; whitespace and unrelated macro uses are excluded.
+            if (containsSourceOffset(block.ifLocation, position)
+                || containsSourceOffset(block.macroLocation, position)) {
                 return {
                     block,
                     directive: block.ifdef

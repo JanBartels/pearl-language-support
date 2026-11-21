@@ -1,0 +1,15 @@
+P=MPC603; SC=2000;
+MODULE HexIdentifier;
+SYSTEM;
+  Port1: BU(FF0F0006,8) <->;
+  Port2: BU(0240FFFC) <-;
+  EventHex: EV(ABCDEF12);
+  EventNumeric: EV(12345678);
+PROBLEM;
+  DCL FACE FIXED;
+
+P: PROC;
+  TRIGGER EventHex;
+END;
+
+MODEND;

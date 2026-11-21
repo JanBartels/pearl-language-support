@@ -1,0 +1,12 @@
+P=MPC603;
+SC=2E00;
+MODULE NumericInclude20;
+PROBLEM;
+#include "12_SharedTypes.h"
+#include 56_Additional.def
+DCL FirstValue FirstType;
+DCL SecondValue SecondType;
+DCL ThirdValue ThirdType;
+DCL F FIXED INIT( 12BOGUS);
+DCL B BIT(32) INIT( '12AB5678'B4);
+MODEND;

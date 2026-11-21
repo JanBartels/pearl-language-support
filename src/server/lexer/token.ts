@@ -76,6 +76,14 @@ export interface Token {
 
   /** Wo steht dieses Token im Ursprungsdokument? */
   readonly location: Location;
+
+  /**
+   * Lexical ambiguity: an identifier consisting only of hex digits (A-F, 0-9)
+   * can also be used as an unprefixed hexadecimal address in a grammar
+   * position which explicitly expects one, e.g. BU(FF0F0006,8).
+   * It remains an Identifier everywhere else.
+   */
+  readonly hexDigitIdentifier?: boolean;
 }
 
 export enum CommentKind {
