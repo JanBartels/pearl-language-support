@@ -10,6 +10,9 @@ import { ArrayTokenStream } from '../lexer/arrayTokenStream';
 import { ProblemCollection } from '../core/problemCollection';
 import { ProblemTag } from '../core/problemTag';
 import { PreprocessorInactiveRegionCollector } from '../preproc/preprocessorInactiveRegionCollector';
+import { findIncludeOccurrenceIdAt, type IncludeOccurrence } from '../preproc/includeOccurrence';
+import { mapToOriginalLocation } from '../core/sourceOffset';
+import type { Source } from '../source/source';
 import { MacroOccurrenceIndex } from '../preproc/macroOccurrenceIndex';
 import { UnusedMacroAnalyzer } from '../preproc/unusedMacroAnalyzer';
 
@@ -220,7 +223,7 @@ export class Validator {
         );
         semanticContext = semanticContext.withSymbolUsages(unused.usages, unused.diagnostics);
 
-        this.addSemanticDiagnostics(problems, semanticContext.diagnostics);
+        this.addSemanticDiagnostics(problems, semanticContext.diagnostics, expanded.source, context.includeOccurrences);
 
         // Compiler-side classifications only: no duplicate lexical highlighting
         // of keywords and literals already covered by the TextMate grammar.
@@ -266,10 +269,26 @@ export class Validator {
 
     private addSemanticDiagnostics(
         problems: ProblemCollection,
-        diagnostics: readonly SemanticDiagnostic[]
+        diagnostics: readonly SemanticDiagnostic[],
+        expandedSource: Source,
+        includeOccurrences: readonly IncludeOccurrence[]
     ): void {
 
         for (const diagnostic of diagnostics) {
+            // SourceValue keeps the lexical token position before mapping to
+            // the physical editor location. Only that position distinguishes
+            // separate executions of the same physical declaration.
+            const lexical = diagnostic.lexicalLocation;
+            const occurrenceId = lexical?.source === expandedSource
+                ? findIncludeOccurrenceIdAt(
+                    includeOccurrences,
+                    mapToOriginalLocation(diagnostic.location).source.uri,
+                    lexical.span
+                ) : undefined;
+            const options = {
+                tags: diagnostic.tags,
+                ...(occurrenceId !== undefined && { includeOccurrenceId: occurrenceId })
+            };
 
             switch (diagnostic.severity) {
 
@@ -277,7 +296,7 @@ export class Validator {
                     problems.error(
                         diagnostic.location,
                         diagnostic.message,
-                        { tags: diagnostic.tags }
+                        options
                     );
                     break;
 
@@ -285,7 +304,7 @@ export class Validator {
                     problems.warning(
                         diagnostic.location,
                         diagnostic.message,
-                        { tags: diagnostic.tags }
+                        options
                     );
                     break;
             }

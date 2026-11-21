@@ -93,6 +93,7 @@ export class UnusedSymbolAnalyzer {
                     code: SemanticDiagnosticCode.UnusedSymbol,
                     severity: SemanticDiagnosticSeverity.Warning,
                     location: declaration.location,
+                    lexicalLocation: declaration.lexicalLocation,
                     message: `Symbol '${declaration.value}' wird nicht verwendet.`,
                     tags: [ProblemTag.Unnecessary]
                 });
@@ -110,6 +111,7 @@ export class UnusedSymbolAnalyzer {
                     code: SemanticDiagnosticCode.WrittenButNeverRead,
                     severity: SemanticDiagnosticSeverity.Warning,
                     location: declaration.location,
+                    lexicalLocation: declaration.lexicalLocation,
                     message: `Variable '${declaration.value}' wird beschrieben, aber niemals gelesen.`,
                     tags: [ProblemTag.Unnecessary]
                 });
@@ -118,6 +120,7 @@ export class UnusedSymbolAnalyzer {
                     code: SemanticDiagnosticCode.ReadButNeverWritten,
                     severity: SemanticDiagnosticSeverity.Warning,
                     location: declaration.location,
+                    lexicalLocation: declaration.lexicalLocation,
                     message: `Variable '${declaration.value}' wird gelesen, aber niemals beschrieben.`
                 });
             }

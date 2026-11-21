@@ -1791,15 +1791,58 @@ physischer Include-URI und wird von Hover, Navigation und Semantic Tokens
 beachtet. Sie bleibt erhalten, solange die gewählte Einbindung gültig ist.
 Bei nur einem Einbindungskontext erfolgt die Auswahl automatisch.
 
-Die Diagnoseveröffentlichung erfolgt ebenfalls getrennt nach
-Übersetzungseinheit. Ein neuer Analyselauf darf Diagnosen eines anderen
-Moduls nicht löschen. Für eine mehrfach eingebundene Quelldatei werden
-Meldungen **eines** Kontextes dargestellt, niemals Diagnosen verschiedener
-Makrokontexte zusammengeführt. Nach einer expliziten CodeLens-Auswahl wird
-auch der anzuzeigende Diagnosekontext entsprechend umgeschaltet.
-Vor einer expliziten Auswahl kann die Diagnoseverwaltung bereits einen
-stabilen Veröffentlichungskontext besitzen, während semantische
-Editoranfragen aus Mehrdeutigkeitsgründen noch kein Ergebnis liefern.
+Die Diagnoseergebnisse werden **pro Übersetzungseinheit** getrennt
+verwaltet. Ein neuer Analyselauf darf die Ergebnisse anderer Module nicht
+löschen. Die CodeLens wählt einen semantischen Kontext für Hover,
+Navigation und kontextbezogene Darstellungen; sie ist **keine Voraussetzung**
+für die projektweite Diagnoseerfassung.
+
+**Diagnoseveröffentlichung in Dev_0_3, Paket 14:** Die projektweite Übersicht
+veröffentlicht bei noch nicht ausgewählten, mehrfach eingebundenen Dateien
+die Compilerfehler und Warnungen **aller** beteiligten Übersetzungseinheiten,
+mit Herkunftskennzeichnung und Zusammenfassung gleicher Meldungen.
+Dabei werden die semantischen Analyseergebnisse nicht vermischt: Vereinigt
+werden ausschließlich die fertigen, unveränderten Diagnosebeiträge zur
+Problems-Ansicht. Inaktivitäts-Hinweise (`Hint` und `Unnecessary`) werden
+in dieser Übersicht weggelassen; bei sonstigen Warnungen wird das
+`Unnecessary`-Tag für die Übersicht entfernt, damit eine fremde Auswertung
+nicht versehentlich Quellzeilen abdunkelt.
+
+Nach der expliziten CodeLens-Auswahl stammen normale Warnungen, Hinweise
+und die Abdunklung aus dem gewählten Include-Vorkommen. **Compilerfehler
+aller anderen Kontexte bleiben sichtbar** und erhalten eine Herkunftsangabe.
+Das gilt auch, wenn nur ein Vorkommen einen Fehler enthält und im Editor
+bereits ein anderes, fehlerfreies Vorkommen ausgewählt ist. Entfernte oder
+behobene Fehler verschwinden, sobald die zugehörige Übersetzungseinheit
+erneut analysiert beziehungsweise entfernt wurde.
+
+**Deduplizierung auch nach Kontextauswahl (Paket 15):** Die Menge der
+Compilerfehler wird für jede physische Datei-URI stets aus **allen**
+analysierten Übersetzungseinheiten und Include-Vorkommen gebildet. Der
+`DiagnosticPublicationManager` fasst gleiche Fehler anhand ihrer vollständigen
+LSP-Diagnosemerkmale (insbesondere Position, Meldung und Schweregrad) zu
+einem Eintrag mit sämtlichen Herkunftsangaben zusammen. Die ausgewählte
+Einbindung wird dabei **nicht zusätzlich** als unveränderter Fehlerbeitrag
+angehängt. Nur Warnungen, Informationen und Hinweise stammen nach einer
+CodeLens-Auswahl aus dem gewählten Vorkommen. Verschiedene Fehler an
+derselben Quellposition bleiben voneinander unterscheidbar. Dies ist eine
+reine Darstellungsregel; die einzelnen Compileranalysen bleiben getrennt.
+
+**Technische Grenze:** LSP `textDocument/publishDiagnostics` liefert nur
+eine Liste je physischer Datei-URI. Deshalb kann VS Code ohne zusätzliche
+Client-Infrastruktur keine unabhängige projektweite Probleme-Ansicht **und**
+eine vollständig separat gefilterte Liste von Editor-Markierungen derselben
+Datei darstellen. Die angezeigten Fehler aus anderen Kontexten sind deshalb
+auch im Editor sichtbar; ihre Nachricht nennt die Herkunft. Warnungen und
+Hinweise anderer Kontexte werden nach einer expliziten Auswahl dagegen
+nicht zusätzlich ausgegeben. Für eine dauerhaft vollständige, von der
+Editorauswahl unabhängige Anzeige **aller** Meldungen wäre eine eigene
+Projekt-Diagnostik-Sicht erforderlich.
+
+Unabhängig von dieser Präsentation gilt weiterhin: Bei mehreren möglichen
+Einbindungskontexten darf `DocumentRegistry` für semantische LSP-Anfragen
+keinen beliebigen AST- oder Semantikkontext auswählen. Die bislang
+implementierte Kontextwahl bleibt unverändert.
 
 ### Auswahl einzelner Include-Vorkommen (Paket 06)
 
@@ -1832,15 +1875,33 @@ bei wiederholten Einbindungen nicht einem beliebigen Vorkommen zugeordnet.
 **Vorkommensbezogene Inaktivitätsmarkierungen (Paket 07):**
 `PreprocessorConditionalBlock` trägt bei Include-Vorgängen die stabile
 `includeOccurrenceId`. `PreprocessorInactiveRegionCollector.collectWithOrigins()`
-behält diese Identität beim Erzeugen der Bereiche. Nur die aus diesen Bereichen
+behält diese Identität beim Erzeugen der Bereiche. Die aus diesen Bereichen
 abgeleiteten `ProblemTag.Unnecessary`-Hinweise tragen die ID über
 `Problem` und den internen `MappedDiagnostic` bis zur Diagnoseveröffentlichung.
 `DiagnosticPublicationManager` filtert sie nach dem ausgewählten
 Include-Vorkommen und entfernt die interne Kennung vor dem LSP-Versand.
-Ohne eindeutige Auswahl werden vorkommensgebundene Inaktivitäts-Hinweise
-nicht veröffentlicht; normale Compilerdiagnosen bleiben erhalten. Damit
+Ohne eindeutige Auswahl werden statt einer beliebigen Ausführung die
+projektweiten Fehlermeldungen und Warnungen publiziert, jedoch keine
+kontextfremden Inaktivitäts-Hinweise. Bei einer expliziten Auswahl werden
+vorkommensgebundene Warnungen und Hinweise gefiltert, während Fehler aus
+anderen Übersetzungskontexten sichtbar bleiben. Damit
 wird eine beim ersten Include aktive `#ifndef`-Region nicht wegen eines
 späteren, durch den Guard unterdrückten Includes fälschlich abgedunkelt.
+
+**Semantische Diagnosen mit nachgewiesener Herkunft (Paket 13):**
+`SemanticDiagnostic` kann zusätzlich zur physischen `location` die
+`lexicalLocation` des deklarierenden `SourceValue` weiterreichen. Der
+`UnusedSymbolAnalyzer` erhält sie für seine Verwendungswarnungen; der
+`Validator` ordnet sie anhand der `IncludeOccurrence.expandedSpan` der
+konkreten Einbindung zu. In verschachtelten Includes ist die engste
+passende Spanne maßgeblich; bei fehlender oder uneindeutiger Herkunft
+wird keine Einbindungskennung geraten. Der Diagnose-Publisher filtert
+diese Warnungen genauso wie die Inaktivitätsmarkierungen. Damit
+verschwindet beispielsweise die Warnung für eine `DCL`-Variable bei der
+Auswahl eines späteren, durch Include-Guard deaktivierten Vorkommens.
+Der Semantic Analyzer selbst muss dazu weder CodeLens noch Workspace
+kennen. Noch nicht alle übrigen semantischen, syntaktischen oder
+präprozessorbezogenen Probleme tragen diese Herkunftsmetadaten.
 
 **Vorkommensbezogener Präprozessor-Hover und Folding (Paket 08):**
 `PreprocessorConditionalBlockLookup` filtert die bereits mit
@@ -1864,7 +1925,7 @@ anderer physischer Quelldateien ausgeschlossen und doppelte Zeilenbereiche
 entfernt.
 
 **Weiterhin offen:** Andere Präprozessorindizes (insbesondere Makro- und
-Compiler-Options-Hover) und allgemeine Compilerdiagnosen besitzen nicht
+Compiler-Options-Hover) sowie weitere Compilerdiagnosen besitzen nicht
 durchgängig eine vorkommensbezogene Herkunft. Diese Funktionen dürfen bei
 wiederholten Includes keine beliebige Auswertung präsentieren. Weitere
 Diagnosen dürfen nicht ohne ausreichenden Herkunftsnachweis einem

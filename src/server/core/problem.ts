@@ -8,7 +8,7 @@ import { ProblemTag } from './problemTag';
 export interface ProblemOptions {
   readonly code?: string;
   readonly tags?: readonly ProblemTag[];
-  /** Execution provenance for a preprocessor-derived, occurrence-scoped hint. */
+  /** Stable execution identity for diagnostics with proven include provenance. */
   readonly includeOccurrenceId?: string;
 }
 

@@ -1,0 +1,7 @@
+P=MPC603;
+SC=2000;
+MODULE DiagA;
+PROBLEM;
+#define WITH_ERROR
+#include "HShared.h"
+MODEND;

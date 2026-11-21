@@ -40,3 +40,36 @@ export function includeOccurrenceId(sites: readonly IncludeSite[]): string {
         site.includingUri, site.directiveOffset, site.includedUri
     ]));
 }
+
+/**
+ * Resolve a compiler token's expanded-text location to the actual include
+ * execution of its physical origin. Nested includes may have overlapping
+ * expansion spans: prefer the narrowest matching occurrence. Equal-sized
+ * ambiguous matches are deliberately not guessed.
+ *
+ * The caller must ensure the lexical location belongs to the same
+ * ExpandedSource as the occurrences.
+ */
+export function findIncludeOccurrenceIdAt(
+    occurrences: readonly IncludeOccurrence[],
+    physicalUri: string,
+    expandedSpan: Readonly<Span>
+): string | undefined {
+    let found: IncludeOccurrence | undefined;
+    let ambiguous = false;
+    for (const occurrence of occurrences) {
+        if (occurrence.sourceUri !== physicalUri
+            || occurrence.expandedSpan.start > expandedSpan.start
+            || occurrence.expandedSpan.end < expandedSpan.end) continue;
+        const length = occurrence.expandedSpan.end - occurrence.expandedSpan.start;
+        const previousLength = found
+            ? found.expandedSpan.end - found.expandedSpan.start : Infinity;
+        if (length < previousLength) {
+            found = occurrence;
+            ambiguous = false;
+        } else if (length === previousLength && occurrence.id !== found?.id) {
+            ambiguous = true;
+        }
+    }
+    return ambiguous ? undefined : found?.id;
+}

@@ -161,6 +161,9 @@ export interface SemanticDiagnostic {
 
     readonly location: Location;
 
+    /** Original token position in the expanded input, when available. */
+    readonly lexicalLocation?: Location;
+
     readonly message: string;
 
     readonly tags?: readonly ProblemTag[];

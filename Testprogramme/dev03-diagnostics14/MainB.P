@@ -1,0 +1,6 @@
+P=MPC603;
+SC=2000;
+MODULE DiagB;
+PROBLEM;
+#include "HShared.h"
+MODEND;

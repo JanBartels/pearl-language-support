@@ -266,9 +266,9 @@ connection.onExecuteCommand(async params => {
     return;
   }
 
-  // Unit-level diagnostics remain separate. Multiple occurrences *within*
-  // that unit cannot yet be distinguished in Problem.location; those
-  // diagnostics are not claimed to be occurrence-specific.
+  // The publisher follows the same unit and include execution as semantic
+  // requests. Only diagnostics with proven lexical provenance are scoped;
+  // diagnostics without that provenance remain explicitly unclassified.
   diagnosticPublicationManager.selectContext(uri, selected.unitUri, selected.occurrence?.id);
   logger.debug(`Include context ${uri} -> ${selected.unitUri} / ${selected.occurrence?.id ?? 'legacy'}`);
   refreshIncludeCodeLenses();
