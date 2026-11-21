@@ -21,6 +21,7 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { PendingNavigationIntent, type NavigationIntent } from './navigationIntent';
+import { IncludeDependencyWatcher, type IncludeWatchSnapshot } from './includeDependencyWatcher';
 import {
   LanguageClient,
   TransportKind,
@@ -146,7 +147,60 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     clientOptions
   );
 
+  // The server reports executed include targets, including paths whose files
+  // have temporarily disappeared. Watch only their parent directories, not
+  // the user's whole library tree. The glob '*' is nonrecursive.
+  const dependencyWatchers = new IncludeDependencyWatcher((directory, onChange) => {
+    const watcher = vscode.workspace.createFileSystemWatcher(
+      new vscode.RelativePattern(vscode.Uri.file(directory), '*')
+    );
+    const events = [
+      watcher.onDidCreate(uri => onChange(uri.toString(), 1)),
+      watcher.onDidChange(uri => onChange(uri.toString(), 2)),
+      watcher.onDidDelete(uri => onChange(uri.toString(), 3))
+    ];
+    return { dispose() {
+      events.forEach(event => event.dispose());
+      watcher.dispose();
+    } };
+  }, (uri, type) => {
+    // Open PEARL documents already generate textDocument/didChange. Avoid
+    // a second invalidation for their on-disk save notifications.
+    const openPearl = vscode.workspace.textDocuments.some(document =>
+      document.uri.toString() === uri && document.languageId === 'pearl'
+    );
+    if (!openPearl && client) {
+      void client.sendNotification('workspace/didChangeWatchedFiles', {
+        changes: [{ uri, type }]
+      }).catch(error => console.warn('PEARL include file event was not delivered:', error));
+    }
+  }, uri => {
+    const documentUri = vscode.Uri.parse(uri);
+    if (documentUri.scheme !== 'file') return false;
+    // Existing workspace globs already cover .p/.P and .h/.H. Outside the
+    // workspace, and for other suffixes inside it, we need exact watchers.
+    return !vscode.workspace.getWorkspaceFolder(documentUri)
+      || !/\.(p|h)$/i.test(documentUri.path);
+  });
+  context.subscriptions.push({ dispose: () => dependencyWatchers.dispose() });
+
+  // Register before starting the client. The snapshot request below covers
+  // any initial compilation that completed before this handler was ready.
+  context.subscriptions.push(client.onNotification(
+    'pearl/includeWatchTargets', (snapshot: IncludeWatchSnapshot) => {
+      dependencyWatchers.update(snapshot);
+    }
+  ));
+
   await client.start();
+  try {
+    const snapshot = await client.sendRequest<IncludeWatchSnapshot>(
+      'pearl/getIncludeWatchTargets'
+    );
+    dependencyWatchers.update(snapshot);
+  } catch (error) {
+    console.warn('PEARL include watchers could not be initialized:', error);
+  }
   context.subscriptions.push(client);
   context.subscriptions.push(
     vscode.window.onDidChangeActiveTextEditor(editor => {

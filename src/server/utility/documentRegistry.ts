@@ -35,6 +35,11 @@ export class DocumentRegistry {
   private readonly sourcesByUnit = new Map<string, Set<string>>();
   private readonly unitsBySource = new Map<string, Set<string>>();
 
+  /** Executed include paths, including unsuccessful resolutions. They are
+   * invalidation/watch dependencies, never candidates for semantic lookup. */
+  private readonly watchedIncludesByUnit = new Map<string, Set<string>>();
+  private readonly unitsByWatchedInclude = new Map<string, Set<string>>();
+
   // Analysis is owned by a translation unit. Included files have no independent
   // result unless they were explicitly analyzed as a root.
   private readonly analysisResults = new Map<string, {
@@ -97,18 +102,14 @@ export class DocumentRegistry {
     }
   }
 
-  resolveInclude(sourceUri: string, includePath: string): TextDocument | null {
-
+  /** Physical target of an attempted include, even if the file does not exist. */
+  resolveIncludeUri(sourceUri: string, includePath: string): string {
       const sourcePath = filePathFromUri(sourceUri);
+      return uriFromFilePath(path.resolve(path.dirname(sourcePath), includePath));
+  }
 
-      const includeFsPath = path.resolve(
-          path.dirname(sourcePath),
-          includePath
-      );
-
-      const includeUri = uriFromFilePath(includeFsPath);
-
-      return this.get(includeUri);
+  resolveInclude(sourceUri: string, includePath: string): TextDocument | null {
+      return this.get(this.resolveIncludeUri(sourceUri, includePath));
   }
 
   /** Register a new analysis request before awaiting settings or I/O. */
@@ -133,6 +134,7 @@ export class DocumentRegistry {
       this.bumpRequestId(uri);
       this.clearAnalysisResult(uri);
       this.removeUnitSources(uri);
+      this.replaceWatchedIncludes(uri, []);
   }
 
   getActiveTranslationUnits(): string[] {
@@ -152,7 +154,10 @@ export class DocumentRegistry {
    */
   invalidateUri(uri: string): string[] {
       this.includeCache.delete(filePathFromUri(uri));
-      const affected = new Set<string>(this.unitsBySource.get(uri) ?? []);
+      const affected = new Set<string>([
+          ...(this.unitsBySource.get(uri) ?? []),
+          ...(this.unitsByWatchedInclude.get(uri) ?? [])
+      ]);
       if (this.translationUnits.has(uri)) affected.add(uri);
 
       for (const unitUri of affected) {
@@ -215,6 +220,31 @@ export class DocumentRegistry {
       this.sourcesByUnit.delete(unitUri);
   }
 
+  /** Atomically replace watch edges after an accepted analysis result. */
+  private replaceWatchedIncludes(unitUri: string, targets: readonly string[]): void {
+      for (const sourceUri of this.watchedIncludesByUnit.get(unitUri) ?? []) {
+          const parents = this.unitsByWatchedInclude.get(sourceUri);
+          parents?.delete(unitUri);
+          if (parents?.size === 0) this.unitsByWatchedInclude.delete(sourceUri);
+      }
+      const next = new Set(targets.filter(sourceUri => sourceUri !== unitUri));
+      if (next.size === 0) this.watchedIncludesByUnit.delete(unitUri);
+      else this.watchedIncludesByUnit.set(unitUri, next);
+      for (const sourceUri of next) {
+          let parents = this.unitsByWatchedInclude.get(sourceUri);
+          if (!parents) {
+              parents = new Set<string>();
+              this.unitsByWatchedInclude.set(sourceUri, parents);
+          }
+          parents.add(unitUri);
+      }
+  }
+
+  /** Complete subscription set, including missing include targets. */
+  getWatchedIncludeUris(): string[] {
+      return [...this.unitsByWatchedInclude.keys()].sort();
+  }
+
   private getLegacyIncludedSources(uri: string): string[] {
       const sources = new Set<string>();
       const pending = [uri];
@@ -268,6 +298,10 @@ export class DocumentRegistry {
           }
           units.add(uri);
       }
+      this.replaceWatchedIncludes(
+          uri,
+          result.watchedIncludeUris ?? result.includedSourceUris ?? this.getLegacyIncludedSources(uri)
+      );
       this.analysisResults.set(uri, { version, result, sourceVersions });
   }
 

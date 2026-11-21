@@ -24,6 +24,11 @@ export class PreprocessorContext {
   /** Active include source URIs in this particular preprocessor run. */
   readonly includedSourceUris = new Set<string>();
 
+  /** All attempted #include paths, including currently missing files.
+   * Keep missing paths watched so recreating a removed header triggers a new analysis.
+   * These are filesystem dependencies, not semantic include contexts. */
+  readonly watchedIncludeUris = new Set<string>();
+
   /** Every executed include, not deduplicated by physical URI. */
   readonly includeOccurrences: IncludeOccurrence[] = [];
 

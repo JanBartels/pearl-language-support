@@ -39,6 +39,7 @@ import {
 import { fileURLToPath, pathToFileURL } from 'url';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import * as path from 'path';
+import { randomUUID } from 'node:crypto';
 import { DocumentRegistry } from './utility/documentRegistry';
 import { filePathFromUri, uriFromFilePath } from './utility/uriUtils';
 import { WorkspaceManager } from './utility/workspace';
@@ -98,6 +99,29 @@ const documentRegistry = new DocumentRegistry(documents);
 const diagnosticPublicationManager = new DiagnosticPublicationManager(
   (uri, diagnostics) => connection.sendDiagnostics({ uri, diagnostics })
 );
+
+/** Full snapshots let the client reconcile subscriptions after changed includes.
+ * The revision also prevents a delayed initial snapshot from undoing an update. */
+const includeWatchSession = randomUUID();
+let includeWatchRevision = 0;
+let lastIncludeWatchUris = '[]';
+function includeWatchSnapshot(): { sessionId: string; revision: number; uris: string[] } {
+  return {
+    sessionId: includeWatchSession,
+    revision: includeWatchRevision,
+    uris: documentRegistry.getWatchedIncludeUris()
+  };
+}
+function publishIncludeWatchSnapshot(): void {
+  const snapshot = includeWatchSnapshot();
+  const next = JSON.stringify(snapshot.uris);
+  if (next === lastIncludeWatchUris) return;
+  lastIncludeWatchUris = next;
+  includeWatchRevision++;
+  logger.debug(`[IncludeWatch] targets revision=${includeWatchRevision} count=${snapshot.uris.length}`);
+  void connection.sendNotification('pearl/includeWatchTargets', includeWatchSnapshot());
+}
+connection.onRequest('pearl/getIncludeWatchTargets', () => includeWatchSnapshot());
 
 const validator = new Validator(
   workspaceManager,
@@ -703,6 +727,7 @@ async function validateAndPublish(document: TextDocument): Promise<void> {
     // Analyse für spätere LSP-Features zwischenspeichern.
     const previousIncludes = documentRegistry.getIncludedSourcesOfUnit(snapshot.uri);
     documentRegistry.setAnalysisResult(snapshot.uri, snapshot.version, result);
+    publishIncludeWatchSnapshot();
 
     // An early semantic-token request may have seen no completed analysis.
     // Refresh only if the client advertises the corresponding capability.
@@ -752,6 +777,7 @@ function refreshFolderTranslationUnits(): void {
     if (!documents.get(uri)) {
       documentRegistry.closeTranslationUnit(uri);
       diagnosticPublicationManager.removeUnit(uri);
+      publishIncludeWatchSnapshot();
     }
   }
   const activeRoots = new Set(documentRegistry.getActiveTranslationUnits());
@@ -806,6 +832,7 @@ documents.onDidClose((event) => {
   if (!folderTranslationUnits.hasRoot(uri)) {
     documentRegistry.closeTranslationUnit(uri);
     diagnosticPublicationManager.removeUnit(uri);
+    publishIncludeWatchSnapshot();
   }
   // The included source now comes from disk, not the editor buffer.
   for (const rootUri of affectedRoots) {
@@ -820,6 +847,7 @@ connection.onDidChangeWatchedFiles((event) => {
   refreshFolderTranslationUnits();
   const roots = new Set<string>();
   for (const change of event.changes) {
+    logger.debug(`[IncludeWatch] file event type=${change.type} uri=${change.uri}`);
     for (const uri of documentRegistry.invalidateUri(change.uri)) roots.add(uri);
   }
   for (const rootUri of roots) {

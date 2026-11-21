@@ -1,0 +1,8 @@
+{
+  "pearl.macros": {
+    "InclDir": "'../Library'"
+  },
+  "files.associations": {
+    "*.h": "pearl"
+  }
+}

@@ -262,7 +262,8 @@ export class Validator {
             analysis,
             [analysis],
             [...context.includedSourceUris],
-            context.includeOccurrences
+            context.includeOccurrences,
+            [...context.watchedIncludeUris]
         );
     }
 

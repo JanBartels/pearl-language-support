@@ -19,6 +19,8 @@ readonly rootAnalysis: Analysis;
     readonly includedSourceUris: readonly string[] | undefined;
     /** Executed include instances with their site chains and expanded ranges. */
     readonly includeOccurrences: readonly IncludeOccurrence[];
+    /** Attempted include targets, including files missing on disk. Not semantic sources. */
+    readonly watchedIncludeUris: readonly string[] | undefined;
 
     private constructor(
       rootAnalysis: Analysis,
@@ -26,7 +28,8 @@ readonly rootAnalysis: Analysis;
       problems: ProblemCollection,
       macroReferences: readonly MacroReference[],
       includedSourceUris?: readonly string[],
-      includeOccurrences: readonly IncludeOccurrence[] = []
+      includeOccurrences: readonly IncludeOccurrence[] = [],
+      watchedIncludeUris?: readonly string[]
     ) {
       this.rootAnalysis = rootAnalysis;
       this.files = files;
@@ -34,13 +37,15 @@ readonly rootAnalysis: Analysis;
       this.macroReferences = macroReferences;
       this.includedSourceUris = includedSourceUris;
       this.includeOccurrences = includeOccurrences;
+      this.watchedIncludeUris = watchedIncludeUris;
     }
 
     static create(
       rootAnalysis: Analysis,
       analyses: readonly Analysis[],
       includedSourceUris?: readonly string[],
-      includeOccurrences: readonly IncludeOccurrence[] = []
+      includeOccurrences: readonly IncludeOccurrence[] = [],
+      watchedIncludeUris?: readonly string[]
     ): AnalysisResult {
 
       const fileMap = new Map<string, Analysis>();
@@ -63,7 +68,8 @@ readonly rootAnalysis: Analysis;
         allProblems,
         allMacroReferences,
         includedSourceUris,
-        Object.freeze([...includeOccurrences])
+        Object.freeze([...includeOccurrences]),
+        watchedIncludeUris === undefined ? undefined : Object.freeze([...watchedIncludeUris])
       );
     }
 

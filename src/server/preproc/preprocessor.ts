@@ -815,11 +815,16 @@ export class Preprocessor {
         directiveLocation: Location
     ): void {
 
-        const document =
-            this.context.documentRegistry.resolveInclude(
-                this.source.uri,
-                includePath
-            );
+        const document = this.context.documentRegistry.resolveInclude(
+            this.source.uri, includePath
+        );
+        // Executed includes remain filesystem dependencies when their targets
+        // disappear. Use the resolved document when available; for a failed
+        // resolution retain the attempted physical path for create events.
+        const watchUri = document?.uri ?? this.context.documentRegistry.resolveIncludeUri?.(
+            this.source.uri, includePath
+        );
+        if (watchUri) this.context.watchedIncludeUris.add(watchUri);
 
         if (!document) {
 

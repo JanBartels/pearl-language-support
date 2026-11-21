@@ -1769,6 +1769,67 @@ Referenzimplementierungen:
 
 ---
 
+
+## Dateisystemüberwachung bekannter Include-Abhängigkeiten (Dev_0_3 / 0.3.1)
+
+Der Präprozessor ermittelt die **tatsächlich ausgeführten** `#include`-
+Anweisungen im Kontext einer vollständigen Übersetzungseinheit. Ihre
+physischen Zielpfade sind unabhängig von der Dateiendung und von der Lage
+relativ zum geöffneten Workspace. Verschachtelte Includes werden rekursiv
+beim jeweiligen Analyselauf berücksichtigt. Es gibt **keinen** zusätzlichen
+Bibliotheksscan, keine automatische Aufnahme externer Header als
+Übersetzungseinheiten und keine eigene semantische Analyse pro Header.
+
+Für die Dateisystemüberwachung werden auch fehlgeschlagene Include-Auflösungen
+als **versuchte Zielpfade** erfasst (`PreprocessorContext.watchedIncludeUris`).
+Nur so kann das spätere Wiederanlegen einer zuvor gelöschten Includedatei
+einen neuen Analyselauf auslösen. Die erfolgreich eingebundenen Dateien
+(`includedSourceUris`, `includeOccurrences`) bleiben davon getrennt:
+Ein nicht existierendes Ziel darf keine semantische Include-Kontextoption
+oder erfundene Deklaration erzeugen.
+
+`DocumentRegistry` übernimmt diese Watch-Abhängigkeiten erst mit einem
+akzeptierten `AnalysisResult`; überholte Analysen dürfen weder den
+Include-Graphen noch die Watch-Menge ersetzen. Die Registry verwaltet für
+jeden aktiven Übersetzungseinheits-Root die aktuellen Watch-Pfade und
+zugehörige Rückwärtsbeziehungen. Werden Includes durch `#ifdef` oder
+Makroänderungen entfernt, werden auch die entsprechenden Watch-Pfade beim
+nächsten akzeptierten Ergebnis entfernt. Beim Schließen eines Roots fallen
+seine Abhängigkeiten weg; gemeinsam verwendete Pfade bleiben erhalten,
+solange noch ein anderer Root darauf verweist.
+
+Der Language Server liefert dem VS-Code-Client die **vollständige Menge**
+aktuell bekannter Watch-Ziel-URIs über `pearl/getIncludeWatchTargets` und
+`pearl/includeWatchTargets`. Eine monoton steigende Revision verhindert,
+dass ein verspätet eingetroffener Anfangssnapshot eine neuere Menge
+überschreibt. Eine zusätzliche Server-Session-ID erlaubt die Neuinitialisierung
+nach einem Language-Server-Neustart. Der Client verwendet `vscode.RelativePattern` mit explizitem
+Verzeichnis und nicht rekursivem `*`-Glob; pro Verzeichnis wird ein Watcher
+angelegt. Die Ereignisse werden nach den tatsächlich bekannten Ziel-URIs
+gefiltert und über `workspace/didChangeWatchedFiles` zum bestehenden
+Server-Ereignisweg zurückgesendet. Dadurch funktionieren die Watcher auch
+**außerhalb** aller geöffneten Workspace-Folder. Eine starre Liste
+unterstützter Include-Endungen ist nicht vorgesehen.
+
+Bestehende Workspace-Watcher für `.p`/`.P` und `.h`/`.H` werden nicht
+doppelt registriert; innerhalb des Workspace werden zusätzliche
+Client-Watcher nur für bislang nicht abgedeckte Endungen benötigt.
+Geöffnete PEARL-Dokumente melden Änderungen weiterhin über den LSP-
+Dokumentlebenszyklus; Dateisystemereignisse ersetzen diesen nicht.
+
+Referenzimplementierungen:
+- `/src/server/preproc/preprocessorContext.ts`
+- `/src/server/preproc/preprocessor.ts`
+- `/src/server/validation/analysisResult.ts`
+- `/src/server/utility/documentRegistry.ts`
+- `/src/server/server.ts`
+- `/src/client/includeDependencyWatcher.ts`
+- `/src/client/extension.ts`
+- `/src/server/utility/tests/externalIncludeWatch.test.ts`
+- `/src/client/tests/includeDependencyWatcher.test.ts`
+
+---
+
 ## Mehrere Einbindungskontexte derselben Datei
 
 Eine physische Includedatei kann in mehreren Übersetzungseinheiten mit

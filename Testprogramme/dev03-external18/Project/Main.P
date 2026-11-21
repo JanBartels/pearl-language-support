@@ -1,0 +1,7 @@
+P=MPC603;
+SC=2000;
+MODULE ExternalWatch;
+PROBLEM;
+#include "InclDir/H0/lib1.inc"
+DCL ExternalValue LibraryType;
+MODEND;
