@@ -74,6 +74,8 @@ import { AnalysisTrace } from './utility/logging/analysisTrace';
 import { AnalysisScheduler, type AnalysisRequest, type AnalysisPriority } from './utility/analysisScheduler';
 import type { AnalysisExecutor, AnalysisSourceSnapshot } from './utility/analysisExecutor';
 import { AnalysisSnapshotCollector, StaleAnalysisSnapshotError } from './utility/analysisSnapshotCollector';
+import { OpenSourceSnapshotVersionBridge } from './utility/openSourceSnapshotVersionBridge';
+import { AnalysisSnapshotRecoveryCoordinator } from './utility/analysisSnapshotRecoveryCoordinator';
 import { LocalAnalysisExecutor } from './utility/localAnalysisExecutor';
 import { WorkerAnalysisExecutor } from './utility/workerAnalysisExecutor';
 import { WorkerPoolAnalysisExecutor } from './utility/workerPoolAnalysisExecutor';
@@ -188,7 +190,7 @@ const validator = new Validator(
   logger
 );
 // The local executor stays the default. Explicit Worker F5 configurations
-// select either one worker (baseline) or two workers (parallel benchmark).
+// select one, two, or four workers for directly comparable measurements.
 const workerFile = path.join(__dirname, 'analysisWorker.js');
 const workerCallbacks = (workerIndex: number) => ({
   onMetrics: (metrics: import('./utility/workerAnalysisExecutor').WorkerAnalysisMetrics) =>
@@ -217,6 +219,13 @@ const analysisExecutor: AnalysisExecutor = workerMode
       (document, settings, includes) => validator.analyze(document, settings, includes)
     );
 const analysisSnapshotCollector = new AnalysisSnapshotCollector(documentRegistry, logger);
+// Tracks only actual didOpen transitions for disk-backed include snapshots
+// already in flight. Committed result adoption remains in DocumentRegistry.
+const openSourceVersionBridge = new OpenSourceSnapshotVersionBridge();
+const snapshotRecovery = new AnalysisSnapshotRecoveryCoordinator(
+  documentRegistry,
+  rootUri => queueAnalysis(rootUri, 'snapshot:sourceChanged', 'interactive')
+);
 
 let clientSupportsSemanticTokenRefresh = false;
 let clientSupportsDynamicFileWatches = false;
@@ -851,6 +860,7 @@ async function validateAndPublish(request: AnalysisRequest): Promise<void> {
   const pass = (analysisPassByUri.get(document.uri) ?? 0) + 1;
   analysisPassByUri.set(document.uri, pass);
   const startedAt = analysisTrace.now();
+  let capturedSourceGeneration = snapshotRecovery.captureGeneration();
   try {
     const snapshot: AnalysisSourceSnapshot = {
       uri: document.uri,
@@ -874,6 +884,7 @@ async function validateAndPublish(request: AnalysisRequest): Promise<void> {
     const settingsWaitMs = Math.round(analysisTrace.now() - startedAt);
     const settingsSnapshot = { ...settings, macros: { ...settings.macros } };
     const captureStartedAt = analysisTrace.now();
+    capturedSourceGeneration = snapshotRecovery.captureGeneration();
     // The real preprocessor discovers all executed lookups before the executor
     // starts. A worker must never have to consult the live DocumentRegistry.
     const includeSnapshots = analysisSnapshotCollector.collect(snapshot, settingsSnapshot);
@@ -892,7 +903,7 @@ async function validateAndPublish(request: AnalysisRequest): Promise<void> {
         changedSources: changedBefore,
         elapsedMs: Math.round(analysisTrace.now() - startedAt)
       });
-      retryStaleSnapshot(snapshot.uri, requestId, changedBefore);
+      retryStaleSnapshot(snapshot.uri, requestId, capturedSourceGeneration, changedBefore);
       return;
     }
 
@@ -927,7 +938,14 @@ async function validateAndPublish(request: AnalysisRequest): Promise<void> {
       });
       return;
     }
-    const changedAfter = analysisSnapshotCollector.changedSources(snapshot, includeSnapshots);
+    const adoptedOpenIncludes: string[] = [];
+    const changedAfter = analysisSnapshotCollector.changedSources(
+      snapshot, includeSnapshots, (captured, current) => {
+        const accepted = openSourceVersionBridge.accepts(captured, current);
+        if (accepted) adoptedOpenIncludes.push(captured.uri);
+        return accepted;
+      }
+    );
     if (changedAfter.length > 0) {
       analysisTrace.event('analysis.discard', {
         trigger, uri: snapshot.uri, requestId, pass, stage: 'afterSnapshotValidation',
@@ -935,10 +953,15 @@ async function validateAndPublish(request: AnalysisRequest): Promise<void> {
         snapshotCaptureMs, validatorSyncMs, validatorAwaitMs, analysisWallMs,
         elapsedMs: Math.round(analysisTrace.now() - startedAt)
       });
-      retryStaleSnapshot(snapshot.uri, requestId, changedAfter);
+      retryStaleSnapshot(snapshot.uri, requestId, capturedSourceGeneration, changedAfter);
       return;
     }
 
+    if (adoptedOpenIncludes.length > 0) {
+      analysisTrace.event('analysis.snapshotOpenVersionAdopted', {
+        trigger, uri: snapshot.uri, requestId, pass, includedUris: adoptedOpenIncludes
+      });
+    }
     const previousIncludes = documentRegistry.getIncludedSourcesOfUnit(snapshot.uri);
     documentRegistry.setAnalysisResult(snapshot.uri, snapshot.version, result);
     publishIncludeWatchSnapshot();
@@ -982,7 +1005,7 @@ async function validateAndPublish(request: AnalysisRequest): Promise<void> {
         changedSources: err.changedUris,
         elapsedMs: Math.round(analysisTrace.now() - startedAt)
       });
-      retryStaleSnapshot(document.uri, requestId, err.changedUris);
+      retryStaleSnapshot(document.uri, requestId, capturedSourceGeneration, err.changedUris);
       return;
     }
     analysisTrace.event('analysis.error', {
@@ -999,22 +1022,21 @@ async function validateAndPublish(request: AnalysisRequest): Promise<void> {
 }
 
 /**
- * A source changed while the closed-world input was being collected or used.
- * Let DocumentRegistry invalidate the affected owners, then schedule fresh
- * requests. Never publish a result based on an inconsistent input set.
+ * A stale closed-world input cannot be committed. Source events which already
+ * invalidated known owners must not be replayed by later worker completions.
+ * An unobserved source change still invalidates all known owners.
  */
-function retryStaleSnapshot(rootUri: string, requestId: number, changedUris: readonly string[]): void {
-  if (!documentRegistry.isCurrentAnalysis(rootUri, requestId)) return;
-  const affected = new Set<string>();
-  for (const uri of changedUris) {
-    for (const unitUri of documentRegistry.invalidateUri(uri)) affected.add(unitUri);
-  }
-  if (!affected.has(rootUri)) {
-    for (const unitUri of documentRegistry.invalidateUri(rootUri)) affected.add(unitUri);
-  }
-  for (const unitUri of affected) {
-    queueAnalysis(unitUri, 'snapshot:sourceChanged', 'interactive');
-  }
+function retryStaleSnapshot(
+  rootUri: string, requestId: number, capturedGeneration: number,
+  changedUris: readonly string[]
+): void {
+  const decision = snapshotRecovery.recover(rootUri, requestId, capturedGeneration, changedUris);
+  analysisTrace.event('analysis.snapshotRecovery', {
+    uri: rootUri, requestId, capturedGeneration, skipped: decision.skipped,
+    handledSources: decision.handledSources,
+    invalidatedSources: decision.invalidatedSources,
+    queuedRoots: decision.queuedRoots
+  });
 }
 
 /**
@@ -1065,6 +1087,7 @@ function revalidateChangedSource(
     uri, version: fallback?.version ?? documents.get(uri)?.version ?? null,
     languageId: fallback?.languageId ?? documents.get(uri)?.languageId ?? null
   });
+  snapshotRecovery.noteSourceInvalidation(uri);
   const affectedRoots = documentRegistry.invalidateUri(uri);
   analysisTrace.event('source.invalidate', {
     trigger, uri, rootCount: affectedRoots.length, rootUris: affectedRoots
@@ -1130,22 +1153,26 @@ function handleOpenSourceDocument(document: TextDocument, reason: string): void 
 }
 
 documents.onDidOpen((event) => {
+  openSourceVersionBridge.didOpen(event.document);
   handleOpenSourceDocument(event.document, 'didOpen');
 });
 
 documents.onDidChangeContent((event) => {
+  openSourceVersionBridge.didChangeContent(event.document);
   handleOpenSourceDocument(event.document, 'didChangeContent');
 });
 
 documents.onDidClose((event) => {
   const uri = event.document.uri;
   lastSeenOpenDocument.delete(uri);
+  openSourceVersionBridge.invalidate(uri);
   lastIncludeContextDiagnostic.delete(uri);
   const trigger = nextAnalysisTrigger('didClose', {
     uri, version: event.document.version, languageId: event.document.languageId
   });
   logger.info(`onDidClose ${uri}`);
   settingsManager.clearDocument(uri);
+  snapshotRecovery.noteSourceInvalidation(uri);
   const affectedRoots = documentRegistry.invalidateUri(uri);
   analysisTrace.event('source.invalidate', {
     trigger, uri, rootCount: affectedRoots.length, rootUris: affectedRoots
@@ -1176,6 +1203,8 @@ connection.onDidChangeWatchedFiles((event) => {
   const roots = new Set<string>();
   for (const change of event.changes) {
     logger.debug(`[IncludeWatch] file event type=${change.type} uri=${change.uri}`);
+    openSourceVersionBridge.invalidate(change.uri);
+    snapshotRecovery.noteSourceInvalidation(change.uri);
     for (const uri of documentRegistry.invalidateUri(change.uri)) roots.add(uri);
   }
   analysisTrace.event('watch.invalidate', {

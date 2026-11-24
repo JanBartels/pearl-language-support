@@ -2747,10 +2747,10 @@ Die Ausführung ist **explizit zuschaltbar**, nicht globaler Default:
   `AnalysisResult` mit einem lokalen Ergebnis. Der Test-Bootstrap lädt die
   TypeScript-Quelldatei nur für `node:test`; produktiv gilt ausschließlich
   der esbuild-Einstiegspunkt.
-- Die bisherigen Provider-Paritätstests bleiben maßgeblich. Erst nach
-  erfolgreichen F5-Integrationstests im expliziten Worker-Modus darf dessen
-  Aktivierung als Default erwogen werden. Mehrere Worker und das
-  Last-/Speichermanagement bilden einen eigenen Folgeschritt.
+- Die bisherigen Provider-Paritätstests bleiben maßgeblich. Eine
+  Aktivierung als Default ist von gesonderten F5-Integrationstests und
+  Last-/Speichermessungen abhängig; die später eingeführten Pool-Varianten
+  sind unten dokumentiert und bleiben ausdrücklich zuschaltbar.
 
 Referenzimplementierungen:
 - `/build.mjs`
@@ -2768,10 +2768,11 @@ Referenzimplementierungen:
 
 ## Messinstrumentierung und CodeLens-Refresh bei Worker-Analysen
 
-Nach der ersten F5-Messung mit einem Worker (15 Uebersetzungseinheiten)
-werden die noch gebuendelten Worker-Transportzeiten aufgeschluesselt, bevor
-mehrere Worker eingefuehrt werden. **Die Ausfuehrung bleibt vorerst
-sequentiell in genau einem Worker** und weiterhin explizit zuschaltbar.
+Diese Messinstrumentierung wurde nach der ersten F5-Messung mit einem
+Worker (15 Uebersetzungseinheiten) eingefuehrt. Sie gilt inzwischen fuer
+**jeden** Worker des Pools. Die Ein-Worker-Variante bleibt fuer
+reproduzierbare Vergleichsmessungen ausdruecklich zuschaltbar; die
+Parallelisierung ist in den nachfolgenden Abschnitten beschrieben.
 
 **Zeitmessung am Thread-Uebergang:**
 
@@ -2879,5 +2880,207 @@ Referenzimplementierungen:
 - `/src/server/utility/workerAnalysisExecutor.ts`
 - `/src/server/server.ts`
 - `/.vscode/launch.json`
+- `/src/server/utility/tests/analysisScheduler.test.ts`
+- `/src/server/utility/tests/workerPoolAnalysisExecutor.test.ts`
+
+
+---
+
+## Vergleichsmessung mit vier Workern
+
+Nach dem erfolgreichen Vergleich von lokalem Executor, einem Worker und zwei
+Workern wird **ohne Aenderung an der Ausfuehrungsarchitektur** eine vierte
+F5-Konfiguration `Run PEARL Extension (4 Workers)` angeboten. Sie setzt
+`PEARL_ANALYSIS_EXECUTOR=worker` und `PEARL_ANALYSIS_WORKERS=4`.
+Die bestehenden Konfigurationen bleiben als Messreferenzen erhalten.
+
+- Die in `server.ts` bereits allgemein ausgelegte Workerzahl (1 bis 16)
+  bestimmt sowohl `AnalysisScheduler.maxConcurrent` als auch die Groesse des
+  `WorkerPoolAnalysisExecutor`. Es gibt keine voneinander abweichenden Limits.
+- Vier Worker bearbeiten maximal vier unterschiedliche Root-URIs gleichzeitig.
+  Eine erneute Analyse derselben Root wird bis zum Abschluss ihres bereits
+  laufenden Auftrags zurueckgestellt. Gueltigkeit und Commit verbleiben beim
+  `DocumentRegistry` im Hauptthread.
+- `CodeLensRefreshController` erhaelt weiterhin den Busy-Zustand des **gesamten**
+  Scheduler-Batches und sendet den analysebedingten Refresh erst bei Leerlauf.
+  Eine explizite Kontextwahl bleibt unabhaengig davon sofort wirksam.
+- `analysis.executor` meldet `workers: 4`; `analysis.worker` unterscheidet
+  `workerId` 1 bis 4 und misst Validator, Kodierung, Uebertragung und Dekodierung
+  getrennt. Die vier Ausfuehrungszeiten koennen ueberlappen, und `decodeMs`
+  blockiert weiterhin kurz den LSP-Hauptthread. Die Summe der Workerzeiten ist
+  deshalb nicht mit der gemessenen Gesamtdauer gleichzusetzen.
+- Ein groesserer Pool bedeutet mehr gleichzeitig lebende Compiler-/AST-Daten
+  und zusaetzlichen Speicherbedarf. Vier Worker sind vorerst nur ein
+  **expliziter Benchmark-Modus**, keine neue Standardeinstellung.
+
+Absicherung: Tests mit vier kontrollierten Slots pruefen Kapazitaetsgrenze,
+Nachruecken, veraltete Root-Anfragen und einen einmaligen Idle-Uebergang.
+Ein Integrationstest prueft vier echte Worker-Threads samt unabhängigen
+`AnalysisResult`-Rekonstruktionen.
+
+Referenzimplementierungen:
+- `/.vscode/launch.json`
+- `/src/server/server.ts`
+- `/src/server/utility/analysisScheduler.ts`
+- `/src/server/utility/workerPoolAnalysisExecutor.ts`
+- `/src/server/utility/tests/analysisScheduler.test.ts`
+- `/src/server/utility/tests/workerPoolAnalysisExecutor.test.ts`
+
+---
+
+## Spaetes Oeffnen einer bereits analysierten Includedatei (Worker-Start)
+
+Bei der parallelen Projektinitialisierung kann der Preprocessor eine Includedatei
+noch aus dem `DocumentRegistry`-Plattencache (Dokumentversion 0) erfassen,
+waehrend VS Code dieselbe physische Datei erst danach als offenes Editor-
+Dokument meldet (typischerweise Version 1). Ein solcher Wechsel ist **keine
+Quelltextaenderung**, wenn das geoeffnete Dokument bytegenau denselben Text
+und dieselbe Sprache enthaelt. Eine alleinige Versionspruefung nach der
+Worker-Ausfuehrung wuerde in diesem Fall ein gueltiges Ergebnis verwerfen.
+Beim Vier-Worker-Lasttest fuehrte das zu redundanten Analysen mehrerer Roots.
+
+**Verbindliche Verantwortlichkeiten und Sicherheitsgrenzen:**
+
+- `OpenSourceSnapshotVersionBridge` im LSP-Hauptthread registriert ausschliesslich
+  tatsaechliche `didOpen`-Ereignisse. Eine unmittelbar nach `didOpen`
+  eintreffende identische `didChangeContent`-Benachrichtigung ist kein Edit.
+  Jede spaetere neue Version bzw. Text- oder Sprachveraenderung, `didClose`
+  oder Dateiwachereignis widerruft den Nachweis.
+- Der `AnalysisSnapshotCollector` bleibt Besitzer der unveraenderlichen,
+  abgeschlossenen Quelltext-Snapshots. Seine Standardvalidierung bleibt strikt.
+  Nur bei der abschliessenden Pruefung eines Worker-Ergebnisses darf der LSP
+  einen expliziten `didOpen`-Nachweis fuer eine **Includedatei** vorlegen:
+  erfasste Version 0, aktuelle Editorversion gleich der gemeldeten
+  `didOpen`-Version, identischer Text und identischer Sprachmodus.
+- Die Root-Version ist **niemals** von dieser Ausnahme betroffen. Die
+  physische URI, der vollstaendige Quelltext, der Sprachmodus, alle
+  `#include`-Aufloesungen und das Vorhandensein auch zuvor fehlender
+  Includes werden weiterhin geprueft. Eine echte Aenderung macht das
+  Ergebnis ungueltig und fuehrt weiterhin zu Invalidation und erneuter Analyse.
+- Die bereits existierende `DocumentRegistry.tryAdoptSourceDocument` bleibt
+  ausschliesslich fuer **bereits akzeptierte** Analyseergebnisse zustaendig.
+  Der neue Nachweis ist nur fuer **noch laufende** Analysen erforderlich;
+  beide Mechanismen werden nicht in den Worker oder Compiler verschoben.
+  Nach erfolgreicher Validierung erfasst `setAnalysisResult` wie bisher die
+  Versionen der **aktuellen** Quellen fuer die LSP-Freshness-Pruefung.
+- `analysis.snapshotOpenVersionAdopted` macht eine solche Uebernahme im
+  Start-Trace sichtbar. Sie vermeidet keine noetigen Reanalysen nach echten
+  Aenderungen und veraendert weder Prioritaeten noch das CodeLens-Batching.
+
+Regressionstests decken den unveraenderten `didOpen`-Fall, echte Edits,
+Rueckwechsel des Textes, fehlende und neu aufgeloeste Includes,
+Sprachwechsel, Root-Versionen und vier parallel laufende echte Worker ab.
+
+Referenzimplementierungen:
+- `/src/server/utility/openSourceSnapshotVersionBridge.ts`
+- `/src/server/utility/analysisSnapshotCollector.ts`
+- `/src/server/utility/documentRegistry.ts` (bestehende Commit-Adoption)
+- `/src/server/server.ts`
+- `/src/server/utility/tests/openSourceSnapshotVersionBridge.test.ts`
+- `/src/server/utility/tests/openSourceWorkerIntegration.test.ts`
+
+---
+
+## Generationenbezogene Zusammenfuehrung nach veralteten Include-Snapshots
+
+Bei parallelen Analysen kann eine Includedatei waehrend eines Worker-Auftrags
+mehrfach editiert werden. Eine Editor-/Dateiwacheraenderung invalidiert bereits
+**sofort** die zu diesem Zeitpunkt bekannten Uebersetzungseinheiten und plant
+deren neue Analysen ueber den `AnalysisScheduler` (bei Texteingabe mit
+200-ms-Debounce). Die gerade analysierte Root kann jedoch noch **keine**
+akzeptierte Include-Kante besitzen und wird daher vom ersten Quellereignis
+nicht erfasst. Ihr spaetes Worker-Ergebnis erkennt den veralteten Snapshot.
+
+Ein solcher Fund darf **nicht nochmals alle bekannten Include-Besitzer**
+invalidieren: Damit wuerden bereits vorgemerkte neuere Requests erneut ersetzt,
+deren Debounce-Fenster aufgehoben und gegebenenfalls bereits laufende neue
+Analysen grundlos supersediert.
+
+`AnalysisSnapshotRecoveryCoordinator` trennt daher zwei Faelle:
+
+- **Explizit verarbeitete Quellveraenderung seit Snapshot-Erfassung:** Das
+  Quellereignis hat die zu diesem Zeitpunkt bekannten Besitzer bereits ueber
+  `DocumentRegistry.invalidateUri()` invalidiert. Hat der aktuelle Worker
+  dennoch ein veraltetes Ergebnis, kann seine Root dem alten Abhaengigkeitsgraphen
+  gefehlt haben. Nur **diese Root** wird neu angemeldet; vorhandene Requests
+  anderer Roots werden nicht erneut invalidiert oder in ihrer Entprellung
+  beeinflusst.
+- **Erst bei Snapshot-Validierung entdeckte Quellveraenderung:** Die
+  Quellen-Invaliderung samt aller bekannten Besitzer bleibt erforderlich.
+  Der Recovery-Koordinator registriert die abgearbeitete Quellgeneration,
+  damit andere noch laufende Worker dieselbe Entdeckung nicht wiederholen.
+
+Der Koordinator fuehrt ausschliesslich eine monotone Generation der
+**Quellinvalidierungsereignisse pro URI**; ein Analyseauftrag haelt den Stand
+unmittelbar vor der unveraenderlichen Snapshot-Erfassung fest. Die Generation
+ist kein Ersatz fuer den Snapshot: Root-Version, aktuelle Request-ID,
+Quelltexte, Sprachmodus, Include-Aufloesungen und Vorhandensein fehlender
+Includes werden weiterhin durch `DocumentRegistry` und
+`AnalysisSnapshotCollector` validiert. Ein aelterer Request wird weiterhin
+vollstaendig verworfen. Wurde eine neuere Anforderung fuer dieselbe Root
+bereits erstellt, darf sein Abschluss gar keine Recovery ausloesen.
+
+**Verantwortlichkeiten:** Der Koordinator verwaltet keine Analyseergebnisse,
+keine eigene Worker-Warteschlange und keine Compilerlogik. `DocumentRegistry`
+bleibt Autoritaet fuer Request-IDs und Ergebnisinvalidierung;
+`AnalysisScheduler` bleibt Autoritaet fuer Prioritaeten und Debounce. Die
+Quelle eines bereits verarbeiteten Ereignisses wird nicht erneut breit
+invalidiert. Nur neue, noch nicht verarbeitete Quellveraenderungen duerfen
+die bekannten Besitzer erneut invalidieren.
+
+Das Trace-Ereignis `analysis.snapshotRecovery` nennt `handledSources`,
+`invalidatedSources` und `queuedRoots`. Bei wiederholten Edits soll dadurch
+sichtbar werden, dass spaete Worker-Abschluesse laufende neuere Requests nicht
+verwerfen und die globale CodeLens-Batchgrenze erhalten bleibt.
+
+Referenzimplementierungen:
+- `/src/server/utility/analysisSnapshotRecoveryCoordinator.ts`
+- `/src/server/server.ts`
+- `/src/server/utility/analysisScheduler.ts`
+- `/src/server/utility/documentRegistry.ts`
+- `/src/server/utility/tests/analysisSnapshotRecoveryCoordinator.test.ts`
+
+
+---
+
+## Vergleichsmessung mit acht Workern
+
+Nach den Vier-Worker-Lasttests mit offener Include-Versionsadoption und
+`AnalysisSnapshotRecoveryCoordinator` wird die bereits vorhandene konfigurierbare
+Parallelitaet (1 bis 16) zusaetzlich mit acht Workern gemessen. Es handelt sich
+um eine **reine Benchmark-Konfiguration**, nicht um eine Aenderung des
+Standard-Executors oder der Architektur.
+
+- `Run PEARL Extension (8 Workers)` setzt
+  `PEARL_ANALYSIS_EXECUTOR=worker` und `PEARL_ANALYSIS_WORKERS=8`.
+  Lokal, ein, zwei und vier Worker bleiben als Referenzen verfuegbar.
+- `server.ts` uebergibt denselben Wert an `AnalysisScheduler.maxConcurrent`
+  und `WorkerPoolAnalysisExecutor`. Der Scheduler limitiert weiterhin
+  unterschiedliche Root-URIs, haelt eine bereits laufende Root bis zu deren
+  Abschluss exklusiv und priorisiert interaktive Auftraege.
+- Die Gueltigkeitspruefung der Root- und Include-Snapshots, die
+  versionsbezogene Open-Include-Adoption und die generationsbezogene
+  `AnalysisSnapshotRecoveryCoordinator`-Zusammenfuehrung gelten unveraendert.
+  Auch bei acht parallelen Analysen bleiben Commit und Publikation allein
+  Aufgabe von `DocumentRegistry` beziehungsweise LSP-Hauptthread.
+- Das analysebedingte CodeLens-Refresh bleibt an den gemeinsamen
+  Scheduler-Leerlauf gebunden. `analysis.executor` protokolliert
+  `workers: 8`, die `analysis.worker`-Ereignisse enthalten `workerId` 1 bis 8.
+- Acht Threads koennen CPU, Speicherbandbreite, Hauptthread-Dekodierung und
+  `resultTransferMs` staerker belasten. Deshalb werden Kaltstart und
+  Include-Aenderungen mit demselben 15-Root-Testprogramm verglichen. Die
+  Laufzeitmessung bis zum letzten Commit und bis zum vollstaendigen
+  CodeLens-Kontext ist aussagekraeftiger als die Summe der Workerzeiten.
+
+Die neuen Tests pruefen die Kapazitaetsgrenze, Rueckstau, den Shutdown,
+Root-Exklusivitaet und das gemeinsame Idle-Signal mit acht Slots sowie
+acht reale unabhaengige Node-Worker mit rekonstruierbaren Analysedaten.
+Die Produktionsimplementierung von Scheduler und Worker-Pool bleibt unveraendert.
+
+Referenzimplementierungen:
+- `/.vscode/launch.json`
+- `/src/server/server.ts`
+- `/src/server/utility/analysisScheduler.ts`
+- `/src/server/utility/workerPoolAnalysisExecutor.ts`
 - `/src/server/utility/tests/analysisScheduler.test.ts`
 - `/src/server/utility/tests/workerPoolAnalysisExecutor.test.ts`

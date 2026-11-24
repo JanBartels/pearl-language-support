@@ -177,3 +177,140 @@ test('parallel scheduling does not commit an invalidated result or overlap its r
         pool.dispose();
     }
 });
+
+test('four-worker pool fills exactly four slots and reuses freed slots', async () => {
+    const workers = Array.from({ length: 4 }, () => new ControlledExecutor());
+    const pool = new WorkerPoolAnalysisExecutor(4, index => workers[index]!);
+    try {
+        const requests = ['A', 'B', 'C', 'D', 'E', 'F'].map(uri => pool.execute(input(uri)));
+        assert.deepEqual(workers.map(w => w.jobs.map(j => j.uri)),
+            [['A'], ['B'], ['C'], ['D']]);
+
+        const result = {} as AnalysisResult;
+        workers[3]!.jobs[0]!.resolve(result);
+        assert.equal(await requests[3], result);
+        await flush();
+        assert.deepEqual(workers[3]!.jobs.map(j => j.uri), ['D', 'E']);
+
+        workers[1]!.jobs[0]!.reject(new Error('B failed'));
+        await assert.rejects(requests[1]!, /B failed/);
+        await flush();
+        assert.deepEqual(workers[1]!.jobs.map(j => j.uri), ['B', 'F']);
+
+        for (const index of [0, 2]) workers[index]!.jobs[0]!.resolve(result);
+        workers[3]!.jobs[1]!.resolve(result);
+        workers[1]!.jobs[1]!.resolve(result);
+        const results = await Promise.all([
+            requests[0], requests[2], requests[4], requests[5]
+        ]);
+        assert.ok(results.every(value => value === result));
+    } finally {
+        pool.dispose();
+    }
+    assert.deepEqual(workers.map(w => w.disposed), [1, 1, 1, 1]);
+});
+
+test('four-worker shutdown rejects all running and pending requests', async () => {
+    const workers = Array.from({ length: 4 }, () => new ControlledExecutor());
+    const pool = new WorkerPoolAnalysisExecutor(4, index => workers[index]!);
+    const requests = ['A', 'B', 'C', 'D', 'E'].map(uri => pool.execute(input(uri)));
+    assert.deepEqual(workers.map(w => w.jobs.length), [1, 1, 1, 1]);
+    pool.dispose();
+    const outcomes = await Promise.allSettled(requests);
+    assert.ok(outcomes.every(outcome => outcome.status === 'rejected'
+        && /shut down/.test(String(outcome.reason))));
+    assert.deepEqual(workers.map(w => w.disposed), [1, 1, 1, 1]);
+});
+
+test('four actual worker threads reconstruct four independent results', { timeout: 60000 }, async () => {
+    const seen: { index: number; metrics: WorkerAnalysisMetrics }[] = [];
+    const bootstrap = path.join(__dirname, 'fixtures/analysisWorkerBootstrap.cjs');
+    const pool = new WorkerPoolAnalysisExecutor(4, index => new WorkerAnalysisExecutor(
+        bootstrap, { onMetrics: metrics => seen.push({ index, metrics }) }
+    ));
+    try {
+        const uris = Array.from({ length: 4 }, (_, index) => `file:///pool/four-${index + 1}.P`);
+        const results = await Promise.all(uris.map(uri => pool.execute(input(uri))));
+        assert.deepEqual(results.map(result => result.rootAnalysis.source.uri), uris);
+        assert.ok(results.every(result =>
+            typeof result.rootAnalysis.ast.lookupSourceValue === 'function'));
+        assert.deepEqual(seen.map(sample => sample.index).sort(), [0, 1, 2, 3]);
+        assert.ok(seen.every(sample => sample.metrics.totalMs >= sample.metrics.analyzeMs));
+    } finally {
+        pool.dispose();
+    }
+});
+
+test('eight-worker pool limits work to eight active slots and reuses released slots', async () => {
+    const workers = Array.from({ length: 8 }, () => new ControlledExecutor());
+    const pool = new WorkerPoolAnalysisExecutor(8, index => workers[index]!);
+    try {
+        const uris = Array.from({ length: 11 }, (_, index) => `ROOT_${index + 1}`);
+        const requests = uris.map(uri => pool.execute(input(uri)));
+        assert.deepEqual(workers.map(worker => worker.jobs.map(job => job.uri)),
+            uris.slice(0, 8).map(uri => [uri]));
+
+        const result = {} as AnalysisResult;
+        workers[7]!.jobs[0]!.resolve(result);
+        assert.equal(await requests[7], result);
+        await flush();
+        assert.deepEqual(workers[7]!.jobs.map(job => job.uri), ['ROOT_8', 'ROOT_9']);
+
+        workers[2]!.jobs[0]!.reject(new Error('root three failed'));
+        await assert.rejects(requests[2]!, /root three failed/);
+        await flush();
+        assert.deepEqual(workers[2]!.jobs.map(job => job.uri), ['ROOT_3', 'ROOT_10']);
+
+        workers[0]!.jobs[0]!.resolve(result);
+        assert.equal(await requests[0], result);
+        await flush();
+        assert.deepEqual(workers[0]!.jobs.map(job => job.uri), ['ROOT_1', 'ROOT_11']);
+
+        for (const worker of workers) {
+            for (const job of worker.jobs.slice(worker.jobs.length === 2 ? 1 : 0)) {
+                job.resolve(result);
+            }
+        }
+        const outcomes = await Promise.allSettled(requests);
+        assert.equal(outcomes.filter(outcome => outcome.status === 'rejected').length, 1);
+        assert.ok(outcomes.every(outcome => outcome.status === 'rejected' || outcome.value === result));
+    } finally {
+        pool.dispose();
+    }
+    assert.deepEqual(workers.map(worker => worker.disposed), Array(8).fill(1));
+});
+
+test('eight-worker shutdown rejects all eight in-flight and queued requests', async () => {
+    const workers = Array.from({ length: 8 }, () => new ControlledExecutor());
+    const pool = new WorkerPoolAnalysisExecutor(8, index => workers[index]!);
+    const requests = Array.from({ length: 10 }, (_, index) =>
+        pool.execute(input(`ROOT_${index + 1}`)));
+    assert.deepEqual(workers.map(worker => worker.jobs.length), Array(8).fill(1));
+    pool.dispose();
+    const outcomes = await Promise.allSettled(requests);
+    assert.ok(outcomes.every(outcome => outcome.status === 'rejected'
+        && /shut down/.test(String(outcome.reason))));
+    assert.deepEqual(workers.map(worker => worker.disposed), Array(8).fill(1));
+});
+
+test('eight real worker threads return independent reconstructable analyses',
+    { timeout: 120000 }, async () => {
+        const seen: { index: number; metrics: WorkerAnalysisMetrics }[] = [];
+        const bootstrap = path.join(__dirname, 'fixtures/analysisWorkerBootstrap.cjs');
+        const pool = new WorkerPoolAnalysisExecutor(8, index => new WorkerAnalysisExecutor(
+            bootstrap, { onMetrics: metrics => seen.push({ index, metrics }) }
+        ));
+        try {
+            const uris = Array.from({ length: 8 }, (_, index) =>
+                `file:///pool/eight-${index + 1}.P`);
+            const results = await Promise.all(uris.map(uri => pool.execute(input(uri))));
+            assert.deepEqual(results.map(result => result.rootAnalysis.source.uri), uris);
+            assert.ok(results.every(result =>
+                typeof result.rootAnalysis.ast.lookupSourceValue === 'function'));
+            assert.deepEqual(seen.map(sample => sample.index).sort((a, b) => a - b),
+                [0, 1, 2, 3, 4, 5, 6, 7]);
+            assert.ok(seen.every(sample => sample.metrics.totalMs >= sample.metrics.analyzeMs));
+        } finally {
+            pool.dispose();
+        }
+    });

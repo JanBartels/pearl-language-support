@@ -334,3 +334,95 @@ test('invalid scheduler concurrency limits fail early', () => {
             undefined, undefined, limit), /positive integer/);
     }
 });
+
+test('four slots fill independently, defer a superseded root and end one batch', async () => {
+    const timing = new ManualTiming();
+    const current = new Map<string, number>([
+        ['A', 1], ['B', 1], ['C', 1], ['D', 1], ['E', 1]
+    ]);
+    const started: string[] = [];
+    const finish = new Map<string, () => void>();
+    const activity: boolean[] = [];
+    const scheduler = new AnalysisScheduler(async job => {
+        const key = `${job.rootUri}:${job.requestId}`;
+        started.push(key);
+        await new Promise<void>(resolve => finish.set(key, resolve));
+    }, job => current.get(job.rootUri) === job.requestId,
+    () => assert.fail('unexpected analysis error'), timing,
+    active => activity.push(active), 4);
+    try {
+        for (const root of ['A', 'B', 'C', 'D', 'E']) {
+            scheduler.enqueue(request(root, 1));
+        }
+        await timing.advanceTo(0);
+        assert.deepEqual(started, ['A:1', 'B:1', 'C:1', 'D:1']);
+        assert.deepEqual(activity, [true]);
+
+        current.set('A', 2);
+        scheduler.enqueue(request('A', 2, 'interactive'));
+        await timing.advanceTo(0);
+        assert.equal(started.length, 4);
+
+        // A:2 cannot overlap A:1. The fifth distinct root may use B's slot.
+        finish.get('B:1')!();
+        await timing.advanceTo(0);
+        assert.deepEqual(started, ['A:1', 'B:1', 'C:1', 'D:1', 'E:1']);
+        assert.deepEqual(activity, [true]);
+
+        finish.get('A:1')!();
+        await timing.advanceTo(0);
+        assert.deepEqual(started, ['A:1', 'B:1', 'C:1', 'D:1', 'E:1', 'A:2']);
+        for (const key of ['C:1', 'D:1', 'E:1', 'A:2']) finish.get(key)!();
+        await timing.drain();
+        assert.deepEqual(activity, [true, false]);
+    } finally {
+        scheduler.dispose();
+    }
+});
+
+test('eight slots run distinct roots, preserve root exclusivity and one shared idle signal', async () => {
+    const timing = new ManualTiming();
+    const current = new Map<string, number>();
+    const started: string[] = [];
+    const finish = new Map<string, () => void>();
+    const activity: boolean[] = [];
+    const scheduler = new AnalysisScheduler(async job => {
+        const key = `${job.rootUri}:${job.requestId}`;
+        started.push(key);
+        await new Promise<void>(resolve => finish.set(key, resolve));
+    }, job => current.get(job.rootUri) === job.requestId,
+    () => assert.fail('unexpected analysis error'), timing,
+    active => activity.push(active), 8);
+    try {
+        for (const root of ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I']) {
+            current.set(root, 1);
+            scheduler.enqueue(request(root, 1));
+        }
+        await timing.advanceTo(0);
+        assert.deepEqual(started, ['A:1', 'B:1', 'C:1', 'D:1', 'E:1', 'F:1', 'G:1', 'H:1']);
+        assert.deepEqual(activity, [true]);
+
+        current.set('A', 2);
+        scheduler.enqueue(request('A', 2, 'interactive'));
+        await timing.advanceTo(0);
+        assert.equal(started.length, 8);
+
+        // Releasing B's slot cannot start A:2 while A:1 is still running.
+        finish.get('B:1')!();
+        await timing.advanceTo(0);
+        assert.deepEqual(started.slice(8), ['I:1']);
+        assert.deepEqual(activity, [true]);
+
+        finish.get('A:1')!();
+        await timing.advanceTo(0);
+        assert.deepEqual(started.slice(8), ['I:1', 'A:2']);
+
+        for (const key of ['C:1', 'D:1', 'E:1', 'F:1', 'G:1', 'H:1', 'I:1', 'A:2']) {
+            finish.get(key)!();
+        }
+        await timing.drain();
+        assert.deepEqual(activity, [true, false]);
+    } finally {
+        scheduler.dispose();
+    }
+});

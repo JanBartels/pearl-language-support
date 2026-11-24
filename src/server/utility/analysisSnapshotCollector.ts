@@ -146,15 +146,29 @@ export class AnalysisSnapshotCollector {
      *
      * Returns physical URIs responsible for invalidating the capture; the LSP
      * orchestrator decides whether and how to queue a replacement analysis.
+     * An optional, explicit didOpen proof can accept an unchanged disk-backed
+     * INCLUDE becoming an editor document. The root still requires its exact
+     * version; contents, language and all include resolutions remain strict.
      */
-    changedSources(root: AnalysisSourceSnapshot, capture: AnalysisIncludeSourceSnapshotSet): string[] {
+    changedSources(
+        root: AnalysisSourceSnapshot,
+        capture: AnalysisIncludeSourceSnapshotSet,
+        acceptOpenedIncludeVersion?: (
+            captured: AnalysisSourceSnapshot, current: SnapshotSourceDocument
+        ) => boolean
+    ): string[] {
         const changed = new Set<string>();
         for (const snapshot of [root, ...capture.sources]) {
             const current = this.provider.get(snapshot.uri);
             if (!current || current.uri !== snapshot.uri
-                || current.version !== snapshot.version
                 || current.languageId !== snapshot.languageId
                 || current.getText() !== snapshot.text) {
+                changed.add(snapshot.uri);
+                continue;
+            }
+            if (current.version !== snapshot.version
+                && (snapshot.uri === root.uri
+                    || !acceptOpenedIncludeVersion?.(snapshot, current))) {
                 changed.add(snapshot.uri);
             }
         }
