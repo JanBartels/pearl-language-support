@@ -3084,3 +3084,54 @@ Referenzimplementierungen:
 - `/src/server/utility/workerPoolAnalysisExecutor.ts`
 - `/src/server/utility/tests/analysisScheduler.test.ts`
 - `/src/server/utility/tests/workerPoolAnalysisExecutor.test.ts`
+
+---
+
+## Analyse-Worker als regulare VS-Code-Einstellung
+
+Der gemessene Acht-Worker-Betrieb ist nun auch in der installierten VSIX
+ueber `pearl.analysis.workerCount` erreichbar. **Ein einziger Wert** waehlt
+Executor und Parallelitaet: `0` (Standard) verwendet den bisherigen
+`LocalAnalysisExecutor`, `1` verwendet den `WorkerAnalysisExecutor` und
+`2` bis `16` den `WorkerPoolAnalysisExecutor` mit entsprechender Kapazitaet.
+Der `AnalysisScheduler` erhaelt dieselbe positive Parallelitaetsgrenze
+(`max(1, workerCount)`). Es gibt keinen separaten Benutzer-Schalter fuer
+Worker-Modus und damit keine widerspruechlichen Einstellungskombinationen.
+
+**Initialisierungs- und Lebenszyklusgrenze:** Der VS-Code-Client liest die
+window-scoped Einstellung in einer `initializationOptions`-Funktion bei
+jedem LSP-Start und uebergibt sie an `server.ts`. Der Server erzeugt
+Executor und Scheduler **synchron in `onInitialize`**, noch bevor in
+`onInitialized` der Folder-Scan beginnen kann. Er liest die Workerzahl
+nicht aus den `PearlSettings` einzelner Dateien: Eine LSP-Serverinstanz
+kann nicht gleichzeitig verschiedene Worker-Kapazitaeten pro Root haben.
+Bei einer Aenderung von `pearl.analysis.workerCount` wartet der Client
+im `middleware.workspace.didChangeConfiguration` zuerst auf das Weiterleiten
+der Konfigurationsbenachrichtigung durch den Language Client (`next`).
+Erst danach fuehrt ein serialisierter Koordinator `LanguageClient.restart()`
+aus und synchronisiert die Include-Watch-Snapshots erneut. Ein paralleler
+`vscode.workspace.onDidChangeConfiguration`-Restart waere fehlerhaft: Er
+kann den Server beenden, waehrend der Language Client noch
+`workspace/didChangeConfiguration` verschickt. Der Koordinator vergleicht
+den konfigurierten Wert mit dem tatsaechlich bei der letzten Initialisierung
+uebergebenen Wert; andere PEARL-Einstellungen loesen keinen Restart aus. Dadurch werden laufende
+Worker nicht heimlich gegen einen neuen Pool ausgetauscht. Der bestehende
+Shutdown entsorgt Scheduler und Executor; danach werden beide beim
+neuen LSP-Start vollstaendig neu erzeugt. Analyseergebnisse, Request-IDs,
+Snapshots und CodeLens-Publikation bleiben ausschliesslich im jeweiligen
+Serverprozess gueltig.
+
+Die bisherigen F5-Benchmark-Profile mit `PEARL_ANALYSIS_EXECUTOR=worker`
+und `PEARL_ANALYSIS_WORKERS=1/2/4/8` bleiben als **bewusste Overrides**
+erhalten. Ohne diesen expliziten Override gilt ausschliesslich die
+regulaere Einstellung, auch bei einem installierten VSIX. Andere LSP-
+Clients ohne `initializationOptions` erhalten wie bisher lokale Analyse.
+
+Referenzimplementierungen:
+- `/package.json` (`contributes.configuration`)
+- `/src/client/extension.ts` (`initializationOptions`, Configuration-Middleware)
+- `/src/client/analysisWorkerConfigurationCoordinator.ts` (Reihenfolge und Serialisierung)
+- `/src/client/tests/analysisWorkerConfigurationCoordinator.test.ts`
+- `/src/server/settings/analysisExecutionSettings.ts`
+- `/src/server/server.ts` (`initializeAnalysisExecution`)
+- `/src/server/settings/tests/analysisExecutionSettings.test.ts`

@@ -23,6 +23,7 @@ import * as vscode from 'vscode';
 import { PendingNavigationIntent, type NavigationIntent } from './navigationIntent';
 import { IncludeDependencyWatcher, type IncludeWatchSnapshot } from './includeDependencyWatcher';
 import { KnownIncludedSources } from './knownIncludedSources';
+import { AnalysisWorkerConfigurationCoordinator } from './analysisWorkerConfigurationCoordinator';
 import {
   LanguageClient,
   TransportKind,
@@ -163,9 +164,39 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
   };
 
+  const configuredWorkerCount = (): number => vscode.workspace
+    .getConfiguration('pearl').get<number>('analysis.workerCount', 0);
+  const workerConfiguration = new AnalysisWorkerConfigurationCoordinator(
+    configuredWorkerCount,
+    async () => {
+      if (!client) return;
+      try {
+        await client.restart();
+        const snapshot = await client.sendRequest<IncludeWatchSnapshot>(
+          'pearl/getIncludeWatchTargets'
+        );
+        acceptIncludeSnapshot(snapshot, dependencyWatchers);
+      } catch (error) {
+        // Keep restart failures separate from configuration-delivery errors.
+        // The language client otherwise labels any middleware rejection as a
+        // failed workspace/didChangeConfiguration notification.
+        console.warn('PEARL analysis worker setting could not restart the language server:', error);
+      }
+    }
+  );
+
   const clientOptions: LanguageClientOptions = {
     documentSelector: [{ scheme: 'file', language: 'pearl' }],
     middleware: {
+      workspace: {
+        // The language client owns workspace/didChangeConfiguration. Its
+        // sendNotification must finish before restarting the server; calling
+        // restart from a competing VS Code configuration listener races it.
+        didChangeConfiguration: (
+          sections: string[] | undefined,
+          next: (sections: string[] | undefined) => Promise<void>
+        ) => workerConfiguration.forwardConfiguration(sections, next)
+      },
       // Both Go to Definition and Peek call this provider. Collect provenance
       // here, but do not mutate the server's selected context until an actual
       // editor change confirms the navigation.
@@ -209,6 +240,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     },
     synchronize: {
       fileEvents: vscode.workspace.createFileSystemWatcher('**/*.{p,P}')
+    },
+    // Re-evaluate for every LSP (re)initialization, including after a settings
+    // change. The server builds its executor and scheduler with one capacity.
+    initializationOptions: () => {
+      const workerCount = configuredWorkerCount();
+      workerConfiguration.noteInitialization(workerCount);
+      return { analysis: { workerCount } };
     },
     outputChannelName: 'PEARL LSP Debug'
   };
@@ -280,6 +318,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   } catch (error) {
     console.warn('PEARL include watchers could not be initialized:', error);
   }
+  // Worker-capacity changes are handled by the LanguageClient configuration
+  // middleware above, after delivery to the current server.
   context.subscriptions.push(client);
   context.subscriptions.push(
     vscode.window.onDidChangeActiveTextEditor(editor => {

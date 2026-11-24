@@ -50,6 +50,14 @@
       "title": "PEARL",
       "type": "object",
       "properties": {
+        "pearl.analysis.workerCount": {
+          "scope": "window",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16,
+          "default": 0,
+          "description": "Anzahl paralleler Analyse-Worker (0 = lokale Analyse wie bisher; 1 bis 16 = Worker-Threads). Eine Aenderung startet den PEARL Language Server neu."
+        },
         "pearl.maxNumberOfProblems": {
           "scope": "resource",
           "type": "number",
