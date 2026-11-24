@@ -18,7 +18,7 @@ import { UnusedMacroAnalyzer } from '../preproc/unusedMacroAnalyzer';
 
 import { Preprocessor } from '../preproc/preprocessor';
 import { PreprocessorContext } from '../preproc/preprocessorContext';
-import { MacroTable } from '../preproc/macroTable';
+import { createPredefinedMacroTable } from '../preproc/createPredefinedMacroTable';
 import { MacroReference } from '../preproc/macroReference';
 import { PreprocessorConditionalBlockStack } from '../preproc/preprocessorConditionalBlockStack';
 import { PreprocessorConditionalBlockCollection } from '../preproc/preprocessorConditionalBlockCollection';
@@ -28,6 +28,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { PearlSettings } from '../settings/pearlSettings';
 import { WorkspaceManager } from '../utility/workspace';
 import { DocumentRegistry } from '../utility/documentRegistry';
+import type { IncludeSourceResolver } from '../preproc/includeSourceResolver';
 import { Logger } from '../utility/logging/logger';
 import { ConditionalStack } from '../preproc/conditionalStack';
 
@@ -62,7 +63,8 @@ export class Validator {
 
     async analyze(
         document: TextDocument,
-        settings: PearlSettings
+        settings: PearlSettings,
+        includeSourceResolver: IncludeSourceResolver = this.documentRegistry
     ): Promise<AnalysisResult> {
 
         this.logger.debug?.(`Analyzing ${document.uri}`);
@@ -76,14 +78,7 @@ export class Validator {
         // vordefinierte Macros anlegen
         // ----------------------------
 
-        const macroTable = new MacroTable();
-
-        for (const [name, value] of Object.entries(settings.macros ?? {})) {
-            macroTable.define(
-                name,
-                value === '' ? null : value
-            );
-        }
+        const macroTable = createPredefinedMacroTable(settings);
 
         // ----------------------------
         // Lexer
@@ -104,7 +99,7 @@ export class Validator {
         // ----------------------------
 
         const context = new PreprocessorContext(
-            this.documentRegistry,
+            includeSourceResolver,
             macroTable,
             new ConditionalStack(),
             new PreprocessorConditionalBlockStack()

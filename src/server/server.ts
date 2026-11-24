@@ -71,6 +71,10 @@ import { createFoldingRangesForDocument } from './lsp/createFoldingRangesForDocu
 import { FoldingRangeRefreshController } from './lsp/foldingRangeRefreshController';
 import { CodeLensRefreshController } from './lsp/codeLensRefreshController';
 import { AnalysisTrace } from './utility/logging/analysisTrace';
+import { AnalysisScheduler, type AnalysisRequest, type AnalysisPriority } from './utility/analysisScheduler';
+import type { AnalysisExecutor, AnalysisSourceSnapshot } from './utility/analysisExecutor';
+import { AnalysisSnapshotCollector, StaleAnalysisSnapshotError } from './utility/analysisSnapshotCollector';
+import { LocalAnalysisExecutor } from './utility/localAnalysisExecutor';
 import { SourceOffset, mapToOriginalLocation, containsSourceOffset } from './core/sourceOffset';
 import { createSignatureHelp } from './lsp/createSignatureHelp';
 import { definitionNavigationContext, matchesDefinitionTarget } from './lsp/definitionNavigationContext';
@@ -110,6 +114,31 @@ const settingsManager = new SettingsManager(connection);
 
 const documents = new TextDocuments(TextDocument);
 const documentRegistry = new DocumentRegistry(documents);
+const analysisScheduler = new AnalysisScheduler(
+  validateAndPublish,
+  request => documentRegistry.isCurrentAnalysis(request.rootUri, request.requestId),
+  (error, request) => {
+    analysisTrace.event('analysis.schedulerError', {
+      uri: request.rootUri, requestId: request.requestId, error: String(error)
+    });
+    logger.error(`Analysis scheduler failed for ${request.rootUri}: ${String(error)}`);
+  }
+);
+/** Debounce only typing, never folder scans, configuration or disk watches. */
+const interactiveEditDebounceMs = 200;
+
+/** DocumentRegistry remains the single authority for request invalidation. */
+function queueAnalysis(
+  rootUri: string, trigger: string, priority: AnalysisPriority, debounceMs = 0
+): void {
+  const requestId = documentRegistry.beginAnalysis(rootUri);
+  const state = analysisScheduler.enqueue({ rootUri, requestId, trigger, priority }, debounceMs);
+  analysisTrace.event('analysis.queued', {
+    trigger, uri: rootUri, requestId, priority: state.effectivePriority,
+    debounceMs, replaced: state.replaced, pendingCount: state.pendingCount
+  });
+}
+
 const diagnosticPublicationManager = new DiagnosticPublicationManager(
   (uri, diagnostics) => connection.sendDiagnostics({ uri, diagnostics })
 );
@@ -147,6 +176,10 @@ const validator = new Validator(
   documentRegistry,
   logger
 );
+const analysisExecutor: AnalysisExecutor = new LocalAnalysisExecutor(
+  (document, settings, includes) => validator.analyze(document, settings, includes)
+);
+const analysisSnapshotCollector = new AnalysisSnapshotCollector(documentRegistry, logger);
 
 let clientSupportsSemanticTokenRefresh = false;
 let clientSupportsDynamicFileWatches = false;
@@ -768,21 +801,27 @@ connection.languages.semanticTokens.on(async (params) => {
 // Events & Start
 // ------------------------------
 
-async function validateAndPublish(document: TextDocument, trigger: string): Promise<void> {
-  const requestId = documentRegistry.beginAnalysis(document.uri);
+async function validateAndPublish(request: AnalysisRequest): Promise<void> {
+  const { rootUri, requestId, trigger } = request;
+  // Resolve the freshest editor/disk snapshot only when this job starts.
+  const document = documentRegistry.get(rootUri);
+  if (!document) {
+    analysisTrace.event('analysis.skipped', { trigger, uri: rootUri, requestId, reason: 'sourceMissing' });
+    return;
+  }
   const pass = (analysisPassByUri.get(document.uri) ?? 0) + 1;
   analysisPassByUri.set(document.uri, pass);
   const startedAt = analysisTrace.now();
   try {
-    const snapshot = TextDocument.create(
-      document.uri,
-      document.languageId,
-      document.version,
-      document.getText()
-    );
+    const snapshot: AnalysisSourceSnapshot = {
+      uri: document.uri,
+      languageId: document.languageId,
+      version: document.version,
+      text: document.getText()
+    };
     analysisTrace.event('analysis.begin', {
       trigger, uri: snapshot.uri, requestId, pass,
-      version: snapshot.version, textLength: snapshot.getText().length
+      version: snapshot.version, textLength: snapshot.text.length
     });
     const settings = await settingsManager.getDocumentSettings(snapshot.uri);
     if (!documentRegistry.isCurrentAnalysis(snapshot.uri, requestId)) {
@@ -793,16 +832,44 @@ async function validateAndPublish(document: TextDocument, trigger: string): Prom
       return;
     }
 
+    const settingsWaitMs = Math.round(analysisTrace.now() - startedAt);
+    const settingsSnapshot = { ...settings, macros: { ...settings.macros } };
+    const captureStartedAt = analysisTrace.now();
+    // The real preprocessor discovers all executed lookups before the executor
+    // starts. A worker must never have to consult the live DocumentRegistry.
+    const includeSnapshots = analysisSnapshotCollector.collect(snapshot, settingsSnapshot);
+    const snapshotCaptureMs = Math.round(analysisTrace.now() - captureStartedAt);
+    const changedBefore = analysisSnapshotCollector.changedSources(snapshot, includeSnapshots);
+    analysisTrace.event('analysis.capture', {
+      trigger, uri: snapshot.uri, requestId, pass,
+      snapshotCaptureMs,
+      capturedSources: includeSnapshots.sources.length,
+      capturedResolutions: includeSnapshots.resolutions.length,
+      changedSources: changedBefore
+    });
+    if (changedBefore.length > 0) {
+      analysisTrace.event('analysis.discard', {
+        trigger, uri: snapshot.uri, requestId, pass, stage: 'afterCapture',
+        changedSources: changedBefore,
+        elapsedMs: Math.round(analysisTrace.now() - startedAt)
+      });
+      retryStaleSnapshot(snapshot.uri, requestId, changedBefore);
+      return;
+    }
+
     analysisTrace.event('analysis.execute', {
       trigger, uri: snapshot.uri, requestId, pass,
-      settingsWaitMs: Math.round(analysisTrace.now() - startedAt)
+      settingsWaitMs, snapshotCaptureMs
     });
     const analysisStartedAt = analysisTrace.now();
-    // Validator.analyze is currently declared async, but does its heavy work
-    // synchronously before returning the Promise. Awaiting that Promise may
-    // defer this continuation until ALL queued validators have run. Measure
-    // the synchronous call separately from that scheduling delay.
-    const validation = validator.analyze(snapshot, settings);
+    // The current local executor invokes Validator.analyze synchronously
+    // before returning its Promise. A future worker executor will instead
+    // spend this time dispatching the job; publication rules stay here.
+    const validation = analysisExecutor.execute({
+      source: snapshot,
+      settings: settingsSnapshot,
+      includeSnapshots
+    });
     const validatorSyncMs = Math.round(analysisTrace.now() - analysisStartedAt);
     const result = await validation;
     const analysisWallMs = Math.round(analysisTrace.now() - analysisStartedAt);
@@ -821,13 +888,24 @@ async function validateAndPublish(document: TextDocument, trigger: string): Prom
       });
       return;
     }
+    const changedAfter = analysisSnapshotCollector.changedSources(snapshot, includeSnapshots);
+    if (changedAfter.length > 0) {
+      analysisTrace.event('analysis.discard', {
+        trigger, uri: snapshot.uri, requestId, pass, stage: 'afterSnapshotValidation',
+        changedSources: changedAfter,
+        snapshotCaptureMs, validatorSyncMs, validatorAwaitMs, analysisWallMs,
+        elapsedMs: Math.round(analysisTrace.now() - startedAt)
+      });
+      retryStaleSnapshot(snapshot.uri, requestId, changedAfter);
+      return;
+    }
 
     const previousIncludes = documentRegistry.getIncludedSourcesOfUnit(snapshot.uri);
     documentRegistry.setAnalysisResult(snapshot.uri, snapshot.version, result);
     publishIncludeWatchSnapshot();
     analysisTrace.event('analysis.commit', {
       trigger, uri: snapshot.uri, requestId, pass, version: snapshot.version,
-      validatorSyncMs, validatorAwaitMs, analysisWallMs,
+      snapshotCaptureMs, validatorSyncMs, validatorAwaitMs, analysisWallMs,
       elapsedMs: Math.round(analysisTrace.now() - startedAt),
       includesBefore: previousIncludes.length,
       includesAfter: result.includedSourceUris?.length ?? 0,
@@ -859,6 +937,15 @@ async function validateAndPublish(document: TextDocument, trigger: string): Prom
       foldingRangeRefresh.schedule();
     }
   } catch (err) {
+    if (err instanceof StaleAnalysisSnapshotError) {
+      analysisTrace.event('analysis.discard', {
+        trigger, uri: document.uri, requestId, pass, stage: 'duringCapture',
+        changedSources: err.changedUris,
+        elapsedMs: Math.round(analysisTrace.now() - startedAt)
+      });
+      retryStaleSnapshot(document.uri, requestId, err.changedUris);
+      return;
+    }
     analysisTrace.event('analysis.error', {
       trigger, uri: document.uri, requestId, pass,
       elapsedMs: Math.round(analysisTrace.now() - startedAt), error: String(err)
@@ -869,6 +956,25 @@ async function validateAndPublish(document: TextDocument, trigger: string): Prom
     } else {
         logger.error(`Validation error in ${document.uri}: ${String(err)}`);
     }
+  }
+}
+
+/**
+ * A source changed while the closed-world input was being collected or used.
+ * Let DocumentRegistry invalidate the affected owners, then schedule fresh
+ * requests. Never publish a result based on an inconsistent input set.
+ */
+function retryStaleSnapshot(rootUri: string, requestId: number, changedUris: readonly string[]): void {
+  if (!documentRegistry.isCurrentAnalysis(rootUri, requestId)) return;
+  const affected = new Set<string>();
+  for (const uri of changedUris) {
+    for (const unitUri of documentRegistry.invalidateUri(uri)) affected.add(unitUri);
+  }
+  if (!affected.has(rootUri)) {
+    for (const unitUri of documentRegistry.invalidateUri(rootUri)) affected.add(unitUri);
+  }
+  for (const unitUri of affected) {
+    queueAnalysis(unitUri, 'snapshot:sourceChanged', 'interactive');
   }
 }
 
@@ -890,6 +996,7 @@ function refreshFolderTranslationUnits(reason: string): void {
   });
   for (const uri of changes.removed) {
     if (!documents.get(uri)) {
+      analysisScheduler.cancel(uri);
       documentRegistry.closeTranslationUnit(uri);
       diagnosticPublicationManager.removeUnit(uri);
       publishIncludeWatchSnapshot();
@@ -898,8 +1005,9 @@ function refreshFolderTranslationUnits(reason: string): void {
   const activeRoots = new Set(documentRegistry.getActiveTranslationUnits());
   for (const uri of changes.added) {
     if (activeRoots.has(uri)) continue;
-    const document = documentRegistry.get(uri);
-    if (document) void validateAndPublish(document, trigger);
+    if (documentRegistry.get(uri)) {
+      queueAnalysis(uri, trigger, documents.get(uri) ? 'interactive' : 'background');
+    }
   }
 }
 
@@ -925,7 +1033,8 @@ function revalidateChangedSource(
   if (affectedRoots.length === 0 && fallback) {
     if (folderTranslationUnits.shouldAnalyzeAsRoot(uri)) {
       // Preserve the existing Open File workflow (no workspace folder).
-      void validateAndPublish(fallback, trigger);
+      queueAnalysis(uri, trigger, 'interactive',
+        reason === 'didChangeContent' ? interactiveEditDebounceMs : 0);
     } else {
       // An include without a known parent has no syntactic context yet.
       logger.debug(`No including translation unit available for ${uri}`);
@@ -933,8 +1042,12 @@ function revalidateChangedSource(
     return;
   }
   for (const rootUri of affectedRoots) {
-    const root = documentRegistry.get(rootUri);
-    if (root) void validateAndPublish(root, trigger);
+    if (documentRegistry.get(rootUri)) {
+      queueAnalysis(rootUri, trigger,
+        reason === 'didOpen' || reason === 'didChangeContent' ? 'interactive'
+          : documents.get(rootUri) ? 'interactive' : 'background',
+        reason === 'didChangeContent' ? interactiveEditDebounceMs : 0);
+    }
   }
 }
 
@@ -1001,6 +1114,7 @@ documents.onDidClose((event) => {
   // Discovered folder units remain active even without an editor tab.
   // Include files never own an analysis of their own in folder mode.
   if (!folderTranslationUnits.hasRoot(uri)) {
+    analysisScheduler.cancel(uri);
     documentRegistry.closeTranslationUnit(uri);
     diagnosticPublicationManager.removeUnit(uri);
     publishIncludeWatchSnapshot();
@@ -1008,8 +1122,9 @@ documents.onDidClose((event) => {
   // The included source now comes from disk, not the editor buffer.
   for (const rootUri of affectedRoots) {
     if (rootUri === uri && !folderTranslationUnits.hasRoot(uri)) continue;
-    const root = documentRegistry.get(rootUri);
-    if (root) void validateAndPublish(root, trigger);
+    if (documentRegistry.get(rootUri)) {
+      queueAnalysis(rootUri, trigger, documents.get(rootUri) ? 'interactive' : 'background');
+    }
   }
 });
 
@@ -1028,8 +1143,9 @@ connection.onDidChangeWatchedFiles((event) => {
     trigger, rootCount: roots.size, rootUris: [...roots]
   });
   for (const rootUri of roots) {
-    const root = documentRegistry.get(rootUri);
-    if (root) void validateAndPublish(root, trigger);
+    if (documentRegistry.get(rootUri)) {
+      queueAnalysis(rootUri, trigger, documents.get(rootUri) ? 'interactive' : 'background');
+    }
   }
 });
 
@@ -1042,12 +1158,14 @@ connection.onDidChangeConfiguration((event) => {
     trigger, rootCount: roots.length, rootUris: roots
   });
   for (const rootUri of roots) {
-    const root = documentRegistry.get(rootUri);
-    if (root) void validateAndPublish(root, trigger);
+    if (documentRegistry.get(rootUri)) {
+      queueAnalysis(rootUri, trigger, documents.get(rootUri) ? 'interactive' : 'background');
+    }
   }
 });
 
 connection.onShutdown(() => {
+  analysisScheduler.dispose();
   codeLensRefresh.dispose();
   foldingRangeRefresh.dispose();
 });

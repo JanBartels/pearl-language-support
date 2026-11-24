@@ -818,13 +818,13 @@ export class Preprocessor {
         directiveLocation: Location
     ): void {
 
-        const document = this.context.documentRegistry.resolveInclude(
+        const document = this.context.includeSourceResolver.resolveInclude(
             this.source.uri, includePath
         );
         // Executed includes remain filesystem dependencies when their targets
         // disappear. Use the resolved document when available; for a failed
         // resolution retain the attempted physical path for create events.
-        const watchUri = document?.uri ?? this.context.documentRegistry.resolveIncludeUri?.(
+        const watchUri = document?.uri ?? this.context.includeSourceResolver.resolveIncludeUri?.(
             this.source.uri, includePath
         );
         if (watchUri) this.context.watchedIncludeUris.add(watchUri);
@@ -857,7 +857,7 @@ export class Preprocessor {
             }
         ];
         const start = this.textOutput.length;
-        const fileSource = FileSource.fromDocument(document);
+        const fileSource = new FileSource(document.uri, document.getText());
         const lexer = new Lexer(fileSource, this.problems, this.logger);
         const tokens = lexer.tokenize();
         const child = new Preprocessor(

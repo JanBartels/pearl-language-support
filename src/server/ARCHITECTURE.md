@@ -1739,6 +1739,196 @@ Referenzimplementierungen:
 
 ---
 
+## Analyseplanung der Übersetzungseinheiten (AnalysisScheduler)
+
+Der LSP besitzt einen zentralen `AnalysisScheduler` für vollständige
+Übersetzungseinheiten. Die Ausführung eines Auftrags wird über eine
+`AnalysisRequest` beschrieben (Hauptdatei-URI, Anforderungskennung, Auslöser,
+Priorität). **Die `DocumentRegistry` bleibt alleinige Instanz für aktive
+Übersetzungseinheiten, Include-Abhängigkeiten, Dokumentversionen und
+Gültigkeit von Analyseergebnissen.** Der Scheduler speichert lediglich noch
+nicht ausgeführte Aufträge, keine ASTs oder Compilerergebnisse.
+
+- Jede Anforderung wird **vor dem Einreihen** durch
+  `DocumentRegistry.beginAnalysis()` gekennzeichnet. So kann ein neuer Auftrag
+  auch eine bereits gestartete, aber noch nicht übernommene Analyse überholen.
+  `isCurrentAnalysis()` bleibt die maßgebliche Prüfung vor der Ausführung und
+  vor der Ergebnisübernahme.
+- Für eine Hauptdatei existiert höchstens **ein ausstehender Auftrag**.
+  Spätere Anforderungen ersetzen die ältere Warteschlangenposition; die
+  höchste vorhandene Priorität (`interactive` vor `background`) bleibt erhalten.
+  Eine bereits laufende synchrone Analyse lässt sich dadurch nicht abbrechen.
+- Änderungen während der Eingabe werden mit einer kurzen, nachlaufenden
+  Wartezeit gebündelt (derzeit 200 ms). Die Invalidierung betroffener Analysen
+  erfolgt dagegen **sofort** und niemals erst nach Ablauf des Debounce-Timers.
+  Workspace-Scans, Dateiwächter und Konfigurationsänderungen erzeugen selbst
+  keinen neuen Eingabe-Timer. Steht für dieselbe Hauptdatei bereits ein
+  interaktiver Auftrag an, kann dessen Debounce-Fenster erhalten bleiben.
+- Interaktive Aufträge werden vor Hintergrundaufträgen ausgeführt. Ein
+  interaktiver Auftrag in seiner Debounce-Phase verhindert, dass unmittelbar
+  vorher ein möglicherweise lang laufender Hintergrundauftrag beginnt.
+- Der Scheduler führt derzeit **höchstens einen Analyseauftrag zur gleichen
+  Zeit** aus und gibt zwischen Übersetzungseinheiten an den Node.js-Event-Loop
+  zurück. Der lokale Executor führt `Validator.analyze()` weiterhin im
+  Hauptthread aus. Innerhalb dieses synchronen CPU-Anteils bleibt der
+  Hauptthread blockiert. Echte CPU-Parallelität und die sofortige Bearbeitung
+  von CodeLens-Anfragen während eines Validatorlaufs sind damit noch nicht
+  erreicht.
+- Beim Schließen oder Entfernen einer Übersetzungseinheit werden ausstehende
+  Aufträge entfernt; eine bereits laufende Analyse wird zusätzlich über die
+  Anforderungskennung bei der Ergebnisübernahme abgewiesen.
+
+Die Ausführung wird über einen `AnalysisExecutor` vom Scheduling getrennt.
+Weder Executor noch Scheduler dürfen eigene semantische Analyseergebnisse
+verwalten oder den Präprozessor und Includedateien als selbständige
+Übersetzungseinheiten neu interpretieren. Ein Worker-Executor darf diese
+Abstraktion später ergänzen.
+
+Referenzimplementierungen:
+- `/src/server/utility/analysisScheduler.ts`
+- `/src/server/utility/analysisExecutor.ts`
+- `/src/server/utility/localAnalysisExecutor.ts`
+- `/src/server/utility/documentRegistry.ts`
+- `/src/server/server.ts`
+
+---
+
+## Ausführung der Analyse (AnalysisExecutor)
+
+Die **Analyseplanung** (`AnalysisScheduler`) und die **Durchführung der
+Compilerpipeline** (`AnalysisExecutor`) haben unterschiedliche Aufgaben:
+
+- Der Scheduler hält nur ausstehende `AnalysisRequest`s vor und bestimmt ihre
+  Reihenfolge. Er kennt keine Compilerinstanz, Source-Mappings oder ASTs.
+- `server.ts` ermittelt **erst beim Start des Auftrags** den aktuellen Snapshot
+  der PEARL-Hauptdatei und die zugehörigen Einstellungen. Die
+  `AnalysisExecutionInput` enthält URI, Sprachkennung, Version und vollständigen
+  Text der Hauptdatei sowie eine Kopie der Einstellungen einschließlich der
+  Makrodefinitionen. Die ursprüngliche `AnalysisRequest` mit `requestId`
+  verbleibt in der LSP-Orchestrierung.
+- `LocalAnalysisExecutor` erstellt aus diesem Snapshot ein `TextDocument`
+  und delegiert an die bestehende `Validator.analyze()`-Pipeline. Er verwaltet
+  weder `DocumentRegistry` noch Diagnosen oder LSP-Anfragen. Die bestehende
+  Validatorinstanz verwendet für die Include-Auflösung weiterhin die vom LSP
+  bereitgestellte `DocumentRegistry`.
+- Der Executor liefert ein `AnalysisResult`, **ohne es selbst zu registrieren**.
+  Ausschließlich `server.ts` prüft nach der Rückkehr Dokumentversion und
+  `DocumentRegistry.isCurrentAnalysis()`, übernimmt gültige Ergebnisse in die
+  Registry und stößt Diagnoseveröffentlichung sowie LSP-Refreshes an.
+- Die lokale Ausführung bewahrt das bisherige Zeitverhalten: Der CPU-intensive
+  Teil von `Validator.analyze()` beginnt bereits beim Executor-Aufruf. Der
+  Executor führt derzeit keine Hintergrundarbeit aus und erzeugt keine
+  zusätzlichen nebenläufigen Analysen.
+
+Der Hauptdatei-Snapshot ist **noch kein vollständiger Snapshot der
+Übersetzungseinheit**: Der Präprozessor kann verschachtelte Includes auflösen,
+auch aus ungespeicherten Editordokumenten. Bevor ein Worker-Executor eingeführt
+werden kann, muss ein konsistentes, vom LSP-Lebenszyklus unabhängiges Modell für
+alle hierfür benötigten Quelltexte geschaffen werden. Auch `AnalysisResult`
+ist ein klassenbasiertes Objekt mit AST, `Source`, `SourceValue` und weiteren
+Indizes; die Übertragung über Threadgrenzen muss vorab explizit definiert
+werden. Eine stillschweigende `structuredClone()`-Übertragung ist **keine**
+Architekturentscheidung.
+
+Referenzimplementierungen:
+- `/src/server/utility/analysisExecutor.ts`
+- `/src/server/utility/localAnalysisExecutor.ts`
+- `/src/server/server.ts`
+
+---
+
+## Quelltextzugang und Snapshot-Vertrag (Vorbereitung für Worker)
+
+Der Präprozessor hängt für `#include` nicht mehr vom konkreten
+`DocumentRegistry`-Typ ab, sondern vom kleinen, **nur lesenden**
+`IncludeSourceResolver`. Er benötigt ausschließlich `resolveInclude()` und
+(optional für ältere Testdoubles) `resolveIncludeUri()`. Der lokale
+`DocumentRegistry` erfüllt diesen Vertrag strukturell und bleibt für die
+Editor-/Dateisystemauflösung sowie Cache-Invalidierung zuständig. Im
+Präprozessor werden keine Include-Beziehungen in der Registry registriert;
+aktive Includes, fehlgeschlagene Zielpfade und wiederholte Include-Vorkommen
+werden wie bisher pro Analyselauf gesammelt und erst nach gültigem Abschluss
+in `DocumentRegistry` übernommen.
+
+Für eine spätere isolierte Ausführung sind datenbasierte Verträge definiert:
+
+- `AnalysisSourceSnapshot` enthält physische URI, Sprachkennung, Version und
+  den vollständigen Text. `AnalysisExecutionInput.source` ist weiterhin der
+  Snapshot der Hauptdatei.
+- `AnalysisIncludeSourceSnapshotSet` umfasst die erfassten weiteren
+  physischen Quellen und `AnalysisIncludeResolutionSnapshot`-Einträge.
+  Ein Lookup-Schlüssel besteht aus **URI der jeweils inkludierenden Datei und
+  bereits makroexpandiertem Include-Pfad**; das Ergebnis enthält die Ziel-URI
+  und den Status `found`. Auch fehlende Dateien behalten so ihren Zielpfad
+  für File-Watches. Gleiche physische URIs dürfen innerhalb eines Laufs nicht
+  mit widersprüchlichen Inhalten oder Versionen auftreten.
+- `SnapshotIncludeSourceResolver` kann diese Daten ohne Dateisystem- oder
+  Editorzugriff synchron an den unveränderten Präprozessor zurückgeben.
+  Unbekannte Lookups und unvollständige Snapshots sind **Fehler**, nicht
+  stillschweigend fehlende Includes. Der Resolver ist keine zweite Registry.
+- `AnalysisExecutionInput.includeSnapshots` ist zunächst **optional**.
+  Solange es fehlt, verwendet `LocalAnalysisExecutor` weiter den lokalen
+  `DocumentRegistry` über den Validator. Liegt es vor, übergibt der Executor
+  den Snapshot-Resolver explizit an `Validator.analyze()`.
+
+Die vollständige **Snapshot-Erfassung** erfolgt über den
+`AnalysisSnapshotCollector` mit einem aufzeichnenden `IncludeSourceResolver`:
+
+- Der Collector führt einen **regulären Lexer-/Präprozessordurchlauf** aus,
+  mit denselben vordefinierten Makros wie der Validator
+  (`createPredefinedMacroTable`). Es gibt weder einen zweiten
+  Präprozessor noch eine statische Include-Suche. Nur tatsächlich ausgeführte
+  Lookups, einschließlich verschachtelter, wiederholter und fehlgeschlagener
+  Includes, werden aufgezeichnet; inaktive `#ifdef`-Zweige erzeugen keine
+  Auflösungseinträge.
+- `SnapshotSourceProvider` ist eine ausschließlich für die **Erfassung**
+  verwendete, lesende Ergänzung des Compiler-Vertrags um URI-Lookup und
+  Dokumentversion. Der `DocumentRegistry` erfüllt sie strukturell. Eine
+  erfolgreich gelesene physische Quelle wird innerhalb eines Snapshots nur
+  einmal mit URI, Sprachkennung, Version und Text gespeichert. Widersprüche
+  bei wiederholten Zugriffen führen zu einem Abbruch des Erfassungsversuchs.
+- Unmittelbar nach der Erfassung und vor der Ergebnisübernahme vergleicht
+  `changedSources()` die gespeicherten Versionen **und vollständigen Texte**
+  mit der aktuellen Dokumentquelle. Bei diskbasierten Dateien genügt Version
+  `0` nicht. Auch verschwundene und neu entstandene Include-Ziele sowie
+  geänderte Pfadauflösungen werden geprüft.
+- `server.ts` startet `LocalAnalysisExecutor` jetzt mit den aufgezeichneten
+  `includeSnapshots`. Nur dort entscheidet die Orchestrierung, ob ein
+  Ergebnis gültig ist. Bei veränderten Quellen invalidiert sie über die
+  `DocumentRegistry` und stellt neue Scheduler-Aufträge ein. Scheduler,
+  Executor und Collector besitzen **keine zweite Ergebnisverwaltung**.
+- Der Snapshot-Resolver gibt gespeicherte Quellen unverändert an den
+  Präprozessor zurück. Wiederholte Include-Ausführungen behalten ihre
+  unterschiedlichen `IncludeOccurrence`s und Source-Mappings. Unbekannte
+  Lookups bleiben harte Fehler statt fiktiv fehlender Dateien.
+
+Der lokale Pfad führt damit den Präprozessor zunächst zur **Erfassung** und
+anschließend in der vollständigen Compilerpipeline noch einmal aus. Dieser
+zusätzliche synchrone Aufwand ist vorerst bewusst akzeptiert, wird im
+AnalysisTrace als `snapshotCaptureMs` gesondert ausgewiesen und ersetzt noch
+**keine Worker-Isolation**. Insbesondere bleibt die Event-Loop während des
+Erfassungsdurchlaufs blockiert. Die getrennte Executor-Schnittstelle ermöglicht
+später den Austausch gegen eine Worker-Ausführung, ohne diese Zuständigkeiten
+oder die Compilerpipeline zu verschieben.
+
+Der Snapshot-Vertrag beschreibt **Eingaben**, nicht den Rücktransport von
+`AnalysisResult`, AST, `FileSource`, `ExpandedSource` und `SourceValue`; hierfür
+ist vor Einführung von Worker-Threads eine weitere explizite Entscheidung
+notwendig. Die Source-Mapping-Semantik der Compilerpipeline bleibt unverändert.
+
+Referenzimplementierungen:
+- `/src/server/preproc/includeSourceResolver.ts`
+- `/src/server/preproc/preprocessorContext.ts`
+- `/src/server/utility/analysisSourceSnapshot.ts`
+- `/src/server/utility/snapshotIncludeSourceResolver.ts`
+- `/src/server/utility/analysisSnapshotCollector.ts`
+- `/src/server/preproc/createPredefinedMacroTable.ts`
+- `/src/server/utility/analysisExecutor.ts`
+- `/src/server/utility/localAnalysisExecutor.ts`
+- `/src/server/validation/validator.ts`
+
+---
+
 ## Include-Abhängigkeiten und Gültigkeit der Analyse
 
 Die aktive Include-Menge wird vom Präprozessor **für den jeweiligen
