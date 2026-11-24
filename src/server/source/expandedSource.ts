@@ -25,6 +25,25 @@ export class ExpandedSource implements Source {
         this._text = this.fragments.map(fragment => fragment.text).join('');
     }
 
+    /**
+     * Infrastructure access for explicit Source-graph transport. The original
+     * objects remain owned by this source; callers receive a read-only copy.
+     */
+    get rootSource(): Source {
+        return this.root;
+    }
+
+    get originalFragments(): readonly ExpandedFragment[] {
+        return this.fragments.map(fragment => ({
+            text: fragment.text,
+            mapping: fragment.mapping,
+            origin: {
+                source: fragment.origin.source,
+                span: { ...fragment.origin.span }
+            }
+        }));
+    }
+
     get uri(): string {
         return this.root.uri;
     }

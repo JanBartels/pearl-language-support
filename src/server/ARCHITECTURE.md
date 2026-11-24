@@ -1911,10 +1911,12 @@ Erfassungsdurchlaufs blockiert. Die getrennte Executor-Schnittstelle ermöglicht
 später den Austausch gegen eine Worker-Ausführung, ohne diese Zuständigkeiten
 oder die Compilerpipeline zu verschieben.
 
-Der Snapshot-Vertrag beschreibt **Eingaben**, nicht den Rücktransport von
-`AnalysisResult`, AST, `FileSource`, `ExpandedSource` und `SourceValue`; hierfür
-ist vor Einführung von Worker-Threads eine weitere explizite Entscheidung
-notwendig. Die Source-Mapping-Semantik der Compilerpipeline bleibt unverändert.
+Der Snapshot-Vertrag beschreibt **Eingaben**, nicht den vollständigen
+Rücktransport von `AnalysisResult`. Eine erste, getrennte Transportschicht
+für `Source`, `SourceValue`, AST und `SemanticContext` ist unten dokumentiert.
+Der vollständige `AnalysisResult`-Transport muss vor Einführung von Worker-Threads
+noch ergänzt und integriert werden.
+Die Source-Mapping-Semantik der Compilerpipeline bleibt unverändert.
 
 Referenzimplementierungen:
 - `/src/server/preproc/includeSourceResolver.ts`
@@ -1926,6 +1928,164 @@ Referenzimplementierungen:
 - `/src/server/utility/analysisExecutor.ts`
 - `/src/server/utility/localAnalysisExecutor.ts`
 - `/src/server/validation/validator.ts`
+
+---
+
+## Rücktransport von Analyseergebnissen: Identitätsgraph (Worker-Vorbereitung)
+
+`AnalysisResult` darf **nicht** als gewöhnliches Objekt per `structuredClone()`
+oder `postMessage()` in die `DocumentRegistry` übernommen werden. Der
+Compiler liefert aktive Klassenobjekte und Identitätsbeziehungen:
+
+- `AnalysisResult` enthält `Analysis`, `ProblemCollection`, Makro- und
+  Include-Metadaten sowie die `files`-Map. Der Hauptthread verwendet u. a.
+  `hasErrors()`, `getFile()`, `lookupMacro()` und die Methoden der untergeordneten
+  Objekte.
+- AST-Knoten sind konkrete `AstNode`-Unterklassen. `parent`,
+  `lookupSourceValue()`, `documentationProvider()` und Folding-Methoden
+  müssen erhalten bleiben. Die Knotenidentität wird auch in semantischen
+  Maps verwendet.
+- `SemanticContext.bindings`, `expressionTypes`, weitere semantische Maps,
+  `SymbolReferenceResolutionIndex` und `SymbolOccurrenceIndex` referenzieren
+  **konkrete** `AstNode`-/`SourceValue`-/Symbolinstanzen, nicht bloß deren
+  Namen oder physische Offsets. Wiederholte Makro- und Include-Ausführungen
+  können dieselbe physische Position besitzen, aber unterschiedliche
+  lexikalische Identitäten darstellen.
+- `Location.source` referenziert eine konkrete `Source`-Instanz. Eine
+  `ExpandedSource` enthält Fragmente mit eigenen Ursprungsquellen,
+  `MacroSource` einen Aufruf-Anker; `mapLocation()` und `mapLocations()` müssen
+  transitive Herkunft und Objektidentität erhalten. **URI ist kein
+  Objektidentifikator**: wiederholt inkludierte Dateien können mehrere
+  `FileSource`-Instanzen mit gleicher URI erzeugen.
+- Einige Indizes (`Analysis.callSignatures`, `Analysis.callSignatureHelp`,
+  `Analysis.blockComments`) werden absichtlich **lazy** aus AST und Semantik
+  erzeugt. Diese Caches sind keine primären Compilerergebnisse.
+
+### Expliziter Transport statt generischem Prototype-Patching
+
+Der Rücktransport wird **schrittweise als versionierter, datenbasierter
+Identitätsgraph** definiert. Auf dem Draht werden Referenzen durch lokale IDs
+beschrieben; auf der Empfängerseite müssen die Originalklassen über ihre
+fachlichen Konstruktoren bzw. explizite Rehydrationsfabriken entstehen.
+Weder `Object.setPrototypeOf()` für beliebige geklonte Objekte noch ein
+rekursiver, reflektionsbasierter Serializer für alle Compilerklassen ist
+zulässig. Der Transport gehört ausschließlich zur technischen
+Compiler-/Worker-Grenze; er darf weder den AST noch LSP-Provider um zusätzliche
+Persistenzzustände erweitern.
+
+**Erste implementierte Schicht:**
+
+- `SourceGraphWire` (Version 1) kodiert ausschließlich `FileSource`,
+  `MacroSource`, `ExpandedSource` und deren Ursprungsfragmente. Quellinstanzen
+  besitzen pro Nachricht eine eigene numerische ID. `SourceGraphEncoder`
+  wird für alle von einem Ergebnis referenzierten Quellen **gemeinsam**
+  verwendet; sonst würden identische Objekte getrennt wiederhergestellt.
+- `SourceLocationWire` speichert Quell-ID und Start-/End-Offset. Der Decoder
+  erzeugt echte Source-Klassen, prüft unbekannte/zyklische Referenzen,
+  ungültige Bereiche und inkonsistente direkte Fragmente. `ExpandedSource`
+  und `MacroSource` stellen hierfür ausschließlich lesende Zugriffe auf ihre
+  Ursprungsinformationen bereit; das fachliche Mapping bleibt unverändert.
+- `SourceValueGraphWire` führt ein **separates** Identitätsregister für
+  `SourceValue`. Zwei Werte mit gleichem Text und gleicher Location sind
+  nicht automatisch dieselbe Instanz. Beide Locations (`location` und
+  `lexicalLocation`) verwenden dieselben `SourceGraph`-IDs. Unterstützt
+  werden derzeit skalare Werte einschließlich als Dezimaltext kodiertem
+  `bigint`; andere Nutzlasten werden ausdrücklich abgewiesen.
+- Beide Drahtformate enthalten nur übertragbare Daten, keine Methoden oder
+  Compilerobjekte. Ihre IDs gelten nur innerhalb **eines** Transportvorgangs
+  und dürfen nicht als Cache-Schlüssel über Analysen hinweg dienen.
+
+**Zweite implementierte Schicht: AST-Knotengraph (Version 1)**
+
+- `AstGraphWire` transportiert die konkrete `AstKind`-Variante, eine pro
+  Analyse lokale Knoten-ID und ausschließlich explizit deklarierte
+  Konstruktorargumente. Die 103 aktuell vorhandenen **konkreten AST-Klassen**
+  werden über ihre Originalkonstruktoren wiederhergestellt; damit bleiben
+  `documentationProvider()`, `lookupSourceValue()`, Folding und `dumpLabel()`
+  als echte Klassenmethoden erhalten.
+- `AstGraphEncoder` verwendet denselben `SourceValueGraphEncoder`, den später
+  auch der Semantiktransport verwenden soll. `SourceValue`-Referenzen erhalten
+  also gemeinsame IDs. AST-Knoten-IDs werden für semantische Verweise zur
+  Verfügung gestellt, unabhängig von Kind, Text oder Quelltextposition.
+- Die veränderlichen AST-Bestandteile von `TranslationUnitNode`, `ModuleNode`,
+  `ProblemPartNode` und `SystemPartNode` werden gesondert erfasst und über
+  die bestehenden `addChild()`-/`adopt()`-Methoden rekonstruiert.
+  Elternzeiger entstehen über die **originalen Konstruktoren** und diese
+  bestehenden Methoden, nicht durch nachträgliches Kopieren von `parent`.
+- Verschachtelte fachliche Record- und Variantentypen (z. B.
+  `ConstantFixedFactorOperand` und `InitElementValue`) besitzen explizite
+  Drahtrepräsentationen. Der Decoder prüft Version, Feldanzahl,
+  Referenz-IDs und Zyklen. Nicht unterstützte `AstKind`-Werte werden
+  ausdrücklich abgewiesen.
+- Die expliziten Klassenzweige in `astGraphTransport.ts` werden durch
+  `utility/transport/tools/generateAstGraphTransport.cjs` **nur zur
+  Entwicklungszeit** aus den AST-Konstruktorsignaturen erzeugt. Der Generator
+  prüft neue Instanzfelder auf Abdeckung. Im laufenden LSP findet weder
+  Typreflexion noch generische Klassenserialisierung statt. Bei Änderungen
+  an den AST-Klassen muss der Transport regeneriert und getestet werden.
+
+**Dritte implementierte Schicht: Semantischer Identitätsgraph (Version 1)**
+
+- `SemanticGraphWire` kombiniert einen `AstGraphWire` mit eigenen ID-Tabellen
+  für `SemanticSymbol`, `SemanticType` und `SymbolReference`. Symbolnamen,
+  Definitionen, Strukturkomponenten und AST-Referenzen verwenden **dieselben**
+  `SourceValue`- und AST-IDs wie der Syntaxbaum. Gleich geschriebene Namen
+  an derselben physischen Position bleiben unterschiedliche Objekte.
+- Die konkreten `SymbolKind`- und `SemanticTypeKind`-Varianten werden mit
+  ausdrücklich beschriebenen Feldern übertragen. Benannte und rekursive
+  Typbeziehungen, Strukturkomponenten, Array-Grenzen, `REF`-Invarianz und
+  Prozedursignaturen bleiben erhalten. Der Encoder weist neue, noch nicht
+  erfasste Felder an Symbolen und Typen ausdrücklich zurück; eine Erweiterung
+  der Fachmodelle erfordert daher eine Anpassung des Transportvertrags.
+  Symbole und semantische Typen sind
+  fachlich reine Datenobjekte: Ihre Identität wird beim Dekodieren durch
+  **einmalig angelegte Datensätze**, nicht durch Klassen-Prototyp-Patching,
+  erhalten. Die `SemanticContext`-Klasse selbst wird regulär konstruiert.
+- `SemanticContextWire` enthält Bindungen, Typdefinitionen, Ausdruckstypen,
+  Konstanten/Initialisierungen, Konfigurationen, semantische Diagnosen,
+  lokale SPC-Relationen, Builtin-Bindungen, Schutzinformationen und
+  Verwendungsinformationen. `bigint` wird als validierter Dezimaltext
+  übertragen. Built-ins werden anhand ihres Namens **aus dem bestehenden
+  RTOS-UH-Katalog** rekonstruiert; unbekannte Einträge sind Fehler.
+- Wahlweise enthält der Transport die Primärdaten von
+  `SymbolReferenceIndex` und `SymbolReferenceResolutionIndex`. Die Klassen
+  werden über ihre **vorhandenen Konstruktoren** rekonstruiert.
+  `SymbolOccurrenceIndex` wird daraus und aus dem `SemanticContext` neu
+  berechnet, statt dessen private Lookup-Caches zu übertragen.
+  `SymbolUsageIndex` erhält dasselbe Referenz-ID-Register, damit die
+  referenzierten Vorkommen in allen Indizes dieselben Instanzen sind.
+- Der Transport bleibt **außerhalb** des laufenden LSP-Pfads. Weder
+  Compilerobjekte noch LSP-Provider werden zur Serialisierung verändert.
+
+**Noch nicht implementiert und vor Einführung eines WorkerExecutor nötig:**
+
+1. Die übrigen Teile von `AnalysisResult` (Probleme, Tokens, Makrometadaten,
+   Präprozessorbedingungen, Include-Vorkommen und Source-Highlights) unter
+   demselben Versionsvertrag ergänzen. Erst ein vollständiger
+   Roundtrip-Test gegen echte Validatorergebnisse inklusive Hover,
+   Definition/References, Folding, Semantic Tokens, Signature Help und
+   Diagnoseabbildung erlaubt die Ergebnisübernahme in `DocumentRegistry`.
+2. `WorkerExecutor` darf nur **vollständig rehydrierte** `AnalysisResult`s
+   zurückgeben. Scheduler, SnapshotCollector und `DocumentRegistry` bleiben
+   für Planung, Eingabesnapshot bzw. Gültigkeitsprüfung zuständig; der Worker
+   publiziert keine LSP-Diagnosen und verwaltet keine Include-Kontexte.
+
+Die Transportobjekte sind **keine neuen fachlichen Compilerrepräsentationen**.
+Die lokale Analyse bleibt auf dem bisherigen Live-Objektpfad, solange der
+vollständige Rücktransport noch nicht implementiert und getestet ist.
+
+Referenzimplementierungen:
+- `/src/server/utility/transport/sourceGraphTransport.ts`
+- `/src/server/utility/transport/sourceValueGraphTransport.ts`
+- `/src/server/utility/transport/astGraphTransport.ts`
+- `/src/server/utility/transport/semanticGraphTransport.ts`
+- `/src/server/utility/transport/tools/generateAstGraphTransport.cjs`
+- `/src/server/source/fileSource.ts`
+- `/src/server/source/expandedSource.ts`
+- `/src/server/source/macroSource.ts`
+- `/src/server/core/sourceValue.ts`
+- `/src/server/validation/analysis.ts`
+- `/src/server/validation/analysisResult.ts`
 
 ---
 

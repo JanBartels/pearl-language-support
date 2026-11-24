@@ -14,6 +14,14 @@ export class MacroSource implements Source {
     ) {
     }
 
+    /** Origin anchor retained by the source graph transfer boundary. */
+    get expansionLocation(): Location {
+        return {
+            source: this.expansion.source,
+            span: { ...this.expansion.span }
+        };
+    }
+
     get uri(): string {
         return this.expansion.source.uri;
     }
