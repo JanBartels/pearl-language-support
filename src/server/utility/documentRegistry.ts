@@ -18,6 +18,44 @@ export interface IncludeContextOption {
 }
 
 
+/** Read-only reason why a committed parent does or does not offer a context. */
+export type IncludeContextOwnerStatus =
+    | 'available'
+    | 'watchedButNotIncluded'
+    | 'inactiveTranslationUnit'
+    | 'analysisMissing'
+    | 'sourceVersionMismatch'
+    | 'staleSourceVersions'
+    | 'analysisUnavailable';
+
+export interface IncludeContextOwnerDiagnostic {
+    readonly unitUri: string;
+    readonly status: IncludeContextOwnerStatus;
+    /** How many CodeLens options this parent currently contributes. */
+    readonly optionCount: number;
+    readonly analysisVersion?: number;
+    readonly recordedSourceVersion?: number;
+    /** Legacy analyses can have no recorded include version. */
+    readonly sourceVersionTracked?: boolean;
+    readonly staleSources?: readonly {
+        readonly uri: string;
+        readonly recordedVersion: number;
+        readonly openVersion: number;
+    }[];
+}
+
+export interface IncludeContextAvailability {
+    readonly uri: string;
+    readonly requestedVersion: number;
+    /** Last accepted, successfully executed include graph, even if invalidated. */
+    readonly includedOwnerCount: number;
+    /** Attempted include targets, also including unresolved or inactive paths. */
+    readonly watchedOwnerCount: number;
+    readonly eligibleOwnerCount: number;
+    readonly optionCount: number;
+    readonly owners: readonly IncludeContextOwnerDiagnostic[];
+}
+
 export class DocumentRegistry {
   private documents: TextDocuments<TextDocument>;
   // Filecaching anhand vom Timestamp auf der Platte
@@ -320,6 +358,66 @@ export class DocumentRegistry {
       this.analysisResults.set(uri, { version, result, sourceVersions });
   }
 
+  /**
+   * Adopt the editor version of a source without invalidating its includers
+   * only when EVERY affected committed analysis used precisely the same text.
+   *
+   * IncludeOccurrence.source is the immutable physical text actually consumed
+   * by the preprocessor, including nested and repeated includes. Comparing
+   * with the current disk cache would not establish that guarantee.
+   *
+   * A missing/stale analysis, unresolved watched include, or mixed snapshots
+   * prevents adoption; the caller must fall back to normal invalidation.
+   */
+  tryAdoptSourceDocument(document: TextDocument): number {
+      const uri = document.uri;
+      const text = document.getText();
+      const affected = new Set<string>([
+          ...(this.unitsBySource.get(uri) ?? []),
+          ...(this.unitsByWatchedInclude.get(uri) ?? [])
+      ]);
+      if (this.translationUnits.has(uri)) affected.add(uri);
+      if (affected.size === 0) return 0;
+
+      // Verify all affected units BEFORE modifying any recorded version.
+      for (const unitUri of affected) {
+          const entry = this.analysisResults.get(unitUri);
+          if (!entry || !this.translationUnits.has(unitUri)) return 0;
+
+          if (unitUri === uri) {
+              if (entry.result.rootAnalysis.source.getText() !== text) return 0;
+          } else {
+              const occurrences = entry.result.includeOccurrences.filter(
+                  occurrence => occurrence.sourceUri === uri
+              );
+              // No source snapshot means e.g. a previously missing include.
+              if (occurrences.length === 0 || occurrences.some(
+                  occurrence => !occurrence.source || occurrence.source.getText() !== text
+              )) return 0;
+          }
+
+          // Do not revalidate an otherwise stale analysis by merely opening
+          // one of its inputs. Other already-open inputs must still be fresh.
+          for (const [sourceUri, version] of entry.sourceVersions) {
+              if (sourceUri === uri) continue;
+              const open = this.documents.get(sourceUri);
+              if (open && open.version !== version) return 0;
+          }
+      }
+
+      for (const unitUri of affected) {
+          const entry = this.analysisResults.get(unitUri)!;
+          const sourceVersions = new Map(entry.sourceVersions);
+          sourceVersions.set(uri, document.version);
+          this.analysisResults.set(unitUri, {
+              version: unitUri === uri ? document.version : entry.version,
+              result: entry.result,
+              sourceVersions
+          });
+      }
+      return affected.size;
+  }
+
   /** Read-only dependency snapshot for LSP presentation refreshes. */
   getIncludedSourcesOfUnit(unitUri: string): string[] {
       return [...(this.sourcesByUnit.get(unitUri) ?? [])]
@@ -367,6 +465,77 @@ export class DocumentRegistry {
           if (this.getAnalysisResult(unitUri, entry.version)) candidates.push(unitUri);
       }
       return candidates.sort();
+  }
+
+  /**
+   * Diagnostic-only view of the exact eligibility checks performed by
+   * getIncludeContextCandidates(). Does not select a context, read the disk,
+   * invalidate anything or change analysis state. In particular, a watch edge
+   * alone is NOT proof of a successfully executed include.
+   */
+  describeIncludeContextAvailability(uri: string, version: number): IncludeContextAvailability {
+      const includedOwners = new Set(this.unitsBySource.get(uri) ?? []);
+      includedOwners.delete(uri);
+      const watchedOwners = new Set(this.unitsByWatchedInclude.get(uri) ?? []);
+      watchedOwners.delete(uri);
+      const allOwners = [...new Set([...includedOwners, ...watchedOwners])].sort();
+      const owners: IncludeContextOwnerDiagnostic[] = [];
+      let eligibleOwnerCount = 0;
+      let optionCount = 0;
+
+      for (const unitUri of allOwners) {
+          if (!includedOwners.has(unitUri)) {
+              owners.push({ unitUri, status: 'watchedButNotIncluded', optionCount: 0 });
+              continue;
+          }
+          if (!this.translationUnits.has(unitUri)) {
+              owners.push({ unitUri, status: 'inactiveTranslationUnit', optionCount: 0 });
+              continue;
+          }
+          const entry = this.analysisResults.get(unitUri);
+          if (!entry) {
+              owners.push({ unitUri, status: 'analysisMissing', optionCount: 0 });
+              continue;
+          }
+          const recorded = entry.sourceVersions.get(uri);
+          const common = {
+              unitUri,
+              optionCount: 0,
+              analysisVersion: entry.version,
+              sourceVersionTracked: recorded !== undefined,
+              ...(recorded === undefined ? {} : { recordedSourceVersion: recorded })
+          };
+          if (recorded !== undefined && recorded !== version) {
+              owners.push({ ...common, status: 'sourceVersionMismatch' });
+              continue;
+          }
+          const staleSources: { uri: string; recordedVersion: number; openVersion: number }[] = [];
+          for (const [sourceUri, recordedVersion] of entry.sourceVersions) {
+              const open = this.documents.get(sourceUri);
+              if (open && open.version !== recordedVersion) {
+                  staleSources.push({ uri: sourceUri, recordedVersion, openVersion: open.version });
+              }
+          }
+          if (staleSources.length > 0) {
+              owners.push({ ...common, status: 'staleSourceVersions', staleSources });
+              continue;
+          }
+          if (!this.getAnalysisResult(unitUri, entry.version)) {
+              owners.push({ ...common, status: 'analysisUnavailable' });
+              continue;
+          }
+          const occurrences = entry.result.includeOccurrences.filter(item => item.sourceUri === uri);
+          const count = Math.max(1, occurrences.length); // Legacy analysis with no occurrences
+          eligibleOwnerCount++;
+          optionCount += count;
+          owners.push({ ...common, status: 'available', optionCount: count });
+      }
+      return {
+          uri, requestedVersion: version,
+          includedOwnerCount: includedOwners.size,
+          watchedOwnerCount: watchedOwners.size,
+          eligibleOwnerCount, optionCount, owners
+      };
   }
 
   /** One option per actual #include execution, including repeated nested sites. */

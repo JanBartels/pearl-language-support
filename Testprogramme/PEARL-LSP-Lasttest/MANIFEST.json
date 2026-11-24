@@ -1,0 +1,103 @@
+{
+  "translation_units": [
+    {
+      "file": "STRESS_01.P",
+      "lines": 560,
+      "shared_mode": "SPC",
+      "variables_local": 365
+    },
+    {
+      "file": "STRESS_02.P",
+      "lines": 720,
+      "shared_mode": "DCL",
+      "variables_local": 478
+    },
+    {
+      "file": "STRESS_03.P",
+      "lines": 880,
+      "shared_mode": "SPC",
+      "variables_local": 593
+    },
+    {
+      "file": "STRESS_04.P",
+      "lines": 1040,
+      "shared_mode": "DCL",
+      "variables_local": 870
+    },
+    {
+      "file": "STRESS_05.P",
+      "lines": 1200,
+      "shared_mode": "SPC",
+      "variables_local": 985
+    },
+    {
+      "file": "STRESS_06.P",
+      "lines": 1360,
+      "shared_mode": "DCL",
+      "variables_local": 1098
+    },
+    {
+      "file": "STRESS_07.P",
+      "lines": 1520,
+      "shared_mode": "SPC",
+      "variables_local": 1213
+    },
+    {
+      "file": "STRESS_08.P",
+      "lines": 1680,
+      "shared_mode": "DCL",
+      "variables_local": 1490
+    },
+    {
+      "file": "STRESS_09.P",
+      "lines": 1840,
+      "shared_mode": "SPC",
+      "variables_local": 1605
+    },
+    {
+      "file": "STRESS_10.P",
+      "lines": 2000,
+      "shared_mode": "DCL",
+      "variables_local": 1718
+    },
+    {
+      "file": "STRESS_11.P",
+      "lines": 2160,
+      "shared_mode": "SPC",
+      "variables_local": 1833
+    },
+    {
+      "file": "STRESS_12.P",
+      "lines": 2320,
+      "shared_mode": "DCL",
+      "variables_local": 2110
+    },
+    {
+      "file": "STRESS_13.P",
+      "lines": 2480,
+      "shared_mode": "SPC",
+      "variables_local": 2225
+    },
+    {
+      "file": "STRESS_14.P",
+      "lines": 2680,
+      "shared_mode": "DCL",
+      "variables_local": 2378
+    },
+    {
+      "file": "STRESS_15.P",
+      "lines": 2920,
+      "shared_mode": "SPC",
+      "variables_local": 2573
+    }
+  ],
+  "includes": {
+    "COMMON_TYPES.TYP": 100,
+    "NESTED_RECORDS.INC": 100,
+    "COMMON_CONST.DEF": 100,
+    "SHARED_VARS.TYP": 2019,
+    "COMMON_MISC.XYZ": 100,
+    "COMMON_ARRAYS.H": 100
+  },
+  "workspace": "Project"
+}

@@ -1818,6 +1818,22 @@ seine bekannten Include-Abhängigkeiten, statt eine solche Datei als eigene
 Übersetzungseinheit zu analysieren. Dateien ohne bekannte Einbindung werden
 nicht automatisch umklassifiziert.
 
+**Datei-URI-Identität unter Windows:** Der Client liefert für Windows-Dateien
+über `vscode.Uri.toString()` eine URI wie `file:///c%3A/Projekt/Typen.H`.
+`node:url.pathToFileURL()` erzeugt für denselben Pfad dagegen gewöhnlich
+`file:///C:/Projekt/Typen.H`. Beide URIs sind gültig, aber als rohe
+Zeichenketten verschieden. Da `DocumentRegistry`, Include-Provenienz,
+Diagnosen, CodeLens und Include-Watcher bisher URI-Strings als Schlüssel
+verwenden, muss die Darstellung beim Erzeugen von Dateiquellen-URIs
+vereinheitlicht werden. Die Projektion erfolgt ausschließlich an der zentralen
+Grenze `utility/uriUtils.uriFromFilePath()`; der Windows-Laufwerksbuchstabe
+wird kleingeschrieben und sein Doppelpunkt als `%3A` kodiert. Pfadkomponenten
+werden weder pauschal kleingeschrieben noch auf den Workspace begrenzt.
+Relative Includes (`../...`), absolute externe Pfade, UNC und POSIX behalten
+ihre bisherigen Auflösungsregeln. Für neue LSP-Clients mit anderer
+URI-Serialisierung kann später eine unabhängige URI-Identitätsabbildung
+nötig werden.
+
 Referenzimplementierungen:
 - `/src/server/utility/folderTranslationUnitIndex.ts`
 - `/src/server/utility/workspace.ts`

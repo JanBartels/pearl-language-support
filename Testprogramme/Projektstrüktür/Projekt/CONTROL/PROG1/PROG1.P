@@ -1,0 +1,21 @@
+P=MPC604;
+SC=2000;
+
+MODULE PROG1_INIT;
+
+PROBLEM;
+
+!#define InclDir "/home/jan/pearl-lsp/Testprogramme/Projektstruktur/Includedateien"
+
+#include "InclDir/H0/SOURCE/LIB2/LIB2.H"
+
+#include "../COMMON/COMMON.H"
+
+P: PROC;
+DCL LF FIXED;
+
+   LIB2_FUNC1( 'hallo' );
+   LF = Var1;
+END;   
+
+MODEND;

@@ -69,6 +69,8 @@ import { appendIncludeOriginDocumentation } from './documentation/includeOriginD
 import { lookupLocalSpecificationRelation } from './semantic/localSpecificationRelation';
 import { createFoldingRangesForDocument } from './lsp/createFoldingRangesForDocument';
 import { FoldingRangeRefreshController } from './lsp/foldingRangeRefreshController';
+import { CodeLensRefreshController } from './lsp/codeLensRefreshController';
+import { AnalysisTrace } from './utility/logging/analysisTrace';
 import { SourceOffset, mapToOriginalLocation, containsSourceOffset } from './core/sourceOffset';
 import { createSignatureHelp } from './lsp/createSignatureHelp';
 import { definitionNavigationContext, matchesDefinitionTarget } from './lsp/definitionNavigationContext';
@@ -77,6 +79,18 @@ import type { DefinitionNavigationContextRequest } from './lsp/definitionNavigat
 const connection = createConnection(ProposedFeatures.all);
 
 const logger = new ConnectionLogger(connection);
+const analysisTrace = new AnalysisTrace(logger);
+let analysisTriggerNumber = 0;
+const analysisPassByUri = new Map<string, number>();
+/** The TextDocuments manager raises didChangeContent also for didOpen. */
+const lastSeenOpenDocument = new Map<string, { version: number; text: string }>();
+
+function nextAnalysisTrigger(reason: string, attributes: Record<string, unknown> = {}): string {
+  const trigger = `${reason}:${++analysisTriggerNumber}`;
+  analysisTrace.event('trigger', { trigger, ...attributes });
+  return trigger;
+}
+
 
 // BEGIN TEMP-NAV-DEBUG: central diagnostic switch and request IDs
 // Navigation tracing is enabled for this diagnostic build. Set PEARL_NAV_DEBUG=0 to disable.
@@ -135,8 +149,20 @@ const validator = new Validator(
 );
 
 let clientSupportsSemanticTokenRefresh = false;
-let clientSupportsCodeLensRefresh = false;
 let clientSupportsDynamicFileWatches = false;
+
+const codeLensRefresh = new CodeLensRefreshController(
+  () => {
+    analysisTrace.event('codeLens.refresh.send');
+    const request = connection.sendRequest('workspace/codeLens/refresh');
+    void request.then(
+      () => analysisTrace.event('codeLens.refresh.ack'),
+      (error: unknown) => analysisTrace.event('codeLens.refresh.rejected', { error: String(error) })
+    );
+    return request;
+  },
+  (error: unknown) => logger.warn(`Include context CodeLens refresh failed: ${String(error)}`)
+);
 
 const foldingRangeRefresh = new FoldingRangeRefreshController(
   () => connection.sendRequest('workspace/foldingRange/refresh'),
@@ -157,8 +183,13 @@ connection.onInitialize((params: InitializeParams) => {
   settingsManager.initialize(params);
   clientSupportsSemanticTokenRefresh =
     params.capabilities.workspace?.semanticTokens?.refreshSupport === true;
-  clientSupportsCodeLensRefresh =
-    params.capabilities.workspace?.codeLens?.refreshSupport === true;
+  const codeLensSupported = params.capabilities.workspace?.codeLens?.refreshSupport === true;
+  codeLensRefresh.setSupported(codeLensSupported);
+  analysisTrace.event('server.initialize', {
+    codeLensRefreshSupported: codeLensSupported,
+    workspaceFolders: params.workspaceFolders?.map(folder => folder.uri) ?? [],
+    semanticTokenRefreshSupported: clientSupportsSemanticTokenRefresh
+  });
   clientSupportsDynamicFileWatches =
     params.capabilities.workspace?.didChangeWatchedFiles?.dynamicRegistration === true;
   // This capability was introduced with LSP 3.18.
@@ -199,9 +230,12 @@ connection.onInitialize((params: InitializeParams) => {
 });
 
 connection.onInitialized(() => {
-  workspaceManager.registerWorkspaceFolderListener(connection, refreshFolderTranslationUnits);
+  analysisTrace.event('server.initialized');
+  workspaceManager.registerWorkspaceFolderListener(
+    connection, () => refreshFolderTranslationUnits('workspaceFoldersChanged')
+  );
   settingsManager.registerConfigurationListener();
-  refreshFolderTranslationUnits();
+  refreshFolderTranslationUnits('initialized');
 
   // VS Code may not otherwise watch PEARL roots or headers. Register only
   // when the client advertises dynamic file-watching support.
@@ -223,12 +257,13 @@ connection.onInitialized(() => {
 // Include context selection (LSP-only; no editor extension command needed)
 // ------------------------------
 
+/** Suppress identical diagnostic snapshots across repeated VS Code requests. */
+const lastIncludeContextDiagnostic = new Map<string, string>();
+
 /** Refresh the CodeLens display when the include graph or selection changes. */
-function refreshIncludeCodeLenses(): void {
-  if (!clientSupportsCodeLensRefresh) return;
-  void connection.sendRequest('workspace/codeLens/refresh').catch((error: unknown) => {
-    logger.warn(`Include context CodeLens refresh failed: ${String(error)}`);
-  });
+function refreshIncludeCodeLenses(reason = 'unspecified'): void {
+  analysisTrace.event('codeLens.refresh.schedule', { reason });
+  codeLensRefresh.schedule();
 }
 
 /** Apply the already validated context through the same path as CodeLens. */
@@ -269,8 +304,43 @@ function includeOptionLabel(option: { unitUri: string; occurrence?: {
 connection.onCodeLens(params => {
   const uri = params.textDocument.uri;
   const document = documents.get(uri);
-  if (!document) return [];
+  if (!document) {
+    analysisTrace.event('codeLens.request', { uri, result: 0, reason: 'notOpen' });
+    return [];
+  }
+
   const options = documentRegistry.getIncludeContextOptions(uri, document.version);
+  const knownIncluded = documentRegistry.getKnownIncludedSourceUris().includes(uri);
+  analysisTrace.event('codeLens.request', {
+    uri, version: document.version, options: options.length,
+    knownIncluded, result: options.length >= 2 ? 1 : 0
+  });
+
+  // Log the exclusion reason for EACH formerly included owner, including when
+  // some (but not all) contexts are ready. A single valid include occurrence
+  // correctly has no selection CodeLens; it is not a lost-context error.
+  if (analysisTrace.enabled) {
+    const availability = documentRegistry.describeIncludeContextAvailability(uri, document.version);
+    const excluded = availability.owners.filter(owner => owner.status !== 'available');
+    const relevant = knownIncluded || availability.watchedOwnerCount > 0;
+    const countMismatch = availability.optionCount !== options.length;
+    if (relevant && (countMismatch || excluded.length > 0 || availability.optionCount < 2)) {
+      const reason = countMismatch ? 'optionCountMismatch'
+        : excluded.length > 0 ? 'excludedOwners'
+        : availability.optionCount === 1 ? 'singleContextNoLens' : 'noContexts';
+      const snapshot = JSON.stringify({ reason, availability, returnedOptions: options.length });
+      if (lastIncludeContextDiagnostic.get(uri) !== snapshot) {
+        lastIncludeContextDiagnostic.set(uri, snapshot);
+        analysisTrace.event('codeLens.contextAvailability', {
+          reason, ...availability, returnedOptions: options.length
+        });
+      }
+    } else if (lastIncludeContextDiagnostic.delete(uri)) {
+      analysisTrace.event('codeLens.contextRecovered', {
+        uri, version: document.version, options: options.length
+      });
+    }
+  }
   if (options.length < 2) return [];
 
   const selected = documentRegistry.getSelectedIncludeContextOption(uri, document.version);
@@ -683,9 +753,6 @@ connection.onFoldingRanges((params) => {
         )?.occurrence,
         logger
     );
-    if (/\.h$/i.test(document.uri)) {
-        logger.debug(`[FoldingRefresh] folding ${document.uri}: ${ranges.length} ranges`);
-    }
     return ranges;
 });
 
@@ -701,8 +768,11 @@ connection.languages.semanticTokens.on(async (params) => {
 // Events & Start
 // ------------------------------
 
-async function validateAndPublish(document: TextDocument): Promise<void> {
+async function validateAndPublish(document: TextDocument, trigger: string): Promise<void> {
   const requestId = documentRegistry.beginAnalysis(document.uri);
+  const pass = (analysisPassByUri.get(document.uri) ?? 0) + 1;
+  analysisPassByUri.set(document.uri, pass);
+  const startedAt = analysisTrace.now();
   try {
     const snapshot = TextDocument.create(
       document.uri,
@@ -710,40 +780,67 @@ async function validateAndPublish(document: TextDocument): Promise<void> {
       document.version,
       document.getText()
     );
-
+    analysisTrace.event('analysis.begin', {
+      trigger, uri: snapshot.uri, requestId, pass,
+      version: snapshot.version, textLength: snapshot.getText().length
+    });
     const settings = await settingsManager.getDocumentSettings(snapshot.uri);
-    if (!documentRegistry.isCurrentAnalysis(snapshot.uri, requestId)) return;
-
-    const result = await validator.analyze(snapshot, settings);
-
-    // Während der Analyse kann bereits eine neuere Dokumentversion
-    // eingetroffen sein. In diesem Fall darf das veraltete Ergebnis
-    // weder gespeichert noch als Diagnostics veröffentlicht werden.
-    const currentDocument = documentRegistry.get(snapshot.uri);
-
-    if (
-        !currentDocument ||
-        currentDocument.version !== snapshot.version ||
-        !documentRegistry.isCurrentAnalysis(snapshot.uri, requestId)
-    ) {
-        return;
+    if (!documentRegistry.isCurrentAnalysis(snapshot.uri, requestId)) {
+      analysisTrace.event('analysis.discard', {
+        trigger, uri: snapshot.uri, requestId, pass, stage: 'afterSettings',
+        elapsedMs: Math.round(analysisTrace.now() - startedAt)
+      });
+      return;
     }
 
-    // Analyse für spätere LSP-Features zwischenspeichern.
+    analysisTrace.event('analysis.execute', {
+      trigger, uri: snapshot.uri, requestId, pass,
+      settingsWaitMs: Math.round(analysisTrace.now() - startedAt)
+    });
+    const analysisStartedAt = analysisTrace.now();
+    // Validator.analyze is currently declared async, but does its heavy work
+    // synchronously before returning the Promise. Awaiting that Promise may
+    // defer this continuation until ALL queued validators have run. Measure
+    // the synchronous call separately from that scheduling delay.
+    const validation = validator.analyze(snapshot, settings);
+    const validatorSyncMs = Math.round(analysisTrace.now() - analysisStartedAt);
+    const result = await validation;
+    const analysisWallMs = Math.round(analysisTrace.now() - analysisStartedAt);
+    const validatorAwaitMs = analysisWallMs - validatorSyncMs;
+
+    // Version and request-id verification stay unchanged.
+    const currentDocument = documentRegistry.get(snapshot.uri);
+    const requestCurrent = documentRegistry.isCurrentAnalysis(snapshot.uri, requestId);
+    if (!currentDocument || currentDocument.version !== snapshot.version || !requestCurrent) {
+      analysisTrace.event('analysis.discard', {
+        trigger, uri: snapshot.uri, requestId, pass, stage: 'afterAnalyze',
+        snapshotVersion: snapshot.version,
+        currentVersion: currentDocument?.version ?? null,
+        requestCurrent, validatorSyncMs, validatorAwaitMs, analysisWallMs,
+        elapsedMs: Math.round(analysisTrace.now() - startedAt)
+      });
+      return;
+    }
+
     const previousIncludes = documentRegistry.getIncludedSourcesOfUnit(snapshot.uri);
     documentRegistry.setAnalysisResult(snapshot.uri, snapshot.version, result);
     publishIncludeWatchSnapshot();
+    analysisTrace.event('analysis.commit', {
+      trigger, uri: snapshot.uri, requestId, pass, version: snapshot.version,
+      validatorSyncMs, validatorAwaitMs, analysisWallMs,
+      elapsedMs: Math.round(analysisTrace.now() - startedAt),
+      includesBefore: previousIncludes.length,
+      includesAfter: result.includedSourceUris?.length ?? 0,
+      occurrences: result.includeOccurrences.length,
+      problems: result.problems.size()
+    });
 
-    // An early semantic-token request may have seen no completed analysis.
-    // Refresh only if the client advertises the corresponding capability.
     if (clientSupportsSemanticTokenRefresh) {
       void connection.languages.semanticTokens.refresh().catch((error: unknown) => {
         logger.warn(`Semantic-token refresh failed: ${String(error)}`);
       });
     }
 
-    // Diagnostics are owned by translation units, not by the last analysis.
-    // Publication also clears diagnostics from sources no longer in this unit.
     const diagnosticsByUri = mapDiagnostics(result.problems, documentRegistry);
     diagnosticPublicationManager.publish(
         snapshot.uri,
@@ -751,16 +848,21 @@ async function validateAndPublish(document: TextDocument): Promise<void> {
         [...result.files.keys(), ...(result.includedSourceUris ?? [])],
         result.includeOccurrences
     );
-    // The first completed include analysis may create a new CodeLens for an
-    // already-open header; no editor text change is required for that.
-    if ([...previousIncludes, ...(result.includedSourceUris ?? [])].some(
-        sourceUri => !!documents.get(sourceUri)
-    )) {
-      refreshIncludeCodeLenses();
-      // A folding request could have received [] while analysis was pending.
+    const changedOpenIncludes = [...new Set([...previousIncludes, ...(result.includedSourceUris ?? [])])]
+      .filter(sourceUri => !!documents.get(sourceUri));
+    analysisTrace.event('analysis.publish', {
+      trigger, uri: snapshot.uri, pass,
+      openIncludesForRefresh: changedOpenIncludes.length
+    });
+    if (changedOpenIncludes.length > 0) {
+      refreshIncludeCodeLenses(`analysisCommit:${snapshot.uri}#${pass}`);
       foldingRangeRefresh.schedule();
     }
   } catch (err) {
+    analysisTrace.event('analysis.error', {
+      trigger, uri: document.uri, requestId, pass,
+      elapsedMs: Math.round(analysisTrace.now() - startedAt), error: String(err)
+    });
     if (err instanceof Error) {
         logger.error(`Validation error in ${document.uri}: ${err.message}`);
         logger.error(err.stack ?? '<no stack>');
@@ -776,8 +878,16 @@ async function validateAndPublish(document: TextDocument): Promise<void> {
  * A file already open as an independent document keeps that analysis when a
  * folder is removed; unopened roots are removed from the analysis registry.
  */
-function refreshFolderTranslationUnits(): void {
+function refreshFolderTranslationUnits(reason: string): void {
+  const trigger = nextAnalysisTrigger(`folder:${reason}`, {
+    workspaceRoots: workspaceManager.getWorkspaceRoots()
+  });
   const changes = folderTranslationUnits.refresh(workspaceManager.getWorkspaceRoots());
+  analysisTrace.event('folder.reconcile', {
+    trigger, added: changes.added.length, removed: changes.removed.length,
+    addedUris: changes.added, removedUris: changes.removed,
+    activeBefore: documentRegistry.getActiveTranslationUnits().length
+  });
   for (const uri of changes.removed) {
     if (!documents.get(uri)) {
       documentRegistry.closeTranslationUnit(uri);
@@ -789,7 +899,7 @@ function refreshFolderTranslationUnits(): void {
   for (const uri of changes.added) {
     if (activeRoots.has(uri)) continue;
     const document = documentRegistry.get(uri);
-    if (document) void validateAndPublish(document);
+    if (document) void validateAndPublish(document, trigger);
   }
 }
 
@@ -801,12 +911,21 @@ function refreshFolderTranslationUnits(): void {
  * When its including roots have already been discovered, their analyses
  * provide the header's language features instead.
  */
-function revalidateChangedSource(uri: string, fallback?: TextDocument): void {
+function revalidateChangedSource(
+  uri: string, reason: string, fallback?: TextDocument
+): void {
+  const trigger = nextAnalysisTrigger(reason, {
+    uri, version: fallback?.version ?? documents.get(uri)?.version ?? null,
+    languageId: fallback?.languageId ?? documents.get(uri)?.languageId ?? null
+  });
   const affectedRoots = documentRegistry.invalidateUri(uri);
+  analysisTrace.event('source.invalidate', {
+    trigger, uri, rootCount: affectedRoots.length, rootUris: affectedRoots
+  });
   if (affectedRoots.length === 0 && fallback) {
     if (folderTranslationUnits.shouldAnalyzeAsRoot(uri)) {
       // Preserve the existing Open File workflow (no workspace folder).
-      void validateAndPublish(fallback);
+      void validateAndPublish(fallback, trigger);
     } else {
       // An include without a known parent has no syntactic context yet.
       logger.debug(`No including translation unit available for ${uri}`);
@@ -815,23 +934,70 @@ function revalidateChangedSource(uri: string, fallback?: TextDocument): void {
   }
   for (const rootUri of affectedRoots) {
     const root = documentRegistry.get(rootUri);
-    if (root) void validateAndPublish(root);
+    if (root) void validateAndPublish(root, trigger);
   }
 }
 
+/**
+ * Distinguish a changed source buffer from simply opening it in VS Code.
+ * The analyzed preprocessor snapshots (not disk mtimes) are authoritative.
+ * A duplicate content event for the same document/version must not trigger
+ * a second analysis request. A new version with identical text is adopted
+ * only if the registry can prove all affected results are still valid.
+ */
+function handleOpenSourceDocument(document: TextDocument, reason: string): void {
+  const previous = lastSeenOpenDocument.get(document.uri);
+  const text = document.getText();
+  lastSeenOpenDocument.set(document.uri, { version: document.version, text });
+
+  if (previous?.version === document.version && previous.text === text) {
+    analysisTrace.event('source.eventDuplicate', {
+      reason, uri: document.uri, version: document.version
+    });
+    return;
+  }
+
+  const adoptedUnits = documentRegistry.tryAdoptSourceDocument(document);
+  if (adoptedUnits > 0) {
+    analysisTrace.event('source.versionAdopted', {
+      reason, uri: document.uri, version: document.version,
+      affectedUnits: adoptedUnits, textLength: text.length
+    });
+    // The source can now offer existing semantic contexts at its new editor
+    // version; notify VS Code even if the include tab was restored late.
+    refreshIncludeCodeLenses(`sourceVersionAdopted:${document.uri}`);
+    foldingRangeRefresh.schedule();
+    return;
+  }
+
+  analysisTrace.event('source.contentRequiresAnalysis', {
+    reason, uri: document.uri, version: document.version,
+    textChangedSinceLastEvent: previous === undefined || previous.text !== text
+  });
+  revalidateChangedSource(document.uri, reason, document);
+}
+
 documents.onDidOpen((event) => {
-  revalidateChangedSource(event.document.uri, event.document);
+  handleOpenSourceDocument(event.document, 'didOpen');
 });
 
 documents.onDidChangeContent((event) => {
-  revalidateChangedSource(event.document.uri, event.document);
+  handleOpenSourceDocument(event.document, 'didChangeContent');
 });
 
 documents.onDidClose((event) => {
   const uri = event.document.uri;
+  lastSeenOpenDocument.delete(uri);
+  lastIncludeContextDiagnostic.delete(uri);
+  const trigger = nextAnalysisTrigger('didClose', {
+    uri, version: event.document.version, languageId: event.document.languageId
+  });
   logger.info(`onDidClose ${uri}`);
   settingsManager.clearDocument(uri);
   const affectedRoots = documentRegistry.invalidateUri(uri);
+  analysisTrace.event('source.invalidate', {
+    trigger, uri, rootCount: affectedRoots.length, rootUris: affectedRoots
+  });
   // Discovered folder units remain active even without an editor tab.
   // Include files never own an analysis of their own in folder mode.
   if (!folderTranslationUnits.hasRoot(uri)) {
@@ -843,34 +1009,48 @@ documents.onDidClose((event) => {
   for (const rootUri of affectedRoots) {
     if (rootUri === uri && !folderTranslationUnits.hasRoot(uri)) continue;
     const root = documentRegistry.get(rootUri);
-    if (root) void validateAndPublish(root);
+    if (root) void validateAndPublish(root, trigger);
   }
 });
 
 connection.onDidChangeWatchedFiles((event) => {
   // React to additions/removals of .P files as well as include content changes.
-  refreshFolderTranslationUnits();
+  refreshFolderTranslationUnits('watchedFiles');
+  const trigger = nextAnalysisTrigger('didChangeWatchedFiles', {
+    changes: event.changes.map(change => ({ uri: change.uri, type: change.type }))
+  });
   const roots = new Set<string>();
   for (const change of event.changes) {
     logger.debug(`[IncludeWatch] file event type=${change.type} uri=${change.uri}`);
     for (const uri of documentRegistry.invalidateUri(change.uri)) roots.add(uri);
   }
+  analysisTrace.event('watch.invalidate', {
+    trigger, rootCount: roots.size, rootUris: [...roots]
+  });
   for (const rootUri of roots) {
     const root = documentRegistry.get(rootUri);
-    if (root) void validateAndPublish(root);
+    if (root) void validateAndPublish(root, trigger);
   }
 });
 
 connection.onDidChangeConfiguration((event) => {
+  const trigger = nextAnalysisTrigger('didChangeConfiguration');
   settingsManager.handleConfigurationChange(event.settings);
   validator.handleConfigurationChanged();
-  for (const rootUri of documentRegistry.invalidateAllAnalyses()) {
+  const roots = documentRegistry.invalidateAllAnalyses();
+  analysisTrace.event('configuration.invalidateAll', {
+    trigger, rootCount: roots.length, rootUris: roots
+  });
+  for (const rootUri of roots) {
     const root = documentRegistry.get(rootUri);
-    if (root) void validateAndPublish(root);
+    if (root) void validateAndPublish(root, trigger);
   }
 });
 
-connection.onShutdown(() => foldingRangeRefresh.dispose());
+connection.onShutdown(() => {
+  codeLensRefresh.dispose();
+  foldingRangeRefresh.dispose();
+});
 
 documents.listen(connection);
 connection.listen();

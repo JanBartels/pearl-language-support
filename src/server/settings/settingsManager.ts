@@ -28,9 +28,11 @@ export class SettingsManager {
   registerConfigurationListener(): void {
     if (!this.hasConfigurationCapability) return;
 
+    // Only PEARL settings can affect our analyses. Other VS Code settings
+    // must not invalidate every translation unit.
     this.connection.client.register(
       DidChangeConfigurationNotification.type,
-      undefined
+      { section: 'pearl' }
     );
   }
 

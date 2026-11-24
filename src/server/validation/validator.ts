@@ -48,7 +48,7 @@ import {
 } from '../semantic/semanticDiagnostic';
 
 
-const DUMP_AST: boolean = true;
+const DUMP_AST: boolean = false;
 
 
 export class Validator {

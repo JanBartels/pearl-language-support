@@ -20,10 +20,30 @@ export function filePathFromUri(uri: string): string {
 }
 
 /**
+ * Projects a Node-generated file URI into the serialization used by VS Code's
+ * Uri.toString() for a Windows drive. VS Code emits `file:///c%3A/...` while
+ * node:url emits `file:///C:/...`. Both identify the same file, but the LSP
+ * registry and include provenance use URI strings as keys.
+ *
+ * Only the Windows drive prefix is rewritten. Never lowercase the rest of a
+ * path: individual Windows directories can be case-sensitive. UNC and POSIX
+ * URIs are unchanged, as are existing %-escapes in file names.
+ *
+ * Exported separately so Windows behavior can be regression-tested on Linux.
+ */
+export function fileUriForLsp(fileUri: string, platform: NodeJS.Platform = process.platform): string {
+  if (platform !== 'win32') return fileUri;
+  return fileUri.replace(/^file:\/\/\/([A-Za-z]):(?=\/|$)/, (_match, drive: string) =>
+    `file:///${drive.toLowerCase()}%3A`
+  );
+}
+
+/**
  * Konvertiert einen absoluten Dateisystem-Pfad in eine file:// URI.
+ * The resulting Windows URI matches the VS Code client's serialization.
  */
 export function uriFromFilePath(absPath: string): string {
-  return pathToFileURL(absPath).toString();
+  return fileUriForLsp(pathToFileURL(absPath).toString());
 }
 
 /**

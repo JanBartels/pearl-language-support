@@ -1,0 +1,8 @@
+{
+  "pearl.macros": {
+    "InclDir": "'../ExternalIncludes'"
+  },
+  "pearl.workingDirMode": "file",
+  "pearl.maxNumberOfProblems": 100,
+  "editor.codeLens": true
+}

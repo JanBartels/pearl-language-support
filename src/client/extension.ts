@@ -35,6 +35,36 @@ const pendingDefinition = new PendingNavigationIntent();
 const knownIncludedSources = new KnownIncludedSources();
 const languageUpdates = new Set<string>();
 
+// Temporary, read-only Windows URI investigation (Dev_0_3, package 28).
+// Kept separate from the Language Server output so a real project's token/AST
+// dumps and hundreds of unrelated diagnostics do not drown out these events.
+let includeUriTrace: vscode.OutputChannel | undefined;
+let lastKnownIncludedUris: readonly string[] = [];
+function traceIncludedUri(message: string): void {
+  includeUriTrace?.appendLine(`[IncludeURI] ${message}`);
+}
+
+function traceOpenedSource(document: vscode.TextDocument, reason: string): void {
+  if (document.uri.scheme !== 'file' || /\.[pP]$/.test(document.uri.path)) return;
+  const openedUri = document.uri.toString();
+  const openedBase = document.uri.path.split('/').pop()?.toLowerCase();
+  const similar = lastKnownIncludedUris.filter(raw => {
+    try {
+      return vscode.Uri.parse(raw).path.split('/').pop()?.toLowerCase() === openedBase;
+    } catch {
+      return false;
+    }
+  });
+  traceIncludedUri(`${reason} language=${document.languageId} exact=${knownIncludedSources.includes(openedUri)} candidatesByName=${similar.length} document=${openedUri}`);
+  for (const raw of similar.slice(0, 5)) {
+    const candidate = vscode.Uri.parse(raw);
+    const samePathIgnoreCase = candidate.authority.toLowerCase() === document.uri.authority.toLowerCase()
+      && candidate.path.toLowerCase() === document.uri.path.toLowerCase();
+    traceIncludedUri(`  server=${raw} samePathIgnoreCase=${samePathIgnoreCase}`);
+  }
+  if (similar.length > 5) traceIncludedUri(`  ... ${similar.length - 5} further same-name entries omitted`);
+}
+
 /** Shared by direct include opening and proven Go to Definition navigation. */
 async function ensurePearlDocumentLanguage(document: vscode.TextDocument): Promise<void> {
   const uri = document.uri.toString();
@@ -54,7 +84,9 @@ async function ensurePearlDocumentLanguage(document: vscode.TextDocument): Promi
 
 /** VS Code does not infer PEARL for an included .def/.inc/.h file. */
 function assignKnownIncludeLanguage(document: vscode.TextDocument): void {
+  traceOpenedSource(document, 'open/reconcile');
   if (knownIncludedSources.includes(document.uri.toString())) {
+    traceIncludedUri(`assign PEARL document=${document.uri.toString()}`);
     void ensurePearlDocumentLanguage(document);
   }
 }
@@ -62,6 +94,8 @@ function assignKnownIncludeLanguage(document: vscode.TextDocument): void {
 function acceptIncludeSnapshot(snapshot: IncludeWatchSnapshot, watchers: IncludeDependencyWatcher): void {
   watchers.update(snapshot);
   if (!knownIncludedSources.update(snapshot)) return;
+  lastKnownIncludedUris = snapshot.includedUris ?? [];
+  traceIncludedUri(`snapshot session=${snapshot.sessionId ?? '-'} revision=${snapshot.revision} watched=${snapshot.uris.length} included=${lastKnownIncludedUris.length}`);
   // Also cover documents opened while the initial folder analysis was running
   // or before the LanguageClient finished starting.
   for (const document of vscode.workspace.textDocuments) {
@@ -110,6 +144,9 @@ async function activateTarget(editor: vscode.TextEditor): Promise<void> {
 }
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
+  includeUriTrace = vscode.window.createOutputChannel('PEARL Include URI Trace');
+  context.subscriptions.push(includeUriTrace);
+  traceIncludedUri('client extension activated');
   const serverModule = context.asAbsolutePath(
     path.join('dist', 'server', 'server.js')
   );
