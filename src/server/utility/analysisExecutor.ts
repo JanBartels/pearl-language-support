@@ -26,9 +26,11 @@ export interface AnalysisExecutionInput {
  * those responsibilities. In particular, a returned result is not necessarily
  * eligible for publication: the caller must check its request id and versions.
  *
- * AnalysisResult is intentionally returned as a live class-based object for
- * now. Transporting it across worker boundaries requires a separate design.
+ * Both local and worker executors return live AnalysisResult instances.
+ * Worker transport is an implementation detail of the executor boundary.
  */
 export interface AnalysisExecutor {
     execute(input: AnalysisExecutionInput): Promise<AnalysisResult>;
+    /** Optional lifecycle hook for executors owning resources such as threads. */
+    dispose?(): void;
 }

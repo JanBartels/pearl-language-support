@@ -75,6 +75,8 @@ import { AnalysisScheduler, type AnalysisRequest, type AnalysisPriority } from '
 import type { AnalysisExecutor, AnalysisSourceSnapshot } from './utility/analysisExecutor';
 import { AnalysisSnapshotCollector, StaleAnalysisSnapshotError } from './utility/analysisSnapshotCollector';
 import { LocalAnalysisExecutor } from './utility/localAnalysisExecutor';
+import { WorkerAnalysisExecutor } from './utility/workerAnalysisExecutor';
+import { WorkerPoolAnalysisExecutor } from './utility/workerPoolAnalysisExecutor';
 import { SourceOffset, mapToOriginalLocation, containsSourceOffset } from './core/sourceOffset';
 import { createSignatureHelp } from './lsp/createSignatureHelp';
 import { definitionNavigationContext, matchesDefinitionTarget } from './lsp/definitionNavigationContext';
@@ -114,6 +116,12 @@ const settingsManager = new SettingsManager(connection);
 
 const documents = new TextDocuments(TextDocument);
 const documentRegistry = new DocumentRegistry(documents);
+const workerMode = process.env.PEARL_ANALYSIS_EXECUTOR === 'worker';
+const requestedWorkerCount = process.env.PEARL_ANALYSIS_WORKERS;
+const workerCount = requestedWorkerCount === undefined ? 1 : Number(requestedWorkerCount);
+if (workerMode && (!Number.isSafeInteger(workerCount) || workerCount < 1 || workerCount > 16)) {
+  throw new Error('PEARL_ANALYSIS_WORKERS must be an integer between 1 and 16');
+}
 const analysisScheduler = new AnalysisScheduler(
   validateAndPublish,
   request => documentRegistry.isCurrentAnalysis(request.rootUri, request.requestId),
@@ -122,7 +130,10 @@ const analysisScheduler = new AnalysisScheduler(
       uri: request.rootUri, requestId: request.requestId, error: String(error)
     });
     logger.error(`Analysis scheduler failed for ${request.rootUri}: ${String(error)}`);
-  }
+  },
+  undefined,
+  active => codeLensRefresh.setAnalysisBusy(active),
+  workerMode ? workerCount : 1
 );
 /** Debounce only typing, never folder scans, configuration or disk watches. */
 const interactiveEditDebounceMs = 200;
@@ -176,9 +187,35 @@ const validator = new Validator(
   documentRegistry,
   logger
 );
-const analysisExecutor: AnalysisExecutor = new LocalAnalysisExecutor(
-  (document, settings, includes) => validator.analyze(document, settings, includes)
-);
+// The local executor stays the default. Explicit Worker F5 configurations
+// select either one worker (baseline) or two workers (parallel benchmark).
+const workerFile = path.join(__dirname, 'analysisWorker.js');
+const workerCallbacks = (workerIndex: number) => ({
+  onMetrics: (metrics: import('./utility/workerAnalysisExecutor').WorkerAnalysisMetrics) =>
+    analysisTrace.event('analysis.worker', {
+      workerId: workerIndex + 1,
+      uri: metrics.uri,
+      queueMs: Math.round(metrics.queueMs),
+      requestPostMs: Math.round(metrics.requestPostMs),
+      requestTransferMs: Math.round(metrics.requestTransferMs),
+      workerSetupMs: Math.round(metrics.workerSetupMs),
+      analyzeMs: Math.round(metrics.analyzeMs),
+      encodeMs: Math.round(metrics.encodeMs),
+      resultTransferMs: Math.round(metrics.resultTransferMs),
+      decodeMs: Math.round(metrics.decodeMs),
+      otherMs: Math.round(metrics.otherMs),
+      totalMs: Math.round(metrics.totalMs)
+    }),
+  onLog: (level: 'debug' | 'info' | 'warn' | 'error', message: string) => logger[level](message)
+});
+const analysisExecutor: AnalysisExecutor = workerMode
+  ? workerCount === 1
+    ? new WorkerAnalysisExecutor(workerFile, workerCallbacks(0))
+    : new WorkerPoolAnalysisExecutor(workerCount, index =>
+        new WorkerAnalysisExecutor(workerFile, workerCallbacks(index)))
+  : new LocalAnalysisExecutor(
+      (document, settings, includes) => validator.analyze(document, settings, includes)
+    );
 const analysisSnapshotCollector = new AnalysisSnapshotCollector(documentRegistry, logger);
 
 let clientSupportsSemanticTokenRefresh = false;
@@ -264,6 +301,7 @@ connection.onInitialize((params: InitializeParams) => {
 
 connection.onInitialized(() => {
   analysisTrace.event('server.initialized');
+  analysisTrace.event('analysis.executor', { mode: workerMode ? 'worker' : 'local', workers: workerMode ? workerCount : 0 });
   workspaceManager.registerWorkspaceFolderListener(
     connection, () => refreshFolderTranslationUnits('workspaceFoldersChanged')
   );
@@ -294,9 +332,10 @@ connection.onInitialized(() => {
 const lastIncludeContextDiagnostic = new Map<string, string>();
 
 /** Refresh the CodeLens display when the include graph or selection changes. */
-function refreshIncludeCodeLenses(reason = 'unspecified'): void {
-  analysisTrace.event('codeLens.refresh.schedule', { reason });
-  codeLensRefresh.schedule();
+function refreshIncludeCodeLenses(reason = 'unspecified', fromAnalysis = false): void {
+  analysisTrace.event('codeLens.refresh.schedule', { reason, fromAnalysis });
+  if (fromAnalysis) codeLensRefresh.scheduleAnalysis();
+  else codeLensRefresh.schedule();
 }
 
 /** Apply the already validated context through the same path as CodeLens. */
@@ -933,7 +972,7 @@ async function validateAndPublish(request: AnalysisRequest): Promise<void> {
       openIncludesForRefresh: changedOpenIncludes.length
     });
     if (changedOpenIncludes.length > 0) {
-      refreshIncludeCodeLenses(`analysisCommit:${snapshot.uri}#${pass}`);
+      refreshIncludeCodeLenses(`analysisCommit:${snapshot.uri}#${pass}`, true);
       foldingRangeRefresh.schedule();
     }
   } catch (err) {
@@ -1078,7 +1117,7 @@ function handleOpenSourceDocument(document: TextDocument, reason: string): void 
     });
     // The source can now offer existing semantic contexts at its new editor
     // version; notify VS Code even if the include tab was restored late.
-    refreshIncludeCodeLenses(`sourceVersionAdopted:${document.uri}`);
+    refreshIncludeCodeLenses(`sourceVersionAdopted:${document.uri}`, true);
     foldingRangeRefresh.schedule();
     return;
   }
@@ -1166,6 +1205,7 @@ connection.onDidChangeConfiguration((event) => {
 
 connection.onShutdown(() => {
   analysisScheduler.dispose();
+  analysisExecutor.dispose?.();
   codeLensRefresh.dispose();
   foldingRangeRefresh.dispose();
 });

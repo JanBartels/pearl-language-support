@@ -119,3 +119,83 @@ test('dispose cancels pending work and prevents a late follow-up', async () => {
     timer.flush();
     assert.equal(requests, 1);
 });
+
+
+test('analysis refreshes are held for the complete scheduler batch, not a 100-ms gap', async () => {
+    const timer = manualScheduler();
+    let requests = 0;
+    const controller = new CodeLensRefreshController(
+        async () => { requests++; }, () => {}, timer.schedule
+    );
+    controller.setSupported(true);
+    controller.setAnalysisBusy(true);
+    // Simulate individual worker results separated by far more than debounce.
+    for (let i = 0; i < 15; i++) {
+        controller.scheduleAnalysis();
+        timer.flush();
+    }
+    assert.equal(requests, 0);
+    controller.setAnalysisBusy(false);
+    timer.flush();
+    await settlePromises();
+    assert.equal(requests, 1);
+});
+
+test('explicit context selection still refreshes while a long analysis batch runs', async () => {
+    const timer = manualScheduler();
+    let requests = 0;
+    const controller = new CodeLensRefreshController(
+        async () => { requests++; }, () => {}, timer.schedule
+    );
+    controller.setSupported(true);
+    controller.setAnalysisBusy(true);
+    controller.scheduleAnalysis();
+    timer.flush();
+    assert.equal(requests, 0);
+    controller.schedule(); // explicit user choice
+    timer.flush();
+    await settlePromises();
+    assert.equal(requests, 1);
+    controller.setAnalysisBusy(false);
+    timer.flush();
+    await settlePromises();
+    assert.equal(requests, 2);
+});
+
+test('disabled client support clears deferred analysis refresh', async () => {
+    const timer = manualScheduler();
+    let requests = 0;
+    const controller = new CodeLensRefreshController(
+        async () => { requests++; }, () => {}, timer.schedule
+    );
+    controller.setSupported(true);
+    controller.setAnalysisBusy(true);
+    controller.scheduleAnalysis();
+    controller.setSupported(false);
+    controller.setAnalysisBusy(false);
+    controller.setSupported(true);
+    timer.flush();
+    await settlePromises();
+    assert.equal(requests, 0);
+});
+
+
+test('new batch absorbs an unsent analysis-only refresh from the previous batch', async () => {
+    const timer = manualScheduler();
+    let requests = 0;
+    const controller = new CodeLensRefreshController(
+        async () => { requests++; }, () => {}, timer.schedule
+    );
+    controller.setSupported(true);
+    controller.setAnalysisBusy(true);
+    controller.scheduleAnalysis();
+    controller.setAnalysisBusy(false); // schedules a 100-ms refresh
+    controller.setAnalysisBusy(true); // next batch starts before timer fires
+    timer.flush();
+    assert.equal(requests, 0);
+    controller.scheduleAnalysis();
+    controller.setAnalysisBusy(false);
+    timer.flush();
+    await settlePromises();
+    assert.equal(requests, 1);
+});

@@ -54,18 +54,29 @@ const DUMP_AST: boolean = false;
 
 export class Validator {
 
-    constructor(
-        private workspaceManager: WorkspaceManager,
-        private documentRegistry: DocumentRegistry,
-        private logger: Logger
-    ) {}
+    private readonly documentRegistry: DocumentRegistry | undefined;
+    private readonly logger: Logger;
+
+    /** Snapshot-only compiler: no workspace or live document registry is needed. */
+    constructor(logger: Logger);
+    /** Compatible with existing LSP and test construction sites. */
+    constructor(workspaceManager: WorkspaceManager, documentRegistry: DocumentRegistry, logger: Logger);
+    constructor(workspaceManagerOrLogger: WorkspaceManager | Logger,
+                documentRegistry?: DocumentRegistry, logger?: Logger) {
+        this.documentRegistry = documentRegistry;
+        this.logger = logger ?? workspaceManagerOrLogger as Logger;
+    }
 
 
     async analyze(
         document: TextDocument,
         settings: PearlSettings,
-        includeSourceResolver: IncludeSourceResolver = this.documentRegistry
+        includeSourceResolver?: IncludeSourceResolver
     ): Promise<AnalysisResult> {
+        const resolver = includeSourceResolver ?? this.documentRegistry;
+        if (!resolver) {
+            throw new Error('Validator requires an IncludeSourceResolver for snapshot-only analysis');
+        }
 
         this.logger.debug?.(`Analyzing ${document.uri}`);
         this.logger.debug?.('[pearl] settings = ' + JSON.stringify(settings));
@@ -99,7 +110,7 @@ export class Validator {
         // ----------------------------
 
         const context = new PreprocessorContext(
-            includeSourceResolver,
+            resolver,
             macroTable,
             new ConditionalStack(),
             new PreprocessorConditionalBlockStack()
@@ -310,6 +321,6 @@ export class Validator {
 
     handleConfigurationChanged(): void {
         this.logger.debug?.('Configuration changed – invalidating include cache');
-        this.documentRegistry.invalidateAllIncludes();
+        this.documentRegistry?.invalidateAllIncludes();
     }
 }

@@ -73,6 +73,26 @@ readonly rootAnalysis: Analysis;
       );
     }
 
+    /**
+     * Assemble a previously validated graph after crossing a transport boundary.
+     * Unlike create(), this preserves the global diagnostic/reference collections
+     * independently of the individual file analyses.
+     */
+    static rehydrate(
+      rootAnalysis: Analysis,
+      files: ReadonlyMap<string, Analysis>,
+      problems: ProblemCollection,
+      macroReferences: readonly MacroReference[],
+      includedSourceUris?: readonly string[],
+      includeOccurrences: readonly IncludeOccurrence[] = [],
+      watchedIncludeUris?: readonly string[]
+    ): AnalysisResult {
+      return new AnalysisResult(rootAnalysis, new Map(files), problems, macroReferences,
+        includedSourceUris === undefined ? undefined : Object.freeze([...includedSourceUris]),
+        Object.freeze([...includeOccurrences]),
+        watchedIncludeUris === undefined ? undefined : Object.freeze([...watchedIncludeUris]));
+    }
+
   getFile(uri: string): Analysis | undefined {
     return this.files.get(uri);
   }

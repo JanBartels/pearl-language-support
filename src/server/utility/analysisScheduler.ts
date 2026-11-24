@@ -53,26 +53,43 @@ export interface AnalysisQueueResult {
 }
 
 /**
- * One locally executed analysis at a time. Replacing a pending request keeps
+ * At most maxConcurrent independent translation units at a time. Replacing a pending request keeps
  * only the newest requestId and extends a trailing-edge debounce interval.
  *
- * The scheduler cannot preempt a running synchronous Validator. A future
- * worker executor may use the same request/validity contract; this scheduler
- * deliberately has no dependency on the way analyses are executed.
+ * No two requests for the same root run simultaneously, even when a root is
+ * invalidated and requeued while its earlier analysis is still in flight.
+ * The scheduler cannot preempt a running synchronous Validator. With workers
+ * it awaits results without blocking the event loop.
+ * The scheduler does not depend on the selected executor implementation.
  */
 export class AnalysisScheduler {
     private readonly pending = new Map<string, PendingAnalysis>();
     private nextOrder = 0;
     private wakeup: ScheduledAnalysisTask | undefined;
-    private running = false;
+    private readonly runningRoots = new Set<string>();
     private disposed = false;
 
     constructor(
         private readonly execute: (request: AnalysisRequest) => Promise<void>,
         private readonly isCurrent: (request: AnalysisRequest) => boolean,
         private readonly onError: (error: unknown, request: AnalysisRequest) => void,
-        private readonly timing: AnalysisSchedulerTiming = defaultTiming
-    ) {}
+        private readonly timing: AnalysisSchedulerTiming = defaultTiming,
+        private readonly onActivityChange?: (active: boolean) => void,
+        private readonly maxConcurrent = 1
+    ) {
+        if (!Number.isSafeInteger(maxConcurrent) || maxConcurrent < 1) {
+            throw new Error('AnalysisScheduler requires a positive integer concurrency limit');
+        }
+    }
+
+    private active = false;
+
+    private reportActivity(): void {
+        const active = this.runningRoots.size > 0 || this.pending.size > 0;
+        if (active === this.active) return;
+        this.active = active;
+        this.onActivityChange?.(active);
+    }
 
     /**
      * A new request for a root supersedes its queued predecessor. An existing
@@ -96,6 +113,7 @@ export class AnalysisScheduler {
             readyAt: this.timing.now() + delayMs,
             order: ++this.nextOrder
         });
+        this.reportActivity();
         this.planNext();
         return {
             replaced: previous !== undefined,
@@ -106,7 +124,10 @@ export class AnalysisScheduler {
 
     /** Remove queued work when a translation unit ceases to be active. */
     cancel(rootUri: string): void {
-        if (this.pending.delete(rootUri)) this.planNext();
+        if (this.pending.delete(rootUri)) {
+            this.reportActivity();
+            this.planNext();
+        }
     }
 
     /** Prevent later queued work, e.g. after LSP shutdown. */
@@ -115,10 +136,13 @@ export class AnalysisScheduler {
         this.wakeup?.cancel();
         this.wakeup = undefined;
         this.pending.clear();
+        this.reportActivity();
     }
 
     private chooseReady(now: number): PendingAnalysis | undefined {
-        const interactive = [...this.pending.values()]
+        const runnable = [...this.pending.values()]
+            .filter(entry => !this.runningRoots.has(entry.request.rootUri));
+        const interactive = runnable
             .filter(entry => entry.request.priority === 'interactive');
         const interactiveReady = interactive.filter(entry => entry.readyAt <= now)
             .sort((left, right) => left.order - right.order);
@@ -126,7 +150,7 @@ export class AnalysisScheduler {
         // An interactive document waiting for its short debounce takes
         // precedence over starting a potentially long background validator.
         if (interactive.length > 0) return undefined;
-        return [...this.pending.values()]
+        return runnable
             .filter(entry => entry.readyAt <= now)
             .sort((left, right) => left.order - right.order)[0];
     }
@@ -134,7 +158,7 @@ export class AnalysisScheduler {
     private planNext(): void {
         this.wakeup?.cancel();
         this.wakeup = undefined;
-        if (this.disposed || this.running || this.pending.size === 0) return;
+        if (this.disposed || this.runningRoots.size >= this.maxConcurrent || this.pending.size === 0) return;
         const now = this.timing.now();
         const ready = this.chooseReady(now);
         if (ready) {
@@ -144,7 +168,8 @@ export class AnalysisScheduler {
             });
             return;
         }
-        const future = [...this.pending.values()].filter(entry => entry.readyAt > now);
+        const future = [...this.pending.values()]
+            .filter(entry => !this.runningRoots.has(entry.request.rootUri) && entry.readyAt > now);
         if (future.length === 0) return;
         const earliest = Math.min(...future.map(entry => entry.readyAt));
         this.wakeup = this.timing.delay(() => {
@@ -154,7 +179,7 @@ export class AnalysisScheduler {
     }
 
     private async runNext(): Promise<void> {
-        if (this.disposed || this.running) return;
+        if (this.disposed || this.runningRoots.size >= this.maxConcurrent) return;
         const entry = this.chooseReady(this.timing.now());
         if (!entry) {
             this.planNext();
@@ -164,16 +189,21 @@ export class AnalysisScheduler {
         // Supersession and closing are decided by DocumentRegistry, not by
         // comparing scheduler-local copies of document versions.
         if (!this.isCurrent(entry.request)) {
+            this.reportActivity();
             this.planNext();
             return;
         }
-        this.running = true;
+        this.runningRoots.add(entry.request.rootUri);
+        this.reportActivity();
+        // Fill remaining slots, yielding to the event loop between dispatches.
+        this.planNext();
         try {
             await this.execute(entry.request);
         } catch (error) {
             this.onError(error, entry.request);
         } finally {
-            this.running = false;
+            this.runningRoots.delete(entry.request.rootUri);
+            this.reportActivity();
             // Always yield to the event loop before running the next unit.
             this.planNext();
         }

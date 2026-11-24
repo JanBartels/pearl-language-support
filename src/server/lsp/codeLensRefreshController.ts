@@ -34,6 +34,10 @@ export class CodeLensRefreshController {
     private pending: ScheduledCodeLensRefresh | undefined;
     private inFlight = false;
     private dirty = false;
+    /** Distinguish an explicit selection from a pending analysis-only refresh. */
+    private dirtyFromUser = false;
+    private analysisBusy = false;
+    private deferredAnalysis = false;
 
     constructor(
         private readonly requestRefresh: () => Promise<unknown>,
@@ -49,13 +53,52 @@ export class CodeLensRefreshController {
             this.pending?.cancel();
             this.pending = undefined;
             this.dirty = false;
+            this.dirtyFromUser = false;
+            this.deferredAnalysis = false;
         }
     }
 
-    /** Called whenever a committed analysis may change a visible CodeLens. */
+    /**
+     * The scheduler owns the analysis-batch boundary. Defer only analysis-
+     * driven refreshes until it becomes idle; explicit user selections must
+     * still be able to request an immediate refresh during a long rebuild.
+     */
+    setAnalysisBusy(busy: boolean): void {
+        if (this.disposed) return;
+        // A new batch may start during the previous batch's 100-ms timer.
+        // Fold a not-yet-sent analysis-only refresh into the new batch.
+        if (busy && this.dirty && !this.dirtyFromUser) {
+            this.pending?.cancel();
+            this.pending = undefined;
+            this.dirty = false;
+            this.deferredAnalysis = true;
+        }
+        this.analysisBusy = busy;
+        if (!busy && this.deferredAnalysis) {
+            this.deferredAnalysis = false;
+            this.scheduleAnalysis();
+        }
+    }
+
+    /** An analysis commit or include-version adoption changed the context. */
+    scheduleAnalysis(): void {
+        if (!this.supported || this.disposed) return;
+        if (this.analysisBusy) {
+            this.deferredAnalysis = true;
+            return;
+        }
+        this.markDirty(false);
+    }
+
+    /** Called whenever a user action may change a visible CodeLens. */
     schedule(): void {
+        this.markDirty(true);
+    }
+
+    private markDirty(fromUser: boolean): void {
         if (!this.supported || this.disposed) return;
         this.dirty = true;
+        this.dirtyFromUser ||= fromUser;
         // Do not send overlapping global refresh requests. A later update
         // remains dirty until the in-flight request has completed.
         if (this.inFlight) return;
@@ -66,6 +109,8 @@ export class CodeLensRefreshController {
         this.supported = false;
         this.disposed = true;
         this.dirty = false;
+        this.dirtyFromUser = false;
+        this.deferredAnalysis = false;
         this.pending?.cancel();
         this.pending = undefined;
     }
@@ -83,6 +128,7 @@ export class CodeLensRefreshController {
     private flush(): void {
         if (!this.supported || this.disposed || !this.dirty || this.inFlight) return;
         this.dirty = false;
+        this.dirtyFromUser = false;
         this.inFlight = true;
         let request: Promise<unknown>;
         try {

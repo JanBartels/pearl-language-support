@@ -2057,28 +2057,99 @@ Persistenzzustände erweitern.
 - Der Transport bleibt **außerhalb** des laufenden LSP-Pfads. Weder
   Compilerobjekte noch LSP-Provider werden zur Serialisierung verändert.
 
-**Noch nicht implementiert und vor Einführung eines WorkerExecutor nötig:**
+**Vierte implementierte Schicht: vollständiges `AnalysisResult`-Objekt (Version 1)**
 
-1. Die übrigen Teile von `AnalysisResult` (Probleme, Tokens, Makrometadaten,
-   Präprozessorbedingungen, Include-Vorkommen und Source-Highlights) unter
-   demselben Versionsvertrag ergänzen. Erst ein vollständiger
-   Roundtrip-Test gegen echte Validatorergebnisse inklusive Hover,
-   Definition/References, Folding, Semantic Tokens, Signature Help und
-   Diagnoseabbildung erlaubt die Ergebnisübernahme in `DocumentRegistry`.
-2. `WorkerExecutor` darf nur **vollständig rehydrierte** `AnalysisResult`s
-   zurückgeben. Scheduler, SnapshotCollector und `DocumentRegistry` bleiben
-   für Planung, Eingabesnapshot bzw. Gültigkeitsprüfung zuständig; der Worker
-   publiziert keine LSP-Diagnosen und verwaltet keine Include-Kontexte.
+- `AnalysisResultWire` fasst den gemeinsam aufgebauten semantischen Graphen
+  und die restlichen Analysefelder zusammen. Pro `Analysis` werden AST-Wurzel,
+  physische Source und `SemanticContext`/Referenzindizes mit **IDs aus derselben
+  Sitzung** referenziert. `decodeSemanticGraphBundle()` rekonstruiert mehrere
+  Kontexte in einer einzigen Decoder-Sitzung. Mehrere Analysen dürfen deshalb
+  dieselben AST-, SourceValue-, Symbol- und Typobjekte teilen, ohne beim
+  Dekodieren unbeabsichtigt Kopien zu erhalten.
+- Tokens werden mit ihren Quell-Locations explizit transportiert. Der Decoder
+  verwendet `createToken()` und `createCommentToken()`; so bleibt insbesondere
+  die Methode `CommentToken.compilerOption()` verfügbar. Geteilte Tokenobjekte
+  aus `tokens` und `activeBlockComments` erhalten gemeinsame IDs.
+- Diagnosen einschließlich Severity, Code, Tags und Include-Vorkommens-ID
+  werden wieder mit den `Problem`-Fabriken erstellt und in echte
+  `ProblemCollection`s eingefügt. Die globale Problemsammlung und die
+  Analysesammlungen behalten durch **ein gemeinsames Problem-ID-Register**
+  die Identität gemeinsam referenzierter Probleme.
+- Makrodefinitionen und -referenzen bekommen eigene ID-Register. Dadurch
+  bleiben Definitionen auch nach `#undef`, erneutem `#define` sowie bei
+  `#ifdef` mit gleichnamigen, aber verschiedenen Definitionen unterscheidbar.
+  `MacroOccurrenceIndex` wird aus den Originaldaten neu aufgebaut.
+  `PreprocessorConditionalBlock` und dessen Collection werden mit ihren
+  normalen Konstruktoren wiederhergestellt.
+- Include-Vorkommen erhalten ihre Ausführungsidentität, Pfadkette,
+  Expansionsspanne und (wenn vorhanden) den Verweis auf **die konkrete**
+  Source-Instanz. Aktive und beobachtete Include-URIs, Source-Highlights und
+  deren `SourceValue`-Referenzen werden ebenfalls übernommen.
+- Das `AnalysisResult` wird durch `AnalysisResult.rehydrate()` aus validierten,
+  konstruierten Bestandteilen aufgebaut. Diese Fabrik übernimmt anders als
+  `create()` die globalen Problemsammlungen und Makroreferenzen explizit,
+  statt sie nur anhand der einzelnen Analysen erneut zu sammeln.
+  Die bestehenden Lazy-Caches für Signaturen und Blockkommentare werden
+  ausdrücklich **nicht** serialisiert; ihre bisherigen Getter erzeugen sie
+  nach dem Transport bei Bedarf neu.
+- Der Encoder weist neue, unbekannte Felder an `AnalysisResult`, `Analysis`,
+  Problemen, Tokens, Makrodefinitionen/-referenzen, Präprozessorbedingungen,
+  Include-Vorkommen und Source-Highlights zurück. Neue Compilerzustände
+  müssen bewusst dem versionierten Transport hinzugefügt werden.
+- `encodeAnalysisResult()`/`decodeAnalysisResult()` sind der einzige
+  vorgesehene vollständige Transportpfad. Die bestehenden einzelnen
+  Graphtransporte bleiben eigenständige, testbare Bausteine.
+
+**Validierung und Grenze zum Worker:**
+
+- Echte Validatorergebnisse wurden über `structuredClone()` und den
+  vollständigen Roundtrip geprüft: AST, Bindungen, Probleme, Makros,
+  verschachtelte/wiederholte Includes, Quell-IDs, Highlights und mehrere
+  Analysen mit gemeinsam verwendeten Objekten. Die bereits vorhandenen
+  Tests für die einzelnen Teiltransporte bleiben gültig.
+- Große synthetische Übersetzungseinheiten (`STRESS_01` und `STRESS_15`)
+  wurden erfolgreich rekonstituiert. Der Decoder ist aber **synchron** und
+  kostet bei großen ASTs messbar Zeit. Vor produktivem Workerbetrieb müssen
+  deshalb auch die Auswirkungen der Rehydration auf die Reaktionsfähigkeit
+  des LSP-Hauptthreads gemessen werden; ein Worker beschleunigt nicht
+  automatisch jeden Schritt der Gesamtkette.
+- Ein **LSP-Provider-Paritätstest** vergleicht echte Validator-Ergebnisse
+  vor und nach `encodeAnalysisResult()` / `structuredClone()` /
+  `decodeAnalysisResult()` über die vorhandenen Provider und eine reale
+  `DocumentRegistry` mit reproduzierbaren In-Memory-Dokumenten. Abgedeckt
+  sind AST-Hover, Definitionen, Referenzen (inklusive Makros),
+  Präprozessor-Hover, Folding, Signature Help, Diagnose-Mapping und
+  -Veröffentlichung, semantische Tokens sowie Include-Kontextoptionen und
+  -auswahl. Zwei Übersetzungseinheiten mit insgesamt drei Einbindungen
+  derselben Datei prüfen auch unterschiedliche `#ifndef`-Ausführungen.
+  Jede Prüfung verlangt sinnvolle Nicht-Leer-Ergebnisse; identische leere
+  Antworten gelten nicht als hinreichender Nachweis.
+  Diese Tests verwenden die **Produktions-Provider-Bausteine**, jedoch
+  noch keine echte LSP-Verbindung und keine Worker-Threads. Sie belegen
+  Verhalten unter den getesteten Eingaben, keine vollständige
+  Serialisierbarkeit aller zukünftigen Compilerzustände.
+- Der **LSP-Hauptpfad bleibt unverändert**: `LocalAnalysisExecutor` liefert
+  bis zur gesonderten Worker-Integration weiterhin die ursprünglichen
+  Live-Klassenobjekte, nicht einen Roundtrip-Clone. Vor einer Umschaltung
+  ist nach den Provider-Paritätstests noch eine Integration an der
+  tatsächlichen LSP-Verbindung sowie eine Reaktionszeitmessung mit
+  asynchronem Worker und synchroner Dekodierung erforderlich.
+- Ein zukünftiger `WorkerExecutor` darf nur vollständig rekonstruierte
+  `AnalysisResult`-Objekte zurückgeben. `AnalysisScheduler`,
+  `AnalysisSnapshotCollector` und `DocumentRegistry` bleiben unverändert
+  für Auftragsplanung, konsistente Eingaben und Ergebnisgültigkeit zuständig.
+  Worker publizieren keine LSP-Diagnosen und verwalten keine Include-Kontexte.
 
 Die Transportobjekte sind **keine neuen fachlichen Compilerrepräsentationen**.
-Die lokale Analyse bleibt auf dem bisherigen Live-Objektpfad, solange der
-vollständige Rücktransport noch nicht implementiert und getestet ist.
+Sie bilden ausschließlich die technische Grenze zwischen Analyseausführung
+und zurückkehrendem Compilerergebnis ab.
 
 Referenzimplementierungen:
 - `/src/server/utility/transport/sourceGraphTransport.ts`
 - `/src/server/utility/transport/sourceValueGraphTransport.ts`
 - `/src/server/utility/transport/astGraphTransport.ts`
 - `/src/server/utility/transport/semanticGraphTransport.ts`
+- `/src/server/utility/transport/analysisResultTransport.ts`
 - `/src/server/utility/transport/tools/generateAstGraphTransport.cjs`
 - `/src/server/source/fileSource.ts`
 - `/src/server/source/expandedSource.ts`
@@ -2613,3 +2684,200 @@ Die Implementierung interpretiert die Speicherreservierung selbst nicht
 und aendert keine Kompilieroptionen.
 
 ---
+
+## Worker-Ausführung der Compilerpipeline (erste Integration)
+
+Nach erfolgreich getesteter Snapshot-Erfassung und vollständigem
+`AnalysisResult`-Roundtrip steht ein erster `WorkerAnalysisExecutor` bereit.
+Die Ausführung ist **explizit zuschaltbar**, nicht globaler Default:
+`PEARL_ANALYSIS_EXECUTOR=worker`. Ohne diese Umgebungsvariable verwendet
+`server.ts` weiterhin `LocalAnalysisExecutor`. Die zweite F5-Konfiguration
+`Run PEARL Extension (Worker)` startet gezielt den Worker-Modus.
+
+**Zuständigkeiten und Grenzen:**
+
+- `AnalysisScheduler` verwaltet weiterhin Auftragsreihenfolge, Prioritäten und
+  Debouncing; `DocumentRegistry` vergibt Request-IDs, besitzt die Ergebnisse
+  und entscheidet allein über deren Gültigkeit. Inklusive der Prüfung aller
+  Quellversionen **nach** der asynchronen Analyse bleibt die Orchestrierung in
+  `server.ts`. Ein Worker publiziert keine Diagnostics und verändert keine
+  LSP-Provider oder Registry-Objekte.
+- Der `AnalysisSnapshotCollector` zeichnet die tatsächlich ausgeführten
+  Includes auf. Erst der **abgeschlossene** `AnalysisExecutionInput` mit
+  `includeSnapshots` darf an den Worker gesendet werden; fehlende Daten
+  erzeugen einen Fehler. Der Worker besitzt weder `DocumentRegistry` noch
+  `WorkspaceManager` und benötigt keinen Dateisystemzugriff. Die für ihn
+  verwendete `Validator(logger)`-Konstruktionsform verlangt einen expliziten
+  `IncludeSourceResolver` beim Analyseaufruf; die bisherige
+  `Validator(workspaceManager, registry, logger)`-Form bleibt vorerst kompatibel.
+- `analysisWorkerProtocol.ts` definiert Daten-Nachrichten mit Request-ID.
+  Der Worker führt den Validator mit `SnapshotIncludeSourceResolver` aus,
+  kodiert das Ergebnis mit `encodeAnalysisResult` und sendet ausschließlich
+  `AnalysisResultWire` zurück. `WorkerAnalysisExecutor` rekonstruiert vor
+  dem Auflösen des Promise mit `decodeAnalysisResult` die echten Compilerobjekte.
+- Der erste Executor hält **einen dauerhaften Worker** und sendet höchstens
+  einen Auftrag gleichzeitig. Intern wartet eine FIFO-Liste. Bei Fehlern
+  werden die betroffenen Promises abgelehnt, bei Worker-Ausfall alle offenen
+  Promises. **Keine stille lokale Ersatzanalyse**, da diese den LSP-Hauptthread
+  wieder blockieren würde. Shutdown beendet den Thread und lehnt offene
+  Aufträge ab. Ein automatischer Neustart oder ein Worker-Pool gehört noch
+  nicht zu dieser Version.
+- Das esbuild-Projekt baut `analysisWorker.ts` als **zweites Server-Bundle**
+  `dist/server/analysisWorker.js`; `server.ts` übergibt dessen expliziten
+  Pfad an den Executor. Das ist für VS-Code-Extension-Hosts erforderlich:
+  ein direktes Starten nicht gebündelter TypeScript-Quelldateien ist kein
+  verlässlicher Produktionspfad.
+- `analysis.worker` protokolliert Validator-, Kodierungs- und
+  **Hauptthread-Dekodierungszeit** sowie die Gesamtdauer. Die Dekodierung
+  bleibt vorläufig synchron im LSP-Hauptthread; die Event-Loop kann dadurch
+  bei großen Übersetzungseinheiten weiterhin verzögert werden. Die
+  Snapshot-Erfassung läuft ebenfalls noch im Hauptthread. Der Scheduler
+  startet vorerst auch im Worker-Modus keine zweite TU, bevor die erste
+  abgeschlossen ist: Dies ist **Isolation, noch keine TU-Parallelisierung**.
+- Der Worker erhält standardmäßig keine Debugger-`execArgv` des Elternthreads,
+  damit parallele Debug-Ports nicht kollidieren. Debugging des Workers benötigt
+  später eine gesonderte Konfiguration.
+
+**Absicherung:**
+
+- Unit-Tests prüfen FIFO-Reihenfolge, Quellversionen, geschlossene Snapshots,
+  Worker-Fehler, ungültige IDs, Exit, PostMessage-Fehler und Dispose.
+- Ein Integrationstest startet einen **echten Worker-Thread** mit der
+  tatsächlichen Validatorpipeline und vergleicht sein rekonstruiertes
+  `AnalysisResult` mit einem lokalen Ergebnis. Der Test-Bootstrap lädt die
+  TypeScript-Quelldatei nur für `node:test`; produktiv gilt ausschließlich
+  der esbuild-Einstiegspunkt.
+- Die bisherigen Provider-Paritätstests bleiben maßgeblich. Erst nach
+  erfolgreichen F5-Integrationstests im expliziten Worker-Modus darf dessen
+  Aktivierung als Default erwogen werden. Mehrere Worker und das
+  Last-/Speichermanagement bilden einen eigenen Folgeschritt.
+
+Referenzimplementierungen:
+- `/build.mjs`
+- `/.vscode/launch.json`
+- `/src/server/analysisWorker.ts`
+- `/src/server/utility/analysisWorkerProtocol.ts`
+- `/src/server/utility/workerAnalysisExecutor.ts`
+- `/src/server/utility/analysisExecutor.ts`
+- `/src/server/utility/transport/analysisResultTransport.ts`
+- `/src/server/validation/validator.ts`
+- `/src/server/utility/tests/workerAnalysisExecutor.test.ts`
+- `/src/server/utility/tests/workerAnalysisIntegration.test.ts`
+
+---
+
+## Messinstrumentierung und CodeLens-Refresh bei Worker-Analysen
+
+Nach der ersten F5-Messung mit einem Worker (15 Uebersetzungseinheiten)
+werden die noch gebuendelten Worker-Transportzeiten aufgeschluesselt, bevor
+mehrere Worker eingefuehrt werden. **Die Ausfuehrung bleibt vorerst
+sequentiell in genau einem Worker** und weiterhin explizit zuschaltbar.
+
+**Zeitmessung am Thread-Uebergang:**
+
+- `analysis.worker` protokolliert `queueMs` (Wartezeit im Executor),
+  `requestPostMs` (synchroner `Worker.postMessage`-Aufruf im LSP),
+  `requestTransferMs` (Rueckkehr aus `postMessage` bis Worker-Empfang),
+  `workerSetupMs` (Dokument/Resolver/Validator aufbauen),
+  `analyzeMs` (Validator), `encodeMs` (Ergebnis kodieren),
+  `resultTransferMs` (Beginn des Antwort-`postMessage` bis Empfang im LSP),
+  `decodeMs` (Klassen und Indizes wiederherstellen), `otherMs` (verbleibende
+  Messdifferenz) sowie `totalMs` (gesamter Auftrag).
+- Anfang und Ende der Uebertragungsstrecken werden ueber
+  `performance.timeOrigin + performance.now()` in beiden Node-Worker-Threads
+  auf derselben Zeitachse gemessen. Die Zeitpunkte liegen im versionierten,
+  nur aus Daten bestehenden Worker-Protokoll. Die Tests pruefen auch einen
+  echten Worker-Roundtrip mit nahezu geschlossener Zeitbilanz.
+- `requestTransferMs` schliesst beim **ersten** Auftrag die Worker-Anlaufzeit
+  ein. `resultTransferMs` schliesst **sowohl** Structured-Clone/MessagePort
+  **als auch** Wartezeiten des LSP-Eventloops ein. Eine Unterscheidung von
+  Klonzeit und Scheduling innerhalb dieser Strecke ist daraus allein noch
+  nicht moeglich. Die Zahlen sind Messungen, keine Ursachenzuschreibung.
+- `analysis.commit` verwendet weiterhin die bestehenden
+  `validatorSyncMs`/`validatorAwaitMs`; `analysis.worker` ist die detaillierte
+  Aufschluesselung. Der Transport veraendert die Gueltigkeits- und
+  Versionspruefungen des `DocumentRegistry` nicht.
+
+**CodeLens-Refresh bei Analyse-Batches:**
+
+- `AnalysisScheduler` meldet ueber einen allgemeinen Activity-Callback den
+  Uebergang von *idle* nach *busy* und zurueck. *Busy* schliesst sowohl
+  wartende als auch gerade laufende Analyseauftraege ein; ein Batch endet
+  erst, wenn beides leer ist. Der Scheduler selbst kennt keine CodeLens.
+- `CodeLensRefreshController.scheduleAnalysis()` fasst
+  analysebedingte Aktualisierungen (Commits und Versionenuebernahme beim
+  Oeffnen von Includedateien) bis zum Scheduler-Leerlauf zusammen. Ein
+  bereits vorgemerkter, noch nicht gesendeter Analyse-Refresh kann in den
+  naechsten Batch uebernommen werden.
+- `CodeLensRefreshController.schedule()` bleibt fuer explizite
+  Benutzeraktionen wie die Auswahl eines Include-Kontexts sofort wirksam.
+  Ein laufender Analyse-Batch darf diese Anzeige nicht blockieren.
+  Vorhandenes In-Flight-Handling verhindert weiterhin ueberlappende globale
+  Refresh-Anfragen. Andere LSP-Funktionen, die Publikation einzelner
+  Diagnostics und die CodeLens-Kontextauswahl werden nicht verzoegert.
+- Der Batch-Refresh kann die erste automatische CodeLens-Aktualisierung bis
+  zum Ende eines groesseren Analyse-Batches verschieben. Das entspricht dem
+  gewaehlten Ziel, redundante globale Refresh-Anfragen zu vermeiden; es ist
+  kein allgemeines Drosseln aller LSP-Funktionen.
+
+Referenzimplementierungen:
+- `/src/server/utility/analysisScheduler.ts`
+- `/src/server/lsp/codeLensRefreshController.ts`
+- `/src/server/server.ts`
+- `/src/server/utility/analysisWorkerProtocol.ts`
+- `/src/server/analysisWorker.ts`
+- `/src/server/utility/workerAnalysisExecutor.ts`
+- `/src/server/utility/tests/analysisScheduler.test.ts`
+- `/src/server/lsp/tests/codeLensRefreshController.test.ts`
+- `/src/server/utility/tests/workerAnalysisExecutor.test.ts`
+- `/src/server/utility/tests/workerAnalysisIntegration.test.ts`
+
+---
+
+## Kontrollierte Parallelisierung kompletter Uebersetzungseinheiten (2 Worker)
+
+Nach der Ein-Worker-Messung und der Aufschluesselung der Ruecktransportzeiten
+kann der Worker-Modus fuer einen getrennten Vergleich mit **zwei** Threads
+betrieben werden. Der lokale Executor bleibt Standard; die vorhandene
+Ein-Worker-F5-Konfiguration bleibt unveraendert. Die zusaetzliche Konfiguration
+`Run PEARL Extension (2 Workers)` setzt `PEARL_ANALYSIS_EXECUTOR=worker` und
+`PEARL_ANALYSIS_WORKERS=2`. Die Workeranzahl ist explizit (1 bis 16), kein
+automatischer Default, damit Benchmark-Ergebnisse reproduzierbar bleiben.
+
+**Verantwortlichkeiten:**
+
+- `AnalysisScheduler` vergibt mit `maxConcurrent=2` bis zu zwei *verschiedene*
+  Translation Units gleichzeitig. Priorisierung, Debounce und Ersetzen
+  ausstehender Auftraege bleiben dort. Zwei Analysen derselben Root-URI duerfen
+  niemals gleichzeitig laufen, auch wenn waehrend eines laufenden Workers
+  neue Bearbeitungsereignisse eintreffen. Der lokale Modus bleibt bei
+  `maxConcurrent=1`.
+- `WorkerPoolAnalysisExecutor` besitzt ausschliesslich mehrere isolierte
+  `WorkerAnalysisExecutor`-Instanzen und deren Ressourcennutzung. Seine eigene
+  FIFO-Warteschlange ist nur Backpressure und trifft keine fachlichen
+  Prioritaets- oder Versionsentscheidungen. Worker besitzen keine Referenzen
+  auf `DocumentRegistry` oder `WorkspaceManager`.
+- `DocumentRegistry` vergibt weiterhin Request-IDs und prueft allein die
+  Ergebnisgueltigkeit. `server.ts` prueft nach jedem asynchronen Resultat die
+  Root-Version und alle erfassten Include-Quelltexte erneut. Ein supersediertes
+  Ergebnis wird verworfen und nie publiziert; Commit und LSP-Provider verbleiben
+  im Hauptthread.
+- Der Scheduler meldet `busy`, solange mindestens ein Auftrag laeuft oder
+  wartet. Der analysebedingte CodeLens-Refresh wird erst nach dem *gesamten*
+  parallelen Batch gesendet; eine ausdrueckliche Kontextwahl bleibt sofort
+  wirksam.
+- `analysis.executor` protokolliert `workers`, `analysis.worker` enthaelt
+  `workerId` (1-basiert). Saemtliche Transportmessungen bleiben je Worker
+  erhalten. Der `resultTransferMs` kann auch bei mehreren Workern Eventloop-
+  Wartezeit einschliessen; Messungen sind keine Ursachenanalyse. Der
+  Hauptthread rekonstruiert Ergebnisse weiterhin synchron, wodurch kurze
+  Blockaden beim Decode bestehen bleiben.
+
+Referenzimplementierungen:
+- `/src/server/utility/analysisScheduler.ts`
+- `/src/server/utility/workerPoolAnalysisExecutor.ts`
+- `/src/server/utility/workerAnalysisExecutor.ts`
+- `/src/server/server.ts`
+- `/.vscode/launch.json`
+- `/src/server/utility/tests/analysisScheduler.test.ts`
+- `/src/server/utility/tests/workerPoolAnalysisExecutor.test.ts`

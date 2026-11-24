@@ -24,20 +24,29 @@ async function build() {
     outfile: 'dist/server/server.js'
   });
 
+  const workerCtx = await esbuild.context({
+    ...shared,
+    entryPoints: ['src/server/analysisWorker.ts'],
+    outfile: 'dist/server/analysisWorker.js'
+  });
+
   if (watch) {
     await Promise.all([
       clientCtx.watch(),
-      serverCtx.watch()
+      serverCtx.watch(),
+      workerCtx.watch()
     ]);
     console.log('Watching...');
   } else {
     await Promise.all([
       clientCtx.rebuild(),
-      serverCtx.rebuild()
+      serverCtx.rebuild(),
+      workerCtx.rebuild()
     ]);
     await Promise.all([
       clientCtx.dispose(),
-      serverCtx.dispose()
+      serverCtx.dispose(),
+      workerCtx.dispose()
     ]);
   }
 }

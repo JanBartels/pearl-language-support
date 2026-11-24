@@ -217,3 +217,120 @@ test('dispose prevents pending work and later enqueue operations', async () => {
     await f.timing.drain();
     assert.equal(f.seen.length, 0);
 });
+
+
+test('activity notification spans the entire batch, including an awaited worker job', async () => {
+    const timing = new ManualTiming();
+    const states: boolean[] = [];
+    let finish!: () => void;
+    const held = new Promise<void>(resolve => { finish = resolve; });
+    const seen: string[] = [];
+    const scheduler = new AnalysisScheduler(
+        async job => {
+            seen.push(job.rootUri);
+            if (job.rootUri === 'A') await held;
+        },
+        () => true,
+        () => assert.fail('unexpected error'),
+        timing,
+        active => states.push(active)
+    );
+    scheduler.enqueue(request('A', 1));
+    scheduler.enqueue(request('B', 1));
+    assert.deepEqual(states, [true]);
+    await timing.advanceTo(0);
+    assert.deepEqual(seen, ['A']);
+    assert.deepEqual(states, [true]);
+    finish();
+    await timing.drain();
+    assert.deepEqual(seen, ['A', 'B']);
+    assert.deepEqual(states, [true, false]);
+});
+
+test('cancellation and rejected stale work end the batch exactly once', async () => {
+    const timing = new ManualTiming();
+    const states: boolean[] = [];
+    const scheduler = new AnalysisScheduler(
+        async () => assert.fail('stale analysis must not run'),
+        () => false,
+        () => assert.fail('unexpected error'),
+        timing,
+        active => states.push(active)
+    );
+    scheduler.enqueue(request('A', 1));
+    scheduler.enqueue(request('B', 1));
+    scheduler.cancel('B');
+    assert.deepEqual(states, [true]);
+    await timing.drain();
+    assert.deepEqual(states, [true, false]);
+});
+
+test('two slots start separate roots concurrently but never overlap the same root', async () => {
+    const timing = new ManualTiming();
+    const current = new Map([['A', 1], ['B', 1], ['C', 1]]);
+    const seen: string[] = [];
+    const finish = new Map<string, () => void>();
+    const states: boolean[] = [];
+    const scheduler = new AnalysisScheduler(async job => {
+        seen.push(`${job.rootUri}:${job.requestId}`);
+        await new Promise<void>(resolve => finish.set(`${job.rootUri}:${job.requestId}`, resolve));
+    }, job => current.get(job.rootUri) === job.requestId,
+    () => assert.fail('unexpected error'), timing, active => states.push(active), 2);
+    scheduler.enqueue(request('A', 1));
+    scheduler.enqueue(request('B', 1));
+    scheduler.enqueue(request('C', 1));
+    await timing.advanceTo(0);
+    assert.deepEqual(seen, ['A:1', 'B:1']);
+    assert.deepEqual(states, [true]);
+
+    // A2 supersedes A1 but must not start until A1 has completed.
+    current.set('A', 2);
+    scheduler.enqueue(request('A', 2, 'interactive'));
+    await timing.advanceTo(0);
+    assert.deepEqual(seen, ['A:1', 'B:1']);
+    finish.get('B:1')!();
+    await timing.advanceTo(0);
+    // A2 is blocked by A1, but background C may use the free slot.
+    assert.deepEqual(seen, ['A:1', 'B:1', 'C:1']);
+    finish.get('A:1')!();
+    await timing.advanceTo(0);
+    assert.deepEqual(seen, ['A:1', 'B:1', 'C:1', 'A:2']);
+    finish.get('C:1')!();
+    finish.get('A:2')!();
+    await timing.drain();
+    assert.deepEqual(states, [true, false]);
+});
+
+test('two worker slots preserve interactive priority among runnable roots', async () => {
+    const timing = new ManualTiming();
+    const seen: string[] = [];
+    let finishFirst!: () => void;
+    let finishSecond!: () => void;
+    const first = new Promise<void>(resolve => { finishFirst = resolve; });
+    const second = new Promise<void>(resolve => { finishSecond = resolve; });
+    const scheduler = new AnalysisScheduler(async job => {
+        seen.push(job.rootUri);
+        if (job.rootUri === 'A') await first;
+        if (job.rootUri === 'D') await second;
+    }, () => true, () => assert.fail('unexpected error'), timing, undefined, 2);
+    scheduler.enqueue(request('A', 1));
+    scheduler.enqueue(request('B', 1));
+    scheduler.enqueue(request('C', 1));
+    scheduler.enqueue(request('D', 1, 'interactive'));
+    await timing.advanceTo(0);
+    assert.deepEqual(seen, ['D', 'A']);
+    finishSecond();
+    await timing.advanceTo(0);
+    // B finishes immediately, so its newly free slot may start C too.
+    assert.deepEqual(seen, ['D', 'A', 'B', 'C']);
+    finishFirst();
+    await timing.drain();
+    assert.deepEqual(seen, ['D', 'A', 'B', 'C']);
+});
+
+test('invalid scheduler concurrency limits fail early', () => {
+    for (const limit of [0, -1, 1.5, NaN]) {
+        assert.throws(() => new AnalysisScheduler(async () => undefined, () => true, () => {},
+            undefined, undefined, limit), /positive integer/);
+    }
+});

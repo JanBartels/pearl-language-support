@@ -466,7 +466,29 @@ export function encodeSemanticGraph(root:AstNode, context:SemanticContext, sourc
     return new SemanticGraphEncoder().encode(root,context,sources,indices);
 }
 
-export function decodeSemanticGraph(wire:SemanticGraphWire):DecodedSemanticGraph {
+/** Separate contexts share one AST / SourceValue / symbol / type identity space. */
+export interface SemanticGraphContextEntryWire {
+    readonly context: SemanticContextWire;
+    readonly indices?: SemanticIndexWire;
+}
+
+export type DecodedSemanticContextEntry = Pick<DecodedSemanticGraph,
+    'context' | 'references' | 'resolutions' | 'occurrences'>;
+
+export interface DecodedSemanticGraphBundle {
+    readonly ast: DecodedAstGraph;
+    readonly entries: readonly DecodedSemanticContextEntry[];
+    resolveSymbol(id: number): SemanticSymbol;
+    resolveType(id: number): SemanticType;
+    resolveReference(id: number): SymbolReference;
+}
+
+/** Decode all entries in one session. Calling decodeSemanticGraph repeatedly would
+ *  duplicate AST, SourceValue and semantic identities across analyses. */
+export function decodeSemanticGraphBundle(
+    wire: SemanticGraphWire,
+    entries: readonly SemanticGraphContextEntryWire[]
+): DecodedSemanticGraphBundle {
     if(wire.version!==SEMANTIC_GRAPH_TRANSPORT_VERSION || !Array.isArray(wire.types)
         || !Array.isArray(wire.symbols) || !Array.isArray(wire.references) || !wire.context) {
         throw new Error('Unsupported or malformed semantic graph transport version');
@@ -618,13 +640,14 @@ export function decodeSemanticGraph(wire:SemanticGraphWire):DecodedSemanticGraph
         read:usage.read,written:usage.written,addressTaken:usage.addressTaken,uncertain:usage.uncertain,
         initialized:usage.initialized,externallyVisible:usage.externallyVisible,implicitlyUsed:usage.implicitlyUsed,unused:usage.unused
     });
-    const c=wire.context;
     const map=<K,V>(entries:readonly (readonly [number,number])[], k:(id:number)=>K, val:(id:number)=>V)=>decodePairs(entries,k,val);
     const mapData=<K,V,W>(entries:readonly (readonly [number,W])[], k:(id:number)=>K, val:(w:W)=>V):Map<K,V>=>{
         const result=new Map<K,V>();
         for(const [id,data] of entries){const key=k(id);if(result.has(key))throw new Error('Duplicate semantic map key');result.set(key,val(data));}
         return result;
     };
+    const decodeEntry = (entry: SemanticGraphContextEntryWire): DecodedSemanticContextEntry => {
+    const c = entry.context;
     const context=new SemanticContext(
         map(c.typeDefinitions,id=>resolveSymbol(id) as TypeSymbol,resolveType),
         map(c.bindings,v,resolveSymbol),
@@ -648,11 +671,11 @@ export function decodeSemanticGraph(wire:SemanticGraphWire):DecodedSemanticGraph
     let referenceIndex:SymbolReferenceIndex|undefined;
     let resolutionIndex:SymbolReferenceResolutionIndex|undefined;
     let occurrenceIndex:SymbolOccurrenceIndex|undefined;
-    if(wire.indices!==undefined){
-        if(!Array.isArray(wire.indices.references)||!Array.isArray(wire.indices.resolutions))
+    if(entry.indices!==undefined){
+        if(!Array.isArray(entry.indices.references)||!Array.isArray(entry.indices.resolutions))
             throw new Error('Malformed semantic index transport');
-        referenceIndex=new SymbolReferenceIndex(wire.indices.references.map(resolveReference));
-        const resolutions=wire.indices.resolutions.map((r):SymbolReferenceResolution=>{
+        referenceIndex=new SymbolReferenceIndex(entry.indices.references.map(resolveReference));
+        const resolutions=entry.indices.resolutions.map((r):SymbolReferenceResolution=>{
             const base={reference:resolveReference(r.reference),diagnostics:r.diagnostics.map(decodeDiagnostic)};
             switch(r.kind){
                 case 'bound':return {...base,kind:r.kind,symbol:resolveSymbol(r.symbol),declaration:v(r.declaration)};
@@ -665,12 +688,24 @@ export function decodeSemanticGraph(wire:SemanticGraphWire):DecodedSemanticGraph
         resolutionIndex=new SymbolReferenceResolutionIndex(resolutions);
         occurrenceIndex=new SymbolOccurrenceIndex(resolutionIndex,context);
     }
+    return {context,
+        ...(referenceIndex===undefined?{}:{references:referenceIndex}),
+        ...(resolutionIndex===undefined?{}:{resolutions:resolutionIndex}),
+        ...(occurrenceIndex===undefined?{}:{occurrences:occurrenceIndex})};
+    };
+    if (!Array.isArray(entries) || !entries.length) {
+        throw new Error('Missing semantic graph context entries');
+    }
+    const decodedEntries = entries.map(decodeEntry);
     // Demand that all records are reachable and decodable, even unused ones.
     for(const id of typeWire.keys())resolveType(id);
     for(const id of symbolWire.keys())resolveSymbol(id);
     for(const id of refWire.keys())resolveReference(id);
-    return {ast,context,resolveType,resolveSymbol,resolveReference,
-        ...(referenceIndex===undefined?{}:{references:referenceIndex}),
-        ...(resolutionIndex===undefined?{}:{resolutions:resolutionIndex}),
-        ...(occurrenceIndex===undefined?{}:{occurrences:occurrenceIndex})};
+    return {ast,entries:decodedEntries,resolveType,resolveSymbol,resolveReference};
+}
+
+export function decodeSemanticGraph(wire:SemanticGraphWire):DecodedSemanticGraph {
+    const decoded = decodeSemanticGraphBundle(wire, [{context:wire.context, ...(wire.indices === undefined ? {} : {indices:wire.indices})}]);
+    return {ast:decoded.ast, ...decoded.entries[0]!, resolveType:decoded.resolveType,
+        resolveSymbol:decoded.resolveSymbol, resolveReference:decoded.resolveReference};
 }
