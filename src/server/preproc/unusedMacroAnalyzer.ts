@@ -4,6 +4,9 @@
 import type { MacroDefinition } from './macroDefinition';
 import type { MacroOccurrenceIndex } from './macroOccurrenceIndex';
 
+/** Stable diagnostic category; presentation logic must not parse message text. */
+export const UNUSED_MACRO_DIAGNOSTIC_CODE = 'preproc.unused-macro';
+
 /**
  * Determine unused source #defines from the preprocessor's actual bindings.
  *

@@ -2421,6 +2421,33 @@ wachsen die Problems-Zeilen nicht mit der Zahl der Uebersetzungseinheiten;
 die vorhandene Deduplizierung, kontextunabhaengige Fehleraggregation und
 kontextabhaengigen Warnungen bleiben unveraendert.
 
+**Projektweite Reduktion von Unused-Warnungen (0.3.6):** Für gewöhnliche
+Deklarationen und Makrodefinitionen in mehrfach eingebundenen Quelldateien
+bleiben die Compileranalysen **vollständig unabhängig**. Der Compiler liefert
+weiterhin alle kontextabhängigen Unused-Warnungen und unveränderte Verwendungsdaten.
+Erst der LSP-`DiagnosticPublicationManager` unterdrückt eine veröffentlichte
+`semantic.unused-symbol`- bzw. `preproc.unused-macro`-Warnung, wenn eine
+andere aktuell gespeicherte, erfolgreich validierte Übersetzungseinheit
+**dieselbe physische Deklaration nachweislich verwendet**. Diese reduzierte
+Ansicht gilt sowohl vor als auch nach der Auswahl eines Include-Kontexts;
+alle anderen Warnungen und Compilerfehler folgen unverändert den oben
+dokumentierten Regeln. Der unbenutzte Teil einer gemeinsamen Datei wird
+weiterhin gemeldet, wenn ihn keiner der bekannten Kontexte verwendet.
+
+Der Server reicht nur unveränderliche, aus den bereits bestehenden
+`SymbolUsageIndex`- und `MacroOccurrenceIndex`-Daten abgeleitete
+Deklarationsnachweise an die Diagnoseveröffentlichung weiter. Eine
+Zuordnung verlangt gleiche physische Datei und Position, Symbolname und
+Symbolart sowie eine übereinstimmende Typ- bzw. Makrodefinition.
+Makroerzeugte Bezeichner und uneindeutige Deklarationen bleiben konservativ
+**ungefiltert**. Ein neues Analyseergebnis ersetzt seine früheren Nachweise
+atomar; beim Entfernen einer Übersetzungseinheit werden sie mit entfernt.
+Damit erscheinen zuvor ausgeblendete Warnungen bei Bedarf wieder.
+Die neue Regel behauptet **keine** Vollständigkeit über nicht entdeckte
+Übersetzungseinheiten oder externe Library-Nutzer. Eine explizite
+Unterdrückung von Warnungen in öffentlichen Library-APIs ist ein separates,
+späteres Thema und gehört nicht zu dieser Konsolidierung.
+
 **Technische Grenze:** LSP `textDocument/publishDiagnostics` liefert nur
 eine Liste je physischer Datei-URI. Deshalb kann VS Code ohne zusätzliche
 Client-Infrastruktur keine unabhängige projektweite Probleme-Ansicht **und**

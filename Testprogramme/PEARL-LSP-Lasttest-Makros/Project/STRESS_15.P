@@ -2912,7 +2912,7 @@ Unit15Task: TASK PRIO 16;
     FOR Counter FROM 1 TO 10 REPEAT
         Step := Step + Counter;
         IF Step > 100 THEN
-            Step := Step - 100;
+            Step := Step - 100 + ExternalConst001;
         FIN;
     END;
 END;

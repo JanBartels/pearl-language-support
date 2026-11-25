@@ -14,7 +14,7 @@ import { findIncludeOccurrenceIdAt, type IncludeOccurrence } from '../preproc/in
 import { mapToOriginalLocation } from '../core/sourceOffset';
 import type { Source } from '../source/source';
 import { MacroOccurrenceIndex } from '../preproc/macroOccurrenceIndex';
-import { UnusedMacroAnalyzer } from '../preproc/unusedMacroAnalyzer';
+import { UnusedMacroAnalyzer, UNUSED_MACRO_DIAGNOSTIC_CODE } from '../preproc/unusedMacroAnalyzer';
 
 import { Preprocessor } from '../preproc/preprocessor';
 import { PreprocessorContext } from '../preproc/preprocessorContext';
@@ -45,6 +45,7 @@ import { UnusedSymbolAnalyzer } from '../semantic/unusedSymbolAnalyzer';
 import { CompilerControlAnalyzer } from '../semantic/compilerControlAnalyzer';
 import {
     SemanticDiagnostic,
+    SemanticDiagnosticCode,
     SemanticDiagnosticSeverity
 } from '../semantic/semanticDiagnostic';
 
@@ -140,7 +141,7 @@ export class Validator {
             problems.warning(
                 definition.location,
                 `Makro '${definition.name}' wird nicht verwendet.`,
-                { tags: [ProblemTag.Unnecessary] }
+                { code: UNUSED_MACRO_DIAGNOSTIC_CODE, tags: [ProblemTag.Unnecessary] }
             );
         }
 
@@ -294,6 +295,9 @@ export class Validator {
                 ) : undefined;
             const options = {
                 tags: diagnostic.tags,
+                // The LSP publisher may consolidate only this precise category.
+                // Do not infer unused declarations from localized message text.
+                ...(diagnostic.code === SemanticDiagnosticCode.UnusedSymbol && { code: diagnostic.code }),
                 ...(occurrenceId !== undefined && { includeOccurrenceId: occurrenceId })
             };
 

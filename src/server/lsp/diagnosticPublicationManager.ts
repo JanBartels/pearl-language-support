@@ -4,6 +4,9 @@
 import { DiagnosticSeverity, DiagnosticTag, type Diagnostic } from 'vscode-languageserver/node';
 import type { IncludeOccurrence } from '../preproc/includeOccurrence';
 import type { MappedDiagnostic } from './diagnosticMapper';
+import { SemanticDiagnosticCode } from '../semantic/semanticDiagnostic';
+import { UNUSED_MACRO_DIAGNOSTIC_CODE } from '../preproc/unusedMacroAnalyzer';
+import { unusedDiagnosticSite, type CrossUnitUnusedFact } from './crossUnitUnusedFacts';
 
 interface UnitDiagnostics {
     /** Source files participating in this translation unit. */
@@ -12,6 +15,9 @@ interface UnitDiagnostics {
     readonly diagnostics: ReadonlyMap<string, readonly MappedDiagnostic[]>;
     readonly occurrences: ReadonlyMap<string, ReadonlySet<string>>;
     readonly occurrenceOrder: ReadonlyMap<string, readonly string[]>;
+    /** Immutable presentation evidence for known physical declarations. */
+    readonly unusedFacts: readonly CrossUnitUnusedFact[];
+    readonly identitiesByWarningSite: ReadonlyMap<string, ReadonlySet<string>>;
 }
 
 interface DiagnosticContribution {
@@ -40,6 +46,7 @@ export class DiagnosticPublicationManager {
     private readonly explicitSelections = new Set<string>();
     private readonly selectedOccurrenceBySource = new Map<string, string>();
     private readonly lastSent = new Map<string, readonly Diagnostic[]>();
+    private readonly usedIdentitiesBySource = new Map<string, ReadonlySet<string>>();
 
     constructor(
         private readonly send: (uri: string, diagnostics: Diagnostic[]) => void
@@ -50,7 +57,8 @@ export class DiagnosticPublicationManager {
         unitUri: string,
         diagnostics: ReadonlyMap<string, readonly MappedDiagnostic[]>,
         sourceUris: Iterable<string> = [],
-        includeOccurrences: readonly IncludeOccurrence[] = []
+        includeOccurrences: readonly IncludeOccurrence[] = [],
+        unusedFacts: readonly CrossUnitUnusedFact[] = []
     ): void {
         const previous = this.units.get(unitUri);
         const sources = new Set<string>([unitUri, ...sourceUris]);
@@ -73,11 +81,23 @@ export class DiagnosticPublicationManager {
             sources.add(uri);
             snapshot.set(uri, [...items]);
         }
-        this.units.set(unitUri, { sources, diagnostics: snapshot, occurrences, occurrenceOrder });
+        const identitiesByWarningSite = new Map<string, Set<string>>();
+        for (const fact of unusedFacts) {
+            if (!sources.has(fact.sourceUri)) continue;
+            let identities = identitiesByWarningSite.get(fact.diagnosticSite);
+            if (!identities) {
+                identities = new Set<string>();
+                identitiesByWarningSite.set(fact.diagnosticSite, identities);
+            }
+            identities.add(fact.identity);
+        }
+        this.units.set(unitUri, { sources, diagnostics: snapshot, occurrences, occurrenceOrder,
+            unusedFacts: [...unusedFacts], identitiesByWarningSite });
 
         // A removed include is still affected, even if no current unit owns it.
         const affected = new Set<string>([...(previous?.sources ?? []), ...sources]);
         for (const sourceUri of affected) {
+            this.updateUsedIdentities(sourceUri);
             this.refreshSource(sourceUri, unitUri);
         }
     }
@@ -103,6 +123,7 @@ export class DiagnosticPublicationManager {
         if (!previous) return;
         this.units.delete(unitUri);
         for (const sourceUri of previous.sources) {
+            this.updateUsedIdentities(sourceUri);
             this.refreshSource(sourceUri);
         }
     }
@@ -116,6 +137,7 @@ export class DiagnosticPublicationManager {
             ? (occurrenceIds?.has(preferred) ? preferred : undefined)
             : occurrenceIds?.size === 1 ? [...occurrenceIds][0] : undefined;
         return (unit.diagnostics.get(sourceUri) ?? [])
+            .filter(diagnostic => !this.isProjectUsedDeclaration(sourceUri, unitUri, diagnostic))
             .filter(diagnostic => diagnostic.includeOccurrenceId === undefined
                 || diagnostic.includeOccurrenceId === currentOccurrence)
             .map(({ includeOccurrenceId: _unused, ...diagnostic }) => diagnostic);
@@ -142,6 +164,7 @@ export class DiagnosticPublicationManager {
                 // still useful there, but without that visual dimming tag.
                 if (diagnostic.severity === DiagnosticSeverity.Hint
                     && diagnostic.tags?.includes(DiagnosticTag.Unnecessary)) continue;
+                if (this.isProjectUsedDeclaration(sourceUri, unitUri, diagnostic)) continue;
                 const contribution = { diagnostic, unitUri, occurrenceId: diagnostic.includeOccurrenceId };
                 if (accept(contribution)) contributions.push(contribution);
             }
@@ -185,6 +208,43 @@ export class DiagnosticPublicationManager {
                 ]
             };
         });
+    }
+
+    /** Recompute only when a committed unit is replaced or removed. */
+    private updateUsedIdentities(sourceUri: string): void {
+        const used = new Set<string>();
+        for (const unit of this.units.values()) {
+            if (!unit.sources.has(sourceUri)) continue;
+            for (const fact of unit.unusedFacts) {
+                if (fact.sourceUri === sourceUri && fact.used) used.add(fact.identity);
+            }
+        }
+        if (used.size) this.usedIdentitiesBySource.set(sourceUri, used);
+        else this.usedIdentitiesBySource.delete(sourceUri);
+    }
+
+    /**
+     * Only unused diagnostics at a proven, unambiguous physical declaration
+     * site may be suppressed. No inference from translated message text,
+     * diagnostic tags, or symbol spelling alone is permitted.
+     *
+     * The independent compiler results remain unaltered, including the
+     * context-specific warnings used for internal semantic analysis.
+     */
+    private isProjectUsedDeclaration(
+        sourceUri: string, unitUri: string, diagnostic: MappedDiagnostic
+    ): boolean {
+        if (sourceUri === unitUri || diagnostic.severity !== DiagnosticSeverity.Warning) return false;
+        const code = diagnostic.code;
+        if (code !== SemanticDiagnosticCode.UnusedSymbol
+            && code !== UNUSED_MACRO_DIAGNOSTIC_CODE) return false;
+        const unit = this.units.get(unitUri);
+        if (!unit) return false;
+        const site = unusedDiagnosticSite(sourceUri, code, diagnostic.range);
+        const identities = unit.identitiesByWarningSite.get(site);
+        if (!identities || identities.size !== 1) return false;
+        return this.usedIdentitiesBySource.get(sourceUri)?.has([...identities][0]!) === true
+            && this.contextCount(sourceUri) > 1;
     }
 
     private contextCount(sourceUri: string): number {

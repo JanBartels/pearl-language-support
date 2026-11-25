@@ -52,6 +52,7 @@ import { resolveAnalysisExecutionSettings } from './settings/analysisExecutionSe
 import { Validator } from './validation/validator';
 import { mapDiagnostics } from './lsp/diagnosticMapper';
 import { DiagnosticPublicationManager } from './lsp/diagnosticPublicationManager';
+import { collectCrossUnitUnusedFacts } from './lsp/crossUnitUnusedFacts';
 import { mapLspLocation } from './lsp/lspLocationMapper';
 import { createHover } from './lsp/createHover';
 import { findReferences } from './lsp/findReferences';
@@ -999,7 +1000,8 @@ async function validateAndPublish(request: AnalysisRequest): Promise<void> {
         snapshot.uri,
         diagnosticsByUri,
         [...result.files.keys(), ...(result.includedSourceUris ?? [])],
-        result.includeOccurrences
+        result.includeOccurrences,
+        collectCrossUnitUnusedFacts(result, documentRegistry)
     );
     const changedOpenIncludes = [...new Set([...previousIncludes, ...(result.includedSourceUris ?? [])])]
       .filter(sourceUri => !!documents.get(sourceUri));
