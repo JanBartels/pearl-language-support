@@ -2366,8 +2366,9 @@ kein beliebiges Analyseergebnis zurück. Solange eine ausdrücklich gewählte
 Anfrage nicht vorübergehend auf eine andere umschalten.
 
 Für mehrfach eingebundene Dateien stellt der LSP eine **CodeLens** bereit.
-Über `pearl.selectIncludeContext` und eine Auswahlliste kann eine einbindende
-`.P`-Datei ausgewählt oder die Wahl geändert werden. Die Auswahl gilt pro
+Über den Client-Befehl `pearl.pickIncludeContext` und eine native QuickPick-
+Liste kann eine einbindende `.P`-Datei beziehungsweise ein einzelnes
+Einbindungsvorkommen ausgewählt oder die Wahl geändert werden. Die Auswahl gilt pro
 physischer Include-URI und wird von Hover, Navigation und Semantic Tokens
 beachtet. Sie bleibt erhalten, solange die gewählte Einbindung gültig ist.
 Bei nur einem Einbindungskontext erfolgt die Auswahl automatisch.
@@ -3189,3 +3190,65 @@ Referenzimplementierungen:
 - `/src/server/server.ts`
 - `/src/server/utility/tests/folderTranslationUnitIndex.test.ts`
 - `/src/server/settings/tests/translationUnitDiscoverySettings.test.ts`
+
+---
+
+## 0.3.5: Bedienoberfläche für Include-Kontexte
+
+Die Auswahl eines Einbindungskontexts bleibt **ausschließlich** in der
+`DocumentRegistry` gespeichert. Die bewährte Zuordnung nach physischer
+Include-URI, einbindender Übersetzungseinheit und stabiler
+`IncludeOccurrence.id` ist unverändert. Insbesondere gibt es keinen
+zweiten Kontextzustand im VS-Code-Client und keine implizite Auswahl bei
+mehreren gültigen Einbindungen.
+
+Die CodeLens zeigt weiterhin **einen** Eintrag in Zeile 0, öffnet jetzt
+aber den Client-Befehl `pearl.pickIncludeContext`. Die native VS-Code-
+QuickPick-Auswahl zeigt eine filterbare Liste statt bis zu 20 Schaltflächen
+in einer `window/showMessage`-Antwort. Die Beschreibung jedes Eintrags
+zeigt den vollständigen Einbindungspfad; die Positionsnummer unterscheidet
+auch Einträge aus derselben Übersetzungseinheit.
+
+Für geöffnete, im Workspace analysierte Includes stellt der Client den
+aktiven Kontext dauerhaft in der **Statusleiste** dar (z. B.
+`PROG1.P (3/19)`). Bei mehreren Kontexten öffnet ein Klick dort dieselbe
+QuickPick-Liste; bei nur einem Kontext ist die Anzeige read-only.
+Solange Analysen noch ausstehen, kann eine read-only Warteanzeige erscheinen.
+Normale `.P`-Dateien erhalten keinen Kontextstatus. Es erfolgt **kein
+Editor-Sprung** bei einem manuellen Kontextwechsel.
+
+Dafür existieren drei UI-bezogene LSP-Nachrichten:
+
+- `pearl/getIncludeContextState`: liest die gültigen Optionen und die
+  aktuelle Auswahl für die **Version des offenen Dokuments** aus der
+  `DocumentRegistry`; der Client speichert die Auswahl nicht selbst.
+- `pearl/activateIncludeContext`: erwartet URI, Dokumentversion,
+  Übersetzungseinheit und `occurrenceId` (für Legacy-Einbindungen `null`).
+  Der Server verwirft veraltete Versionen und nutzt die bisherige
+  `activateIncludeContext`-Routine für Diagnose, Folding, CodeLens und
+  Semantic Tokens.
+- `pearl/includeContextsChanged`: fordert nur die Aktualisierung der
+  sichtbaren Statusanzeige an; 40 ms Zusammenfassung im Client schützt vor
+  überflüssigen Abfragen beim Commit vieler Übersetzungseinheiten.
+
+Die schon vorhandene automatische Kontextübernahme bei *Go to Definition*
+verwendet weiterhin `pearl/activateNavigationContext` und denselben
+serverseitigen Aktivierungspfad. Die Statusanzeige zieht danach den
+aktuellen Zustand erneut vom Server. Überlappende asynchrone Antworten
+werden über die Request-Generation verworfen. Eine nach Editieren oder
+Tabwechsel veraltete QuickPick-Auswahl wird nicht aktiviert.
+
+Die Statusleiste ist eine **Ansicht** auf den Registry-Zustand, keine
+neue Quelle semantischer Wahrheit. Compiler, Parser, AST, Semantik,
+`DocumentRegistry`, `AnalysisScheduler` und Worker-Executors werden
+hierdurch nicht verändert. Die bisherigen Einschränkungen für Peek
+Definition bleiben bestehen.
+
+Referenzimplementierungen:
+- `/src/shared/includeContextUiProtocol.ts`
+- `/src/server/lsp/includeContextUiState.ts`
+- `/src/server/server.ts` (UI-Endpunkte und CodeLens-Befehl)
+- `/src/client/includeContextPresentation.ts`
+- `/src/client/extension.ts` (QuickPick und Statusleiste)
+- `/src/client/tests/includeContextPresentation.test.ts`
+- `/src/server/lsp/tests/includeContextUiState.test.ts`

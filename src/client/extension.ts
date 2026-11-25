@@ -25,6 +25,12 @@ import { IncludeDependencyWatcher, type IncludeWatchSnapshot } from './includeDe
 import { KnownIncludedSources } from './knownIncludedSources';
 import { AnalysisWorkerConfigurationCoordinator } from './analysisWorkerConfigurationCoordinator';
 import {
+  IncludeContextRequestGate, includeContextQuickPickItems, presentIncludeContextStatus
+} from './includeContextPresentation';
+import type {
+  IncludeContextUiState, SelectIncludeContextUiRequest
+} from '../shared/includeContextUiProtocol';
+import {
   LanguageClient,
   TransportKind,
   LanguageClientOptions,
@@ -35,6 +41,7 @@ let client: LanguageClient | undefined;
 const pendingDefinition = new PendingNavigationIntent();
 const knownIncludedSources = new KnownIncludedSources();
 const languageUpdates = new Set<string>();
+let notifyIncludeContextStatusChange: (() => void) | undefined;
 
 // Temporary, read-only Windows URI investigation (Dev_0_3, package 28).
 // Kept separate from the Language Server output so a real project's token/AST
@@ -138,6 +145,7 @@ async function activateTarget(editor: vscode.TextEditor): Promise<void> {
       // Navigation may precede the next include snapshot; share the language
       // transition guard with the direct-open path.
       await ensurePearlDocumentLanguage(editor.document);
+      notifyIncludeContextStatusChange?.();
     }
   } catch (error) {
     console.warn('PEARL navigation context could not be activated:', error);
@@ -148,6 +156,108 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   includeUriTrace = vscode.window.createOutputChannel('PEARL Include URI Trace');
   context.subscriptions.push(includeUriTrace);
   traceIncludedUri('client extension activated');
+
+  // Two mutually exclusive surfaces: a clickable selector and a read-only
+  // context indicator while there is no meaningful choice.
+  const contextStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+  const passiveContextStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+  contextStatus.name = 'PEARL Include-Kontext';
+  contextStatus.command = 'pearl.pickIncludeContext';
+  passiveContextStatus.name = 'PEARL Include-Kontext';
+  context.subscriptions.push(contextStatus, passiveContextStatus);
+  function hideIncludeContextStatus(): void {
+    contextStatus.hide();
+    passiveContextStatus.hide();
+  }
+  const contextRequests = new IncludeContextRequestGate();
+  let statusRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+
+  async function refreshIncludeContextStatus(): Promise<void> {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor || !client || editor.document.uri.scheme !== 'file'
+        || editor.document.languageId !== 'pearl') {
+      contextRequests.cancel();
+      hideIncludeContextStatus();
+      return;
+    }
+    const uri = editor.document.uri.toString();
+    // Failed/stopped clients return null; the server remains the only source
+    // of selected occurrences. Never retain a stale client-side selection.
+    const state = await contextRequests.read(uri, requestedUri =>
+      client!.sendRequest<IncludeContextUiState | null>(
+        'pearl/getIncludeContextState', { uri: requestedUri }
+      ).catch(() => null)
+    );
+    if (!state || vscode.window.activeTextEditor?.document.uri.toString() !== uri) return;
+    const presentation = presentIncludeContextStatus(state);
+    if (!presentation) {
+      hideIncludeContextStatus();
+      return;
+    }
+    const target = presentation.canChoose ? contextStatus : passiveContextStatus;
+    const other = presentation.canChoose ? passiveContextStatus : contextStatus;
+    other.hide();
+    target.text = presentation.text;
+    target.tooltip = presentation.tooltip;
+    target.show();
+  }
+
+  function scheduleIncludeContextStatusRefresh(): void {
+    if (statusRefreshTimer !== undefined) clearTimeout(statusRefreshTimer);
+    statusRefreshTimer = setTimeout(() => {
+      statusRefreshTimer = undefined;
+      void refreshIncludeContextStatus();
+    }, 40);
+  }
+
+  notifyIncludeContextStatusChange = scheduleIncludeContextStatusRefresh;
+  context.subscriptions.push({ dispose: () => {
+    notifyIncludeContextStatusChange = undefined;
+    contextRequests.cancel();
+    if (statusRefreshTimer !== undefined) clearTimeout(statusRefreshTimer);
+  } });
+
+  context.subscriptions.push(vscode.commands.registerCommand(
+    'pearl.pickIncludeContext', async (requestedUri?: unknown) => {
+      const editor = vscode.window.activeTextEditor;
+      if (!client || !editor || editor.document.uri.scheme !== 'file') return;
+      const uri = typeof requestedUri === 'string' ? requestedUri : editor.document.uri.toString();
+      if (editor.document.uri.toString() !== uri) return;
+      const state = await client.sendRequest<IncludeContextUiState | null>(
+        'pearl/getIncludeContextState', { uri }
+      ).catch(() => null);
+      if (!state || state.uri !== uri || state.options.length < 2) return;
+
+      const items = includeContextQuickPickItems(state);
+      const picked = await vscode.window.showQuickPick(items, {
+        title: 'PEARL: Include-Kontext auswählen',
+        placeHolder: `${state.options.length} Einbindungsvorkommen – nach Übersetzungseinheit oder Include-Stelle filtern`,
+        matchOnDescription: true
+      });
+      if (!picked || !client) return;
+      // A picker may remain open during edits or a change of editor tab.
+      if (vscode.window.activeTextEditor?.document.uri.toString() !== uri
+          || vscode.window.activeTextEditor.document.version !== state.version) {
+        scheduleIncludeContextStatusRefresh();
+        return;
+      }
+      const option = state.options[picked.optionIndex];
+      if (!option) return;
+      const request: SelectIncludeContextUiRequest = {
+        uri, version: state.version, unitUri: option.unitUri,
+        occurrenceId: option.occurrenceId
+      };
+      const accepted = await client.sendRequest<boolean>(
+        'pearl/activateIncludeContext', request
+      ).catch(() => false);
+      if (!accepted) {
+        void vscode.window.showInformationMessage(
+          'Der gewählte PEARL-Include-Kontext ist nicht mehr gültig. Bitte erneut auswählen.'
+        );
+      }
+      scheduleIncludeContextStatusRefresh();
+    }
+  ));
   const serverModule = context.asAbsolutePath(
     path.join('dist', 'server', 'server.js')
   );
@@ -170,12 +280,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     configuredWorkerCount,
     async () => {
       if (!client) return;
+      contextRequests.cancel();
+      hideIncludeContextStatus();
       try {
         await client.restart();
         const snapshot = await client.sendRequest<IncludeWatchSnapshot>(
           'pearl/getIncludeWatchTargets'
         );
         acceptIncludeSnapshot(snapshot, dependencyWatchers);
+        scheduleIncludeContextStatusRefresh();
       } catch (error) {
         // Keep restart failures separate from configuration-delivery errors.
         // The language client otherwise labels any middleware rejection as a
@@ -299,6 +412,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // The Open-Folder snapshot also reconciles documents opened before startup.
   context.subscriptions.push(vscode.workspace.onDidOpenTextDocument(document => {
     void assignKnownIncludeLanguage(document);
+    if (document.uri.toString() === vscode.window.activeTextEditor?.document.uri.toString()) {
+      scheduleIncludeContextStatusRefresh();
+    }
   }));
 
   // Register before starting the client. The snapshot request below covers
@@ -306,7 +422,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(client.onNotification(
     'pearl/includeWatchTargets', (snapshot: IncludeWatchSnapshot) => {
       acceptIncludeSnapshot(snapshot, dependencyWatchers);
+      scheduleIncludeContextStatusRefresh();
     }
+  ));
+  context.subscriptions.push(client.onNotification(
+    'pearl/includeContextsChanged', () => scheduleIncludeContextStatusRefresh()
   ));
 
   await client.start();
@@ -318,12 +438,21 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   } catch (error) {
     console.warn('PEARL include watchers could not be initialized:', error);
   }
+  scheduleIncludeContextStatusRefresh();
   // Worker-capacity changes are handled by the LanguageClient configuration
   // middleware above, after delivery to the current server.
   context.subscriptions.push(client);
   context.subscriptions.push(
     vscode.window.onDidChangeActiveTextEditor(editor => {
+      contextRequests.cancel();
+      hideIncludeContextStatus();
       if (editor) void activateTarget(editor);
+      scheduleIncludeContextStatusRefresh();
+    }),
+    vscode.workspace.onDidChangeTextDocument(event => {
+      if (event.document.uri.toString() === vscode.window.activeTextEditor?.document.uri.toString()) {
+        scheduleIncludeContextStatusRefresh();
+      }
     }),
     vscode.window.onDidChangeTextEditorSelection(event => {
       if (event.textEditor === vscode.window.activeTextEditor) {

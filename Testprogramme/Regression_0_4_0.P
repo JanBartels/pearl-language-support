@@ -10,6 +10,10 @@ SYSTEM;
 
 PROBLEM;
 
+#include "Regression_0_4_0.H"
+
+#undef MyMacro
+
 SPC A1 DATION INOUT ALPHIC;
 
 DCL X FIXED;
@@ -30,5 +34,10 @@ P2: PROC;
     PUT S.E,'foo' TO A1 BY A,SKIP;  ! Format A ist mit dem Datenobjekt S (Fixed) nicht verträglich.
                                     ! Meldung an sich ist richtig, aber "Datenobjekt S (Fixed)" ist falsch. Muss S.E heißen.
 END;
+
+#ifdef MyMacro      ! Hier wäre es schön, wenn man zum #undef springen könnte
+P3: PROC;
+END;
+#endif
 
 MODEND;

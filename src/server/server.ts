@@ -41,6 +41,8 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import * as path from 'path';
 import { randomUUID } from 'node:crypto';
 import { DocumentRegistry } from './utility/documentRegistry';
+import type { IncludeContextUiState, SelectIncludeContextUiRequest } from '../shared/includeContextUiProtocol';
+import { buildIncludeContextUiState } from './lsp/includeContextUiState';
 import { filePathFromUri, uriFromFilePath } from './utility/uriUtils';
 import { WorkspaceManager } from './utility/workspace';
 import { FolderTranslationUnitIndex, type TranslationUnitDiscoveryFolder } from './utility/folderTranslationUnitIndex';
@@ -300,7 +302,6 @@ connection.onInitialize((params: InitializeParams) => {
 //      completionProvider: { resolveProvider: true },
       hoverProvider: true,
       codeLensProvider: { resolveProvider: false },
-      executeCommandProvider: { commands: ['pearl.selectIncludeContext'] },
       definitionProvider: true,
       declarationProvider: true,
       referencesProvider: true,
@@ -347,7 +348,7 @@ connection.onInitialized(() => {
 });
 
 // ------------------------------
-// Include context selection (LSP-only; no editor extension command needed)
+// Include context selection (registry-owned; client renders QuickPick and status)
 // ------------------------------
 
 /** Suppress identical diagnostic snapshots across repeated VS Code requests. */
@@ -356,6 +357,9 @@ const lastIncludeContextDiagnostic = new Map<string, string>();
 /** Refresh the CodeLens display when the include graph or selection changes. */
 function refreshIncludeCodeLenses(reason = 'unspecified', fromAnalysis = false): void {
   analysisTrace.event('codeLens.refresh.schedule', { reason, fromAnalysis });
+  // The client refreshes only its currently visible include status. Do not
+  // duplicate the selected context in the extension host.
+  void connection.sendNotification('pearl/includeContextsChanged');
   if (fromAnalysis) codeLensRefresh.scheduleAnalysis();
   else codeLensRefresh.schedule();
 }
@@ -394,6 +398,32 @@ function includeOptionLabel(option: { unitUri: string; occurrence?: {
   });
   return sites?.length ? sites.join(' → ') : fileLabel(option.unitUri);
 }
+
+/** Read-only projection of the current registry state into the editor UI. */
+connection.onRequest('pearl/getIncludeContextState', (request: { uri: string }): IncludeContextUiState | null => {
+  if (!request || typeof request.uri !== 'string') return null;
+  const document = documents.get(request.uri);
+  if (!document) return null;
+  const options = documentRegistry.getIncludeContextOptions(request.uri, document.version);
+  const selected = documentRegistry.getSelectedIncludeContextOption(request.uri, document.version);
+  return buildIncludeContextUiState(
+    request.uri, document.version,
+    documentRegistry.getKnownIncludedSourceUris().includes(request.uri),
+    options, selected,
+    unitUri => path.basename(filePathFromUri(unitUri)),
+    includeOptionLabel
+  );
+});
+
+/** Version-bound selection; all validation and side effects stay server-owned. */
+connection.onRequest('pearl/activateIncludeContext', (request: SelectIncludeContextUiRequest): boolean => {
+  if (!request || typeof request.uri !== 'string' || typeof request.unitUri !== 'string'
+      || !Number.isInteger(request.version)
+      || !(request.occurrenceId === null || typeof request.occurrenceId === 'string')) return false;
+  const document = documents.get(request.uri);
+  if (!document || document.version !== request.version) return false;
+  return activateIncludeContext(request.uri, request.unitUri, request.occurrenceId ?? undefined);
+});
 
 connection.onCodeLens(params => {
   const uri = params.textDocument.uri;
@@ -437,48 +467,18 @@ connection.onCodeLens(params => {
   }
   if (options.length < 2) return [];
 
-  const selected = documentRegistry.getSelectedIncludeContextOption(uri, document.version);
-  const title = selected
-    ? `PEARL: Include-Kontext ${includeOptionLabel(selected)} (wechseln)`
-    : `PEARL: Include-Kontext auswählen (${options.length} Vorkommen)`;
+  // One compact CodeLens entry; the client command opens a native QuickPick.
+  // The registry selection is not modified merely by presenting the choice.
+  const title = `PEARL: Include-Kontext wählen / wechseln (${options.length})`;
   const lens: CodeLens = {
     range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
     command: {
       title,
-      command: 'pearl.selectIncludeContext',
+      command: 'pearl.pickIncludeContext',
       arguments: [uri]
     }
   };
   return [lens];
-});
-
-connection.onExecuteCommand(async params => {
-  if (params.command !== 'pearl.selectIncludeContext') return;
-  const uri = params.arguments?.[0];
-  if (typeof uri !== 'string') return;
-  const document = documents.get(uri);
-  if (!document) return;
-  const options = documentRegistry.getIncludeContextOptions(uri, document.version);
-  if (options.length < 2) return;
-
-  const choices = options.map((option, index) => ({
-    option,
-    // The index guarantees an unambiguous action even if labels coincide.
-    title: `${index + 1}. ${includeOptionLabel(option)}`
-  }));
-  const answer = await connection.window.showInformationMessage(
-    `PEARL: Einbindungskontext für ${path.basename(filePathFromUri(uri))} auswählen`,
-    ...choices.map(choice => ({ title: choice.title }))
-  );
-  if (!answer) return;
-  const selected = choices.find(choice => choice.title === answer.title)?.option;
-  if (!selected || !activateIncludeContext(
-    uri, selected.unitUri, selected.occurrence?.id
-  )) {
-    logger.warn(`Include context selection is no longer valid for ${uri}`);
-    return;
-  }
-  logger.debug(`Include context ${uri} -> ${selected.unitUri} / ${selected.occurrence?.id ?? 'legacy'}`);
 });
 
 // ------------------------------
