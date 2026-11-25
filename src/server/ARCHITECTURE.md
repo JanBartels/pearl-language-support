@@ -4,7 +4,7 @@ Dieses Dokument beschreibt die Architektur des Projekts.
 
 Die Implementierung befindet sich im öffentlichen GitHub-Repository:
 
-https://github.com/JanBartels/pearl-language-support/tree/Dev_0_3
+https://github.com/JanBartels/pearl-language-support/tree/Dev_0_4
 
 Die hier genannten Referenzimplementierungen sind Einstiegspunkte in den
 Quellcode und gelten als maßgebliche Beispiele für die jeweiligen
@@ -3290,3 +3290,212 @@ Referenzimplementierungen:
 - `/src/client/extension.ts` (QuickPick und Statusleiste)
 - `/src/client/tests/includeContextPresentation.test.ts`
 - `/src/server/lsp/tests/includeContextUiState.test.ts`
+
+---
+
+## 0.3.6: Kontextübergreifende Unused-Diagnosen und Problems-Ansicht
+
+Die Compileranalyse jeder Übersetzungseinheit bleibt unabhängig. Die
+projektweite Diagnoseveröffentlichung darf jedoch gleichartige Diagnosen
+physischer Includedateien zusammenfassen und gezielt Unused-Warnungen
+reduzieren. Sie erzeugt dadurch keine gemeinsame Symboltabelle und verändert
+keine Compilerergebnisse.
+
+In der Problems-Ansicht steht die eigentliche Diagnose am Anfang. Bei
+mehreren Kontexten wird die Anzahl der betroffenen Kontexte angehängt;
+die vollständige Herkunft bleibt als `relatedInformation` verfügbar.
+Inaktivitätsmarkierungen dürfen in der projektweiten Übersicht keine
+physische Includedatei abdunkeln. Tatsächliche Warnungen bleiben sichtbar,
+aber ohne das Tag `Unnecessary` in dieser Übersicht.
+
+`collectCrossUnitUnusedFacts()` ermittelt aus veröffentlichten
+Analyseergebnissen Fakten über physische Deklarationen. Die Identität
+berücksichtigt URI, Diagnosecode, physischen Positionsbereich, Namen und
+fachliche Signatur (bei Makros den Ersetzungstext, bei Symbolen unter
+anderem die aufgelösten Typinformationen). Objektidentitäten aus
+verschiedenen Workern sind hierfür ungeeignet. Makroerzeugte Namen, deren
+physischer Quelltext nicht dem deklarierten Namen entspricht, werden
+konservativ ausgeschlossen.
+
+Der `DiagnosticPublicationManager` unterdrückt ausschließlich Warnungen
+mit den expliziten Codes für unbenutzte Symbole bzw. Makros, wenn die
+physische Deklaration eindeutig zugeordnet ist, mehrere Kontexte bekannt
+sind und in mindestens einem gültigen Analyseergebnis eine entsprechende
+Verwendung nachgewiesen ist. Weder Meldungstexte noch Namen allein sind
+geeignete Identitäten. Beim Ersetzen oder Entfernen einer committed
+Übersetzungseinheit werden die betroffenen Fakten neu zusammengeführt;
+eine zuvor unterdrückte Warnung kann dadurch wieder erscheinen.
+
+Diese Zusammenfassung ist eine Aufgabe der Diagnoseveröffentlichung,
+nicht der semantischen Analyse und nicht der aktiven Kontextauswahl.
+
+Referenzimplementierungen:
+- `/src/server/lsp/crossUnitUnusedFacts.ts`
+- `/src/server/lsp/diagnosticPublicationManager.ts`
+- `/src/server/lsp/tests/crossUnitUnusedFacts.test.ts`
+- `/src/server/lsp/tests/diagnosticsCrossUnit.test.ts`
+
+---
+
+# Dev_0_4: Semantische Korrekturen und Navigation (0.4.0)
+
+Die in Dev_0_3 etablierte Analyseinfrastruktur bleibt Grundlage der
+weiteren Entwicklung. Verbesserungen der Diagnosequalität und Navigation
+verwenden vorhandene Compilerinformationen und die bestehende
+kontextabhängige Analyseverwaltung.
+
+## Textuelle Bezeichnung und Diagnoseposition trennen
+
+Die Position eines Ausdrucks ist nicht notwendigerweise eine vollständige
+textuelle Darstellung dieses Ausdrucks. `expressionSource()` liefert
+weiterhin die für die Diagnose geeignete Quelltextposition. Die
+Formatverträglichkeitsprüfung verwendet für die Meldung bei einem
+`NameExpressionNode` dagegen den vollständigen Pfad seiner Namenssegmente
+(z. B. `S.Inner.E`). Indexausdrücke werden dabei nicht dargestellt.
+
+Es wird weder ein allgemeiner Ausdrucksformatter eingeführt noch das
+AST- oder Typmodell für eine reine Verbesserung des Meldungstextes geändert.
+Diagnosecodes, Schweregrade und Positionsbestimmung bleiben unverändert.
+
+Referenzimplementierungen:
+- `/src/server/semantic/formattedIoFormatCompatibility.ts`
+- `/src/server/semantic/tests/formattedIoFormatExecution.test.ts`
+
+## Explizite Undefinition als Navigationsziel
+
+Ein nicht definiertes Makro kann entweder niemals definiert oder explizit
+mit `#undef` aufgehoben worden sein. Diese Unterscheidung verändert nicht
+die Auswertung von `#ifdef` und `#ifndef`, ist aber für Go to Definition
+relevant.
+
+Die `MacroTable` speichert getrennt von den gültigen Makrodefinitionen die
+letzte wirksame Undefinitionsposition je Name. Ein erneutes `#define`
+entfernt diese Position. Ein wirksames `#undef` speichert sie auch dann,
+wenn keine Definition vorhanden war; die bisherige Warnung bleibt erhalten.
+Inaktive Direktiven ändern den Zustand nicht.
+
+Das Navigationsziel wird zum Auswertungszeitpunkt im
+`PreprocessorConditionalBlock` als `macroUndefinitionLocation` festgehalten
+und über den expliziten `AnalysisResultTransport` übertragen. Spätere
+Änderungen der Makrotabelle dürfen ein früheres Navigationsziel nicht
+verändern. Der Lookup berücksichtigt das konkrete Include-Vorkommen.
+
+Eine Undefinition ist keine `MacroDefinition` und erzeugt keine künstliche
+`MacroReference`. Hover, Makroexpandierung, Unused-Analyse und bedingte
+Übersetzung bleiben unverändert. Bei einem niemals definierten Makro ohne
+explizites `#undef` existiert weiterhin kein solches Navigationsziel.
+
+Referenzimplementierungen:
+- `/src/server/preproc/macroTable.ts`
+- `/src/server/preproc/preprocessor.ts`
+- `/src/server/preproc/preprocessorConditionalBlock.ts`
+- `/src/server/preproc/preprocessorConditionalBlockStack.ts`
+- `/src/server/preproc/preprocessorConditionalBlockLookup.ts`
+- `/src/server/preproc/tests/macroReferencesLsp.test.ts`
+- `/src/server/utility/transport/analysisResultTransport.ts`
+- `/src/server/server.ts` (`onDefinition`)
+
+## Konservative Erkennung von Include-Guards
+
+Ein klassischer Include-Guard ist eine strukturelle Präprozessorkonstruktion,
+für die eine Unused-Warnung auch bei nur einmaliger Einbindung nicht hilfreich
+ist. Die Erkennung arbeitet auf den bereits vorhandenen Lexer-Tokens der
+jeweiligen physischen Datei, vor der Entfernung inaktiver Zweige. Sie ist
+unabhängig von Namenskonventionen und der aktuellen Makroumgebung.
+
+Erkannt wird ausschließlich die konservative Ganzdatei-Form:
+
+```pearl
+#ifndef Guard
+#define Guard
+! Dateiinhalt
+#endif
+```
+
+Das erste relevante Element muss `#ifndef` sein, unmittelbar gefolgt vom
+`#define` desselben Namens ohne Ersetzungstext. Gewöhnliche Kommentare und
+Leerzeilen sind zulässig, Compiler-Steuerkommentare gelten als relevanter
+Quelltext. Der zugehörige `#endif` muss den gesamten übrigen Dateiinhalt
+abschließen. Ein alternativer Zweig auf Guard-Ebene oder ein erneutes
+`#define` bzw. `#undef` desselben Namens innerhalb des Guards verhindert
+die Erkennung. Verschachtelte Bedingungen sind zulässig, werden aber
+nicht selbst als Ganzdatei-Guard klassifiziert.
+
+Insbesondere bleibt eine verschachtelte Defaultdefinition wie
+`#ifndef InclDir` / `#define InclDir " "` / `#endif` ein gewöhnliches
+Makro und unterliegt der normalen Unused-Analyse.
+
+`detectIncludeGuard()` liefert die Position des exakten definierenden
+Identifiers, nicht lediglich den Namen. Der Präprozessor ordnet dieser
+Definition das optionale Attribut `isIncludeGuard` zu. Das Attribut wird
+über den Worker-Transport erhalten. Der `UnusedMacroAnalyzer` unterdrückt
+für diese Definition die Unused-Warnung, ohne eine Makroverwendung zu
+simulieren. Andere Makros gleichen Namens werden dadurch nicht ausgenommen.
+Die projektweite Unused-Reduktion und die Diagnoseveröffentlichung bleiben
+unverändert. Im Zweifel wird keine Guard-Eigenschaft vergeben.
+
+Die allgemeine, explizite Diagnoseunterdrückung über Kommentare ist eine
+separate zukünftige Aufgabe; dieser Mechanismus legt deren Syntax und
+Gültigkeitsbereich nicht fest.
+
+Referenzimplementierungen:
+- `/src/server/preproc/includeGuardDetector.ts`
+- `/src/server/preproc/macroDefinition.ts`
+- `/src/server/preproc/macroTable.ts`
+- `/src/server/preproc/preprocessor.ts`
+- `/src/server/preproc/unusedMacroAnalyzer.ts`
+- `/src/server/preproc/tests/unusedMacroAnalyzer.test.ts`
+- `/src/server/utility/transport/analysisResultTransport.ts`
+
+## Navigation zur tatsächlich eingebundenen Datei
+
+Go to Definition auf einer `#include`-Direktive oder ihrem Dateipfad führt
+zum Anfang der tatsächlich eingebundenen Datei. Hierfür werden ausschließlich
+die aufgelösten Include-Vorkommen des gültigen Analyseergebnisses verwendet.
+Der LSP expandiert keine Pfadmakros und führt keine eigene Dateisuche durch.
+
+`IncludeSite` erhält den optionalen `directiveEndOffset` als Ende des
+physischen Direktivenbereichs ohne nachfolgende Trivia. Der Bereich ist
+halboffen. Die bisherige stabile Identität eines Include-Vorkommens aus
+URI, Direktivenanfang und Ziel-URI bleibt unverändert; der zusätzliche
+Offset wird nicht Bestandteil der ID. Er wird über den Worker-Transport
+übertragen.
+
+`lookupIncludeTarget()` sucht ausschließlich direkte Kinder der ausgewählten
+Include-Ausführung bzw. der Root-Übersetzungseinheit. Ohne eindeutigen
+Elternkontext oder bei mehreren passenden Vorkommen wird kein Include-Ziel
+geraten. Inaktive oder nicht erfolgreich aufgelöste Includes haben kein
+solches Ziel. Die Include-Navigation hat innerhalb eines aufgelösten
+Include-Pfads Vorrang vor der gewöhnlichen Makronavigation.
+
+Die tatsächliche Navigation übernimmt über den bestehenden Mechanismus
+den Kontext des gefundenen Zielvorkommens. Native Peek Definition verändert
+den aktiven Kontext weiterhin nicht. Es wird kein zusätzlicher Client-Befehl
+und kein unabhängiger Kontextzustand eingeführt.
+
+Referenzimplementierungen:
+- `/src/server/preproc/includeOccurrence.ts`
+- `/src/server/preproc/preprocessor.ts`
+- `/src/server/preproc/tests/includeOccurrences.test.ts`
+- `/src/server/utility/transport/analysisResultTransport.ts`
+- `/src/server/utility/transport/tests/analysisResultTransport.test.ts`
+- `/src/server/server.ts` (Definition und navigationsbezogene Kontextübernahme)
+
+## Referenzzugriffe und offene Regression
+
+Bei `R = X` wird die Referenzvariable R beschrieben und die Adresse von X
+verwendet. Bei `CONT R = 0` wird R gelesen, um das referenzierte Objekt zu
+beschreiben. Die Adressverwendung verhindert konservativ unbegründete
+Lese-/Schreibwarnungen für X, ohne eine allgemeine Alias-Analyse einzuführen.
+Der zusätzliche Regressionstest sichert diese Zugriffsklassifikationen ab.
+
+Offener Prüfpunkt (kein Release-Blocker für 0.4.0): Die in einem echten
+Programm beobachtete Warnung, X werde gelesen, aber nirgends beschrieben,
+ist im synthetischen Test nicht reproduzierbar. Der Produktivcode wurde
+hierfür nicht verändert. Der Punkt bleibt auch bei Beginn von 0.4.1 offen
+und wird bei erneuter Reproduktion gezielt untersucht.
+
+Referenzimplementierungen:
+- `/src/server/semantic/symbolAccessClassifier.ts`
+- `/src/server/semantic/unusedSymbolAnalyzer.ts`
+- `/src/server/semantic/tests/unusedSymbolAnalyzer.test.ts`

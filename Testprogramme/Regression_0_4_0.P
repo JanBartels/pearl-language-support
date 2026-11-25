@@ -25,7 +25,7 @@ TYPE MyStruct STRUCT [
 DCL S MyStruct;
 
 P1: PROC;
-    R = X;  ! Symbol 'P' wird nicht verwendet.
+    R = X;  ! Warnung: X wird gelesen, aber nirgends beschrieben.
     CONT R = 0;
 END;
 

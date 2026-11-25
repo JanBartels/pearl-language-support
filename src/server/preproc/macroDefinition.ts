@@ -7,6 +7,9 @@ export interface MacroDefinition {
 
     readonly name: string;
 
+    /** Canonical whole-file include guard; does not imply a macro reference. */
+    readonly isIncludeGuard?: boolean;
+
     readonly replacement: string | null;
 
     /** Literal contents between the quotes of a source #define, if available. */

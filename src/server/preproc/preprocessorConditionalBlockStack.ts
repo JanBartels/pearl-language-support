@@ -12,6 +12,8 @@ interface OpenPreprocessorConditionalBlock {
 
     readonly macroDefinition: MacroDefinition | undefined;
 
+    readonly macroUndefinitionLocation: Location | undefined;
+
     readonly ifLocation: Location;
 
     readonly macroLocation: Location;
@@ -29,7 +31,8 @@ export class PreprocessorConditionalBlockStack {
         macro: string,
         macroDefinition: MacroDefinition | undefined,
         location: Location,
-        macroLocation: Location
+        macroLocation: Location,
+        macroUndefinitionLocation?: Location
     ): void {
 
         this.stack.push({
@@ -38,6 +41,7 @@ export class PreprocessorConditionalBlockStack {
             macroDefinition: macroDefinition
                 ? { ...macroDefinition }
                 : undefined,
+            macroUndefinitionLocation,
             ifLocation: location,
             macroLocation,
             conditionSatisfied: macroDefinition !== undefined
@@ -48,7 +52,8 @@ export class PreprocessorConditionalBlockStack {
         macro: string,
         macroDefinition: MacroDefinition | undefined,
         location: Location,
-        macroLocation: Location
+        macroLocation: Location,
+        macroUndefinitionLocation?: Location
     ): void {
 
         this.stack.push({
@@ -57,6 +62,7 @@ export class PreprocessorConditionalBlockStack {
             macroDefinition: macroDefinition
                 ? { ...macroDefinition }
                 : undefined,
+            macroUndefinitionLocation,
             ifLocation: location,
             macroLocation,
             conditionSatisfied: macroDefinition === undefined

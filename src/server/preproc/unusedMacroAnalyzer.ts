@@ -24,7 +24,7 @@ export class UnusedMacroAnalyzer {
 
         for (const group of occurrences.all) {
             const location = group.definition.location;
-            if (!location) continue;
+            if (!location || group.definition.isIncludeGuard) continue;
             const key = `${location.source.uri}:${location.span.start}:${location.span.end}`;
             const used = group.references.some(reference => reference.kind !== 'undef');
             const existing = byLocation.get(key);

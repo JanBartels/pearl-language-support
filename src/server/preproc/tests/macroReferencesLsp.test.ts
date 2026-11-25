@@ -19,6 +19,8 @@ import type { DocumentRegistry } from '../../utility/documentRegistry';
 import type { Logger } from '../../utility/logging/logger';
 import type { MacroReference } from '../macroReference';
 import { Analysis } from '../../validation/analysis';
+import { PreprocessorConditionalBlockLookup } from '../preprocessorConditionalBlockLookup';
+import { encodeAnalysisResult, decodeAnalysisResult } from '../../utility/transport/analysisResultTransport';
 import { AnalysisResult } from '../../validation/analysisResult';
 import { MacroDocumentationProvider } from '../../documentation/macroDocumentationProvider';
 
@@ -70,12 +72,13 @@ function preprocess(
     const problems = new ProblemCollection();
     const source = new FileSource(rootUri, text);
     const tokens = new Lexer(source, problems, logger).tokenize();
+    const blocks = new PreprocessorConditionalBlockCollection();
     const stream = Preprocessor.create(tokens, source, context, problems, references,
-        new PreprocessorConditionalBlockCollection(), logger);
+        blocks, logger);
     const ast = new Parser(stream, problems, logger).parse();
     const index = new MacroOccurrenceIndex(context.macroDefinitions, references);
     const analysis = new Analysis(source, tokens, ast, problems, references,
-        new PreprocessorConditionalBlockCollection(), undefined, undefined, undefined,
+        blocks, undefined, undefined, undefined,
         undefined, context.macroDefinitions, index);
     const analysisResult = AnalysisResult.create(analysis, [analysis]);
     const at = (uri: string, offset: number, includeDeclaration: boolean) => {
@@ -232,4 +235,51 @@ test('hover on the #define keyword selects the same macro as its name and usage'
     assert.equal(declaration.definition, use.definition);
     assert.deepEqual(at(rootUri, source.indexOf('#define') + 2, true),
         at(rootUri, source.lastIndexOf('ABC_NAME'), true));
+});
+
+
+test('explicit undefinition navigation preserves evaluation time and worker transport', () => {
+    const text = [
+        '#ifdef huhu', '#endif',
+        '#undef huhu', '#ifdef huhu', '#endif',
+        '#ifdef missing', '#undef huhu', '#endif',
+        '#ifndef huhu', '#endif',
+        '#undef huhu', '#ifdef huhu', '#endif',
+        '#define huhu "1"', '#ifdef huhu', '#endif',
+        'MODULE Main; PROBLEM; MODEND;'
+    ].join('\n');
+    const { analysisResult } = preprocess(text);
+    const decoded = decodeAnalysisResult(structuredClone(encodeAnalysisResult(analysisResult)));
+    const lines = text.split('\n');
+    const offset = (line: number) => lines.slice(0, line).reduce((n, l) => n + l.length + 1, 0) + lines[line]!.indexOf('huhu');
+    for (const result of [analysisResult, decoded]) {
+        const blocks = result.rootAnalysis.preprocessorConditionalBlocks;
+        for (const [line, target] of [[0, -1], [3, 2], [8, 2], [11, 10], [14, -1]] as const) {
+            const pos = { uri: rootUri, offset: offset(line) };
+            const found = PreprocessorConditionalBlockLookup.lookupUndefinition(blocks, pos);
+            assert.equal(found?.span.start, target < 0 ? undefined : offset(target));
+            if (found) assert.equal(found.source.uri, rootUri);
+        }
+        assert.equal(PreprocessorConditionalBlockLookup.lookupUndefinition(blocks,
+            { uri: rootUri, offset: offset(3) - 2 }), undefined);
+    }
+});
+
+test('undefinition navigation respects the selected repeated include occurrence', () => {
+    const header = 'file:///tests/inc.h';
+    const text = '#undef huhu\n#include "inc.h"\n#undef huhu\n#include "inc.h"\nMODULE Main; PROBLEM; MODEND;';
+    const { analysisResult } = preprocess(text, { [header]: '#ifdef huhu\n#endif\n' });
+    const result = decodeAnalysisResult(structuredClone(encodeAnalysisResult(analysisResult)));
+    const blocks = [...result.rootAnalysis.preprocessorConditionalBlocks];
+    assert.equal(blocks.length, 2);
+    assert.ok(blocks[0]!.includeOccurrenceId);
+    assert.ok(blocks[1]!.includeOccurrenceId);
+    assert.notEqual(blocks[0]!.includeOccurrenceId, blocks[1]!.includeOccurrenceId);
+    for (const [index, expected] of [text.indexOf('huhu'), text.lastIndexOf('huhu')].entries()) {
+        const target = PreprocessorConditionalBlockLookup.lookupUndefinition(
+            result.rootAnalysis.preprocessorConditionalBlocks,
+            { uri: header, offset: '#ifdef '.length }, blocks[index]!.includeOccurrenceId);
+        assert.equal(target?.source.uri, rootUri);
+        assert.equal(target?.span.start, expected);
+    }
 });

@@ -12,6 +12,8 @@ import type { Source } from '../source/source';
 export interface IncludeSite {
     readonly includingUri: string;
     readonly directiveOffset: number;
+    /** End of the physical directive and path, excluding trailing trivia. */
+    readonly directiveEndOffset?: number;
     readonly includedUri: string;
 }
 
@@ -72,4 +74,25 @@ export function findIncludeOccurrenceIdAt(
         }
     }
     return ambiguous ? undefined : found?.id;
+}
+
+/** Resolve only direct children of the selected physical include execution. */
+export function lookupIncludeTarget(
+    occurrences: readonly IncludeOccurrence[],
+    unitUri: string,
+    uri: string,
+    offset: number,
+    parentId?: string
+): IncludeOccurrence | undefined {
+    if (parentId === undefined && uri !== unitUri) return undefined;
+    const matches = occurrences.filter(occurrence => {
+        const site = occurrence.sites[occurrence.sites.length - 1];
+        if (!site || site.includingUri !== uri || site.directiveEndOffset === undefined
+            || offset < site.directiveOffset || offset >= site.directiveEndOffset) return false;
+        return parentId === undefined
+            ? occurrence.sites.length === 1
+            : occurrence.sites.length > 1
+                && includeOccurrenceId(occurrence.sites.slice(0, -1)) === parentId;
+    });
+    return matches.length === 1 ? matches[0] : undefined;
 }

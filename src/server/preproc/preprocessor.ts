@@ -15,6 +15,7 @@ import { Source } from "../source/source";
 import { FileSource } from "../source/fileSource";
 import { Lexer } from "../lexer/lexer";
 
+import { detectIncludeGuard } from './includeGuardDetector';
 import { MacroDefinition } from './macroDefinition';
 import { MacroReference } from './macroReference';
 import { PreprocessorContext } from './preprocessorContext';
@@ -95,7 +96,8 @@ export class Preprocessor {
         private readonly logger: Logger,
         private readonly textOutput: ExternalPreprocessorResultBuilder,
         private readonly includeDepth = 0,
-        private readonly includeSites: readonly IncludeSite[] = []
+        private readonly includeSites: readonly IncludeSite[] = [],
+        private readonly includeGuardLocation?: Location
     ) {
         this.initialConditionalDepth = context.conditionals.depth();
 
@@ -161,7 +163,8 @@ export class Preprocessor {
         const input = new LexerTokenStream(tokens, source);
         const preprocessor = new Preprocessor(
             input, source, context, problems, macroReferences,
-            preprocessorConditionalBlocks, logger, output
+            preprocessorConditionalBlocks, logger, output, 0, [],
+            source instanceof FileSource ? detectIncludeGuard(tokens) : undefined
         );
         while (!preprocessor.eof()) preprocessor.next();
         for (const reference of macroReferences) output.addMacroReference(reference);
@@ -474,7 +477,8 @@ export class Preprocessor {
                 open.elseLocation,
                 directive.location,
                 open.conditionSatisfied,
-                this.includeSites.length ? includeOccurrenceId(this.includeSites) : undefined
+                this.includeSites.length ? includeOccurrenceId(this.includeSites) : undefined,
+                open.macroUndefinitionLocation
             )
         );
         this.input.next();
@@ -509,7 +513,8 @@ export class Preprocessor {
             name,
             macroDefinition,
             directive.location,
-            token.location
+            token.location,
+            this.context.macroTable.getUndefinition(name)
         );        
         if ( macroDefinition ) {
             this.recordMacroReference(token, macroDefinition);
@@ -546,7 +551,8 @@ export class Preprocessor {
             name,
             macroDefinition,
             directive.location,
-            token.location
+            token.location,
+            this.context.macroTable.getUndefinition(name)
         );        
         if ( macroDefinition ) {
             this.recordMacroReference(token, macroDefinition);
@@ -576,6 +582,7 @@ export class Preprocessor {
 
         let path = "";
         let quoted = false;
+        let directiveEndOffset = directiveLocation.span.end;
 
         while (!this.input.eof()) {
 
@@ -595,7 +602,7 @@ export class Preprocessor {
                         "Expected file name after #include."
                     );
                 } else {
-                    this.includeFile(path, location, directiveLocation);
+                    this.includeFile(path, location, directiveLocation, directiveEndOffset);
                 }
 
                 return;
@@ -613,13 +620,14 @@ export class Preprocessor {
                         "Expected file name after #include."
                     );
                 } else {
-                    this.includeFile(path, location, directiveLocation);
+                    this.includeFile(path, location, directiveLocation, directiveEndOffset);
                 }
 
                 this.skipToNextLine();
                 return;
             }
 
+            directiveEndOffset = token.location.span.end;
             const text = this.input.tokenText(token);
 
             // Doppelte Anführungszeichen dienen nur als Begrenzung.
@@ -690,7 +698,7 @@ export class Preprocessor {
 
         } else {
 
-            this.includeFile(path, location, directiveLocation);
+            this.includeFile(path, location, directiveLocation, directiveEndOffset);
         }
     }
 
@@ -792,7 +800,12 @@ export class Preprocessor {
         replacementLocation?: Location
     ): void {
 
-        const redefined = this.context.macroTable.define(name, replacement, location, directiveLocation, replacementLocation);
+        const isIncludeGuard = replacement === null &&
+            this.includeGuardLocation?.source === location.source &&
+            this.includeGuardLocation.span.start === location.span.start;
+        const redefined = this.context.macroTable.define(
+            name, replacement, location, directiveLocation, replacementLocation, isIncludeGuard
+        );
         const definition = this.context.macroTable.get(name);
         if (definition) {
             this.context.macroDefinitions.push(definition);
@@ -807,7 +820,7 @@ export class Preprocessor {
         location: Location
     ): void {
 
-        if (!this.context.macroTable.undefine(name)) {
+        if (!this.context.macroTable.undefine(name, location)) {
             this.problems.warning(location, `Macro '${name}' is not defined.`);
         }
     }
@@ -815,7 +828,8 @@ export class Preprocessor {
     private includeFile(
         includePath: string,
         location: Location,
-        directiveLocation: Location
+        directiveLocation: Location,
+        directiveEndOffset: number
     ): void {
 
         const document = this.context.includeSourceResolver.resolveInclude(
@@ -853,6 +867,7 @@ export class Preprocessor {
             {
                 includingUri: this.source.uri,
                 directiveOffset: directiveLocation.span.start,
+                directiveEndOffset,
                 includedUri: document.uri
             }
         ];
@@ -864,7 +879,7 @@ export class Preprocessor {
             new LexerTokenStream(tokens, fileSource), fileSource, this.context,
             this.problems, this.macroReferences,
             this.preprocessorConditionalBlocks, this.logger,
-            this.textOutput, this.includeDepth + 1, sites
+            this.textOutput, this.includeDepth + 1, sites, detectIncludeGuard(tokens)
         );
         while (!child.eof()) child.next();
 

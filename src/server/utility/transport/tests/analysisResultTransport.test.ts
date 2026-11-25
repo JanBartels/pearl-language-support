@@ -4,6 +4,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { TextDocument } from 'vscode-languageserver-textdocument';
+import { lookupIncludeTarget } from '../../../preproc/includeOccurrence';
 import { Validator } from '../../../validation/validator';
 import { AnalysisResult } from '../../../validation/analysisResult';
 import { Analysis } from '../../../validation/analysis';
@@ -93,6 +94,8 @@ test('included source executions, source locations and watches survive the round
     assert.equal(result.includeOccurrences.length,original.includeOccurrences.length);
     const repeated = result.includeOccurrences.filter(o => o.sourceUri === inc);
     assert.equal(repeated.length,2);
+    assert.equal(lookupIncludeTarget(result.includeOccurrences, uri, uri, text.indexOf('inc.h'))?.id, repeated[0]!.id);
+    assert.equal(lookupIncludeTarget(result.includeOccurrences, uri, uri, text.lastIndexOf('inc.h'))?.id, repeated[1]!.id);
     assert.notEqual(repeated[0]?.source, repeated[1]?.source,
         'Two executions of the same include URI must retain distinct Source objects');
     for (let i=0;i<result.includeOccurrences.length;i++) {

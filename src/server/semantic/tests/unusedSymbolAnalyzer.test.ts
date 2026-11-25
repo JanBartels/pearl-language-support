@@ -819,3 +819,19 @@ test('an incomplete mixed STRUCT/ARRAY INIT never invents a REF binding', () => 
     const target = result.result.usages.all.find(u => u.declaration.value === 'Target')!;
     assert.equal(target.addressTaken, false);
 });
+
+test('reference assignment and explicit dereference count as uses', () => {
+    const result = analyze(`
+        DCL X FIXED;
+        DCL R REF FIXED;
+        P1: PROC;
+            R = X;
+            CONT R = 0;
+        END;`);
+    assert.deepEqual(result.syntax, []);
+    const r = result.result.usages.all.find(u => u.declaration.value === 'R')!;
+    assert.equal(r.unused, false);
+    assert.deepEqual(r.accesses.map(a => a.kind), [SymbolAccessKind.Write, SymbolAccessKind.Read]);
+    const x = result.result.usages.all.find(u => u.declaration.value === 'X')!;
+    assert.deepEqual(x.accesses.map(a => a.kind), [SymbolAccessKind.Address]);
+});

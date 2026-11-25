@@ -32,6 +32,24 @@ test('data/format mismatches point to the offending format and reference the dat
     assert.equal(result[0].relatedLocations?.length, 1);
 });
 
+test('format mismatch names the selected structure component, not its owner', () => {
+    const result = diagnostics("PUT S.E,'foo' TO Disk BY A,SKIP;",
+        'TYPE MyStruct STRUCT [E FIXED]; DCL S MyStruct;');
+    const errors = result.filter(d => d.code === mismatch);
+    assert.equal(errors.length, 1);
+    assert.equal(errors[0]!.message,
+        'Format A ist mit dem Datenobjekt S.E (Fixed) nicht verträglich.');
+    assert.equal(errors[0]!.relatedLocations?.length, 1);
+});
+
+test('format mismatch names every segment of a nested structure selection', () => {
+    const result = diagnostics('PUT S.Inner.E TO Disk BY A;',
+        'TYPE InnerType STRUCT [E FIXED]; TYPE OuterType STRUCT [Inner InnerType]; DCL S OuterType;');
+    assert.deepEqual(result.map(d => d.code), [mismatch]);
+    assert.equal(result[0]!.message,
+        'Format A ist mit dem Datenobjekt S.Inner.E (Fixed) nicht verträglich.');
+});
+
 test('B, B1, B3 and B4 accept BIT but reject CHAR', () => {
     assert.deepEqual(diagnostics('PUT VarBit,VarBit,VarBit,VarBit TO Disk BY B,B1,B3,B4;'), []);
     assert.deepEqual(diagnostics('PUT VarChar20 TO Disk BY B1;').map(d => d.code), [mismatch]);

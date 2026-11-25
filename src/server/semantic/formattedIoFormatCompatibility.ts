@@ -2,6 +2,8 @@
 // Copyright (C) 2026 Jan Bartels
 
 import type { SourceValue } from '../core/sourceValue';
+import { AstKind } from '../ast/astKind';
+import type { NameExpressionNode } from '../ast/problem/expressions/nameExpressionNode';
 import type { ExpressionNode } from '../ast/problem/expressions/expressionNode';
 import type { FormatItemNode } from '../ast/problem/statements/formatItemNode';
 import type { FormattedIoStatementNode } from '../ast/problem/statements/formattedIoStatementNode';
@@ -85,7 +87,7 @@ export class FormattedIoFormatCompatibility {
                     seenKinds.add(kind.kind);
                     reportedIncompatibilities.set(format, seenKinds);
                     const source = format.keyword!;
-                    const dataName = expressionSource(entry.expression)?.value ?? `Datenobjekt ${index + 1}`;
+                    const dataName = this.dataName(entry.expression) ?? `Datenobjekt ${index + 1}`;
                     this.report(state, SemanticDiagnosticCode.IncompatibleFormattedIoFormat,
                         SemanticDiagnosticSeverity.Error, source,
                         `Format ${source.value} ist mit dem Datenobjekt ${dataName} (${this.typeName(kind.kind)}) nicht verträglich.`,
@@ -175,6 +177,15 @@ export class FormattedIoFormatCompatibility {
                 SemanticTypeKind.Clock, SemanticTypeKind.Duration].includes(type);
             default: return true;
         }
+    }
+
+    /** Display the complete selector path, independently of the diagnostic anchor. */
+    private dataName(expression: ExpressionNode): string | undefined {
+        if (expression.kind === AstKind.NameExpression) {
+            const segments = (expression as NameExpressionNode).segments;
+            return segments.length ? segments.map(segment => segment.identifier.value).join('.') : undefined;
+        }
+        return expressionSource(expression)?.value;
     }
 
     private typeName(kind: SemanticTypeKind): string {

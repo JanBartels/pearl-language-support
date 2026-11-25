@@ -85,6 +85,7 @@ import { WorkerAnalysisExecutor } from './utility/workerAnalysisExecutor';
 import { WorkerPoolAnalysisExecutor } from './utility/workerPoolAnalysisExecutor';
 import { SourceOffset, mapToOriginalLocation, containsSourceOffset } from './core/sourceOffset';
 import { createSignatureHelp } from './lsp/createSignatureHelp';
+import { lookupIncludeTarget } from './preproc/includeOccurrence';
 import { definitionNavigationContext, matchesDefinitionTarget } from './lsp/definitionNavigationContext';
 import type { DefinitionNavigationContextRequest } from './lsp/definitionNavigationContext';
 
@@ -621,6 +622,24 @@ connection.onDefinition(params => {
         ? documentRegistry.getSourceLookupPosition(uri, document.version, document.offsetAt(fallbackCursor))
         : undefined;
     const repeatedInclude = documentRegistry.hasRepeatedSourceOccurrences(uri, document.version);
+    const occurrenceId = documentRegistry.getSelectedIncludeContextOption(uri, document.version)?.occurrence?.id;
+    const include = lookupIncludeTarget(analysisResult.includeOccurrences,
+        analysisResult.rootAnalysis.source.uri, uri, position.offset,
+        uri === analysisResult.rootAnalysis.source.uri ? undefined : occurrenceId);
+    if (include) {
+        const start = { line: 0, character: 0 };
+        return { uri: include.sourceUri, range: { start, end: start } };
+    }
+    const blocks = analysisResult.rootAnalysis.preprocessorConditionalBlocks;
+    const undefinition = repeatedInclude && occurrenceId === undefined ? undefined : (
+        PreprocessorConditionalBlockLookup.lookupUndefinition(blocks, position, occurrenceId)
+        ?? (fallbackPosition ? PreprocessorConditionalBlockLookup.lookupUndefinition(blocks, fallbackPosition, occurrenceId) : undefined)
+    );
+    if (undefinition) {
+        const target = mapLspLocation(undefinition, documentRegistry);
+        navigationTrace(id, `END reason=macro-undefinition target=${JSON.stringify(target)}`);
+        return target;
+    }
     const macro = repeatedInclude ? undefined : (
         analysisResult.lookupMacro(position)
         ?? (fallbackPosition ? analysisResult.lookupMacro(fallbackPosition) : undefined)
@@ -690,11 +709,21 @@ connection.onRequest('pearl/resolveDefinitionContext', (request: DefinitionNavig
   if (!source) return null;
   const result = documentRegistry.getAnalysisResultForSource(source.uri, source.version);
   const semantic = result?.rootAnalysis.semanticContext;
-  if (!result || !semantic) return null;
+  if (!result) return null;
 
   const position = documentRegistry.getSourceLookupPosition(
     source.uri, source.version, source.offsetAt(request.position)
   );
+  const unitUri = result.rootAnalysis.source.uri;
+  const include = lookupIncludeTarget(result.includeOccurrences, unitUri,
+    source.uri, position.offset, source.uri === unitUri ? undefined :
+      documentRegistry.getSelectedIncludeContextOption(source.uri, source.version)?.occurrence?.id);
+  if (include) {
+    return include.sourceUri === request.targetUri && request.targetStart.line === 0
+      && request.targetStart.character === 0
+      ? { uri: include.sourceUri, unitUri, occurrenceId: include.id } : null;
+  }
+  if (!semantic) return null;
   const fallback = identifierEndFallbackPosition(source, request.position);
   const positions: SourceOffset[] = [position];
   if (fallback) positions.push(documentRegistry.getSourceLookupPosition(

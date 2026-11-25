@@ -51,6 +51,7 @@ interface MacroDefinitionWire {
     readonly location?: SourceLocationWire;
     readonly directiveLocation?: SourceLocationWire;
     readonly replacementLocation?: SourceLocationWire;
+    readonly isIncludeGuard?: boolean;
 }
 interface MacroReferenceWire {
     readonly id: number;
@@ -62,6 +63,7 @@ interface ConditionalWire {
     readonly ifdef: boolean;
     readonly macro: string;
     readonly macroDefinition?: number;
+    readonly macroUndefinitionLocation?: SourceLocationWire;
     readonly ifLocation: SourceLocationWire;
     readonly macroLocation: SourceLocationWire;
     readonly elseLocation?: SourceLocationWire;
@@ -151,13 +153,14 @@ export function encodeAnalysisResult(result: AnalysisResult): AnalysisResultWire
         return id;
     };
     const encodeDefinition = (d: MacroDefinition): number => {
-        rejectUnknownFields(d, ['name','replacement','location','directiveLocation','replacementLocation'], 'macro definition');
+        rejectUnknownFields(d, ['name','replacement','location','directiveLocation','replacementLocation','isIncludeGuard'], 'macro definition');
         const previous = macroDefinitionIds.get(d);
         if (previous !== undefined) return previous;
         const id = definitionRecords.length + 1;
         macroDefinitionIds.set(d, id);
         definitionRecords.push({
             id, name: d.name, replacement: d.replacement,
+            ...(d.isIncludeGuard === undefined ? {} : {isIncludeGuard: d.isIncludeGuard}),
             ...(d.location === undefined ? {} : {location: loc(d.location)}),
             ...(d.directiveLocation === undefined ? {} : {directiveLocation: loc(d.directiveLocation)}),
             ...(d.replacementLocation === undefined ? {} : {replacementLocation: loc(d.replacementLocation)})
@@ -197,10 +200,11 @@ export function encodeAnalysisResult(result: AnalysisResult): AnalysisResultWire
     };
     const encodeConditional = (b: PreprocessorConditionalBlock): ConditionalWire => {
         rejectUnknownFields(b, ['ifdef','macro','macroDefinition','ifLocation','macroLocation',
-            'elseLocation','endifLocation','conditionSatisfied','includeOccurrenceId'], 'conditional block');
+            'elseLocation','endifLocation','conditionSatisfied','includeOccurrenceId','macroUndefinitionLocation'], 'conditional block');
         return {
         ifdef: b.ifdef, macro: b.macro,
         ...(b.macroDefinition === undefined ? {} : {macroDefinition: encodeDefinition(b.macroDefinition)}),
+        ...(b.macroUndefinitionLocation === undefined ? {} : {macroUndefinitionLocation: loc(b.macroUndefinitionLocation)}),
         ifLocation: loc(b.ifLocation), macroLocation: loc(b.macroLocation),
         ...(b.elseLocation === undefined ? {} : {elseLocation: loc(b.elseLocation)}),
         endifLocation: loc(b.endifLocation), conditionSatisfied: b.conditionSatisfied,
@@ -215,7 +219,7 @@ export function encodeAnalysisResult(result: AnalysisResult): AnalysisResultWire
     const encodeOccurrence = (o: IncludeOccurrence): IncludeOccurrenceWire => {
         rejectUnknownFields(o, ['id','sourceUri','source','sites','expandedSpan'], 'include occurrence');
         for (const site of o.sites) {
-            rejectUnknownFields(site, ['includingUri','directiveOffset','includedUri'], 'include site');
+            rejectUnknownFields(site, ['includingUri','directiveOffset','directiveEndOffset','includedUri'], 'include site');
         }
         return {
             id: o.id, sourceUri: o.sourceUri,
@@ -309,6 +313,7 @@ export function decodeAnalysisResult(wire: AnalysisResultWire): AnalysisResult {
     const resolveSource = (id: number): Source => sourceGraph.resolve(id);
     const definitions = decodeUniqueRecords(wire.macroDefinitions, 'macro definition', record => ({
         name: record.name, replacement: record.replacement,
+        ...(record.isIncludeGuard === undefined ? {} : {isIncludeGuard: record.isIncludeGuard}),
         ...(record.location === undefined ? {} : {location: location(record.location)}),
         ...(record.directiveLocation === undefined ? {} : {directiveLocation: location(record.directiveLocation)}),
         ...(record.replacementLocation === undefined ? {} : {replacementLocation: location(record.replacementLocation)})
@@ -354,7 +359,8 @@ export function decodeAnalysisResult(wire: AnalysisResultWire): AnalysisResult {
         block.macroDefinition === undefined ? undefined : resolve(definitions, block.macroDefinition, 'macro definition'),
         location(block.ifLocation), location(block.macroLocation),
         block.elseLocation === undefined ? undefined : location(block.elseLocation),
-        location(block.endifLocation), block.conditionSatisfied, block.includeOccurrenceId
+        location(block.endifLocation), block.conditionSatisfied, block.includeOccurrenceId,
+        block.macroUndefinitionLocation === undefined ? undefined : location(block.macroUndefinitionLocation)
     );
     const decodedAnalyses = wire.analyses.map((a: AnalysisWire, index: number) => {
         const blocks = new PreprocessorConditionalBlockCollection();

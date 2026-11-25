@@ -1,11 +1,28 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Jan Bartels
 
+import type { Location } from "../core/location";
 import { SourceOffset, containsSourceOffset } from "../core/sourceOffset";
 import { PreprocessorConditionalBlockCollection } from "./preprocessorConditionalBlockCollection";
 import { PreprocessorConditionalLookupResult, PreprocessorDirectiveKind } from "./preprocessorConditionalLookupResult";
 
 export class PreprocessorConditionalBlockLookup {
+
+    static lookupUndefinition(
+        blocks: PreprocessorConditionalBlockCollection,
+        position: SourceOffset,
+        includeOccurrenceId?: string
+    ): Location | undefined {
+        for (const block of blocks) {
+            if (includeOccurrenceId !== undefined
+                && block.includeOccurrenceId !== includeOccurrenceId) continue;
+            if (containsSourceOffset(block.macroLocation, position)) {
+                return block.macroDefinition === undefined
+                    ? block.macroUndefinitionLocation : undefined;
+            }
+        }
+        return undefined;
+    }
 
     static lookup(
         blocks: PreprocessorConditionalBlockCollection,

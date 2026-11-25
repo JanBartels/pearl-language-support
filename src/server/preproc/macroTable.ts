@@ -8,15 +8,23 @@ export class MacroTable {
 
   private readonly macros = new Map<string, MacroDefinition>();
 
+  private readonly undefinitions = new Map<string, Location>();
+
+  getUndefinition(name: string): Location | undefined {
+    return this.undefinitions.get(name);
+  }
+
   get(name: string): MacroDefinition | undefined {
     return this.macros.get(name);
   }
 
-  define(name: string, value: string|null, location?: Location, directiveLocation?: Location, replacementLocation?: Location): boolean {
+  define(name: string, value: string|null, location?: Location, directiveLocation?: Location, replacementLocation?: Location, isIncludeGuard = false): boolean {
     const redefined = this.macros.get(name) !== undefined;
+    this.undefinitions.delete(name);
     this.macros.set(name, { 
       name,
       replacement: value,
+      ...(isIncludeGuard ? { isIncludeGuard } : {}),
       ...(location ? { location } : {}),
       ...(directiveLocation ? { directiveLocation } : {}),
       ...(replacementLocation ? { replacementLocation } : {})
@@ -24,14 +32,17 @@ export class MacroTable {
     return redefined;
   }
 
-  undefine(name: string): boolean {
+  undefine(name: string, location?: Location): boolean {
     const defined = this.macros.get(name) != undefined;
     this.macros.delete(name);
+    if (location) this.undefinitions.set(name, location);
+    else this.undefinitions.delete(name);
     return defined;
   }
 
   clear(): void {
     this.macros.clear();
+    this.undefinitions.clear();
   }
 
 }

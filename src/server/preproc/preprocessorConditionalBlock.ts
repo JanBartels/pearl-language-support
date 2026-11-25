@@ -51,7 +51,10 @@ export class PreprocessorConditionalBlock {
         readonly conditionSatisfied: boolean,
 
         /** Include execution that evaluated this conditional, if any. */
-        readonly includeOccurrenceId?: string
+        readonly includeOccurrenceId?: string,
+
+        /** Last effective explicit #undef at the time of evaluation. */
+        readonly macroUndefinitionLocation?: Location
 
     ) {}
 

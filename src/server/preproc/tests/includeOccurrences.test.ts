@@ -21,7 +21,7 @@ import { Preprocessor } from '../preprocessor';
 import { PreprocessorConditionalBlockCollection } from '../preprocessorConditionalBlockCollection';
 import { PreprocessorConditionalBlockStack } from '../preprocessorConditionalBlockStack';
 import { PreprocessorContext } from '../preprocessorContext';
-import type { IncludeOccurrence } from '../includeOccurrence';
+import { lookupIncludeTarget, type IncludeOccurrence } from '../includeOccurrence';
 import { PreprocessorInactiveRegionCollector, type InactiveSourceRegion } from '../preprocessorInactiveRegionCollector';
 
 const rootUri = 'file:///tests/main.P';
@@ -314,4 +314,40 @@ MODEND;`;
     assert.equal(result.inactiveRegions.length, 1);
     assert.equal(result.inactiveRegions[0]!.includeOccurrenceId, sharedOccurrences[1]!.id);
     assert.equal(sharedOccurrences[1]!.sites.length, 2);
+});
+
+
+test('include navigation uses resolved paths and the selected parent occurrence', () => {
+    const root = `#define InclDir "A"
+#include "Outer.h" ! trailing comment
+#undef InclDir
+#define InclDir "B"
+#include "Outer.h"
+#ifdef UNKNOWN
+#include "Shared.h"
+#endif
+#include "missing.h"`;
+    const header = '#include "InclDir/Inner.h"';
+    const a = 'file:///tests/A/Inner.h';
+    const b = 'file:///tests/B/Inner.h';
+    const result = preprocess(root, new Map([
+        [outerUri, header], [a, ''], [b, ''], [sharedUri, '']
+    ]));
+    const occurrences = result.occurrences;
+    const parents = occurrences.filter(o => o.sourceUri === outerUri);
+    assert.equal(parents.length, 2);
+    const lookup = (uri: string, offset: number, parentId?: string) =>
+        lookupIncludeTarget(occurrences, rootUri, uri, offset, parentId);
+    assert.equal(lookup(rootUri, root.indexOf('#include') + 2)?.id, parents[0]!.id);
+    assert.equal(lookup(rootUri, root.indexOf('Outer.h'))?.id, parents[0]!.id);
+    assert.equal(lookup(rootUri, root.indexOf('! trailing')), undefined);
+    assert.equal(lookup(rootUri, root.indexOf('Shared.h')), undefined);
+    assert.equal(lookup(rootUri, root.indexOf('missing.h')), undefined);
+    assert.equal(lookup(outerUri, header.indexOf('InclDir')), undefined);
+    for (const offset of [0, header.indexOf('InclDir'), header.length - 1]) {
+        assert.equal(lookup(outerUri, offset, parents[0]!.id)?.sourceUri, a);
+        assert.equal(lookup(outerUri, offset, parents[1]!.id)?.sourceUri, b);
+    }
+    assert.equal(lookup(outerUri, header.length, parents[0]!.id), undefined);
+    assert.equal(result.problemCount, 1);
 });
