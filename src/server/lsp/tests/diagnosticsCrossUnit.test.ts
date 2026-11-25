@@ -23,6 +23,24 @@ function diagnostic(message: string, severity: DiagnosticSeverity = DiagnosticSe
     };
 }
 
+/** Expected LSP presentation for a problem shared by several include contexts. */
+function contextDiagnostic(
+    message: string,
+    origins: string[],
+    severity: DiagnosticSeverity = DiagnosticSeverity.Error
+): Diagnostic {
+    const base = diagnostic(message, severity);
+    const sorted = [...origins].sort();
+    return {
+        ...base,
+        message: `${message} (${sorted.length} ${sorted.length === 1 ? 'Kontext' : 'Kontexte'})`,
+        relatedInformation: [{
+            location: { uri: include, range: base.range },
+            message: `Betroffene Kontexte: ${sorted.join(', ')}`
+        }]
+    };
+}
+
 function fixture(): {
     publisher: DiagnosticPublicationManager;
     sent: Array<{ uri: string; diagnostics: Diagnostic[] }>;
@@ -183,17 +201,17 @@ test('include guard hint belongs to the second execution, not the first', () => 
     // Unselected execution: compiler errors remain visible, but the
     // inactive-region hint must not dim the whole physical file.
     assert.deepEqual(sent.at(-1), {
-        uri: include, diagnostics: [diagnostic('[Module1.P] Real compiler diagnostic')]
+        uri: include, diagnostics: [contextDiagnostic('Real compiler diagnostic', ['Module1.P'])]
     });
 
     sent.length = 0;
     assert.equal(publisher.selectContext(include, moduleA, scopedOccurrences[0]!.id), true);
     assert.deepEqual(sent, [{ uri: include,
-        diagnostics: [diagnostic('[Module1.P] Real compiler diagnostic')] }]);
+        diagnostics: [contextDiagnostic('Real compiler diagnostic', ['Module1.P'])] }]);
     sent.length = 0;
     assert.equal(publisher.selectContext(include, moduleA, scopedOccurrences[1]!.id), true);
     assert.deepEqual(sent, [{ uri: include, diagnostics: [
-        diagnostic('[Module1.P] Real compiler diagnostic'),
+        contextDiagnostic('Real compiler diagnostic', ['Module1.P']),
         { ...diagnostic(disabled.message, DiagnosticSeverity.Hint),
             tags: [DiagnosticTag.Unnecessary] }] }]);
     assert.equal('includeOccurrenceId' in sent[0]!.diagnostics[1]!, false);
@@ -227,15 +245,15 @@ test('shared include exposes all compiler errors in the project overview', () =>
     publisher.publish(moduleB, new Map([[include, [second]]]), [include]);
     assert.deepEqual(sent.filter(item => item.uri === include), [
         { uri: include, diagnostics: [
-            diagnostic('[Module1.P] From unit A'),
-            diagnostic('[Module2.P] From unit B')
+            contextDiagnostic('From unit A', ['Module1.P']),
+            contextDiagnostic('From unit B', ['Module2.P'])
         ] }
     ]);
     sent.length = 0;
     assert.equal(publisher.selectContext(include, moduleB), true);
     assert.deepEqual(sent, [{ uri: include, diagnostics: [
-        diagnostic('[Module1.P] From unit A'),
-        diagnostic('[Module2.P] From unit B')
+        contextDiagnostic('From unit A', ['Module1.P']),
+        contextDiagnostic('From unit B', ['Module2.P'])
     ] }]);
 });
 
@@ -251,7 +269,7 @@ test('warnings scoped to the active execution disappear in a guarded execution',
     // with its include occurrence, rather than losing it altogether.
     assert.deepEqual(sent.at(-1), {
         uri: include,
-        diagnostics: [diagnostic(`[Module1.P, Include 1] ${warning.message}`, DiagnosticSeverity.Warning)]
+        diagnostics: [contextDiagnostic(warning.message, ['Module1.P, Include 1'], DiagnosticSeverity.Warning)]
     });
     assert.equal(publisher.selectContext(include, moduleA, scopedOccurrences[0]!.id), true);
     assert.deepEqual(sent.at(-1), {
@@ -270,8 +288,8 @@ test('opening a folder reports both units errors from an unopened shared header'
     assert.deepEqual(sent.filter(entry => entry.uri === include).at(-1), {
         uri: include,
         diagnostics: [
-            diagnostic('[Module1.P] Syntax error in A'),
-            diagnostic('[Module2.P] Type error in B')
+            contextDiagnostic('Syntax error in A', ['Module1.P']),
+            contextDiagnostic('Type error in B', ['Module2.P'])
         ]
     });
     // No selectContext() call, and no editor-open state is required.
@@ -290,7 +308,7 @@ test('selecting a guarded execution hides its unused warning, never another cont
     assert.equal(publisher.selectContext(include, moduleA, scopedOccurrences[1]!.id), true);
     assert.deepEqual(sent, [{
         uri: include,
-        diagnostics: [diagnostic('[Module2.P] Genuine syntax error')]
+        diagnostics: [contextDiagnostic('Genuine syntax error', ['Module2.P'])]
     }]);
     // The warning is absent, while the error remains visible in Problems.
 });
@@ -303,7 +321,7 @@ test('reanalyzing or removing an owning unit clears stale global errors', () => 
     publisher.publish(moduleA, new Map(), [include]);
     assert.deepEqual(sent.filter(entry => entry.uri === include).at(-1), {
         uri: include,
-        diagnostics: [diagnostic('[Module2.P] Still broken')]
+        diagnostics: [contextDiagnostic('Still broken', ['Module2.P'])]
     });
     sent.length = 0;
     publisher.removeUnit(moduleB);
@@ -320,7 +338,7 @@ test('identical project errors are deduplicated with all owning units named', ()
     publisher.publish(moduleB, new Map([[include, [same]]]), [include]);
     assert.deepEqual(sent.filter(entry => entry.uri === include).at(-1), {
         uri: include,
-        diagnostics: [diagnostic('[Module1.P, Module2.P] Unknown type')]
+        diagnostics: [contextDiagnostic('Unknown type', ['Module1.P','Module2.P'])]
     });
 });
 
@@ -335,7 +353,7 @@ test('unused warnings stay searchable without dimming unrelated include executio
         [include], scopedOccurrences);
     assert.deepEqual(sent.filter(entry => entry.uri === include).at(-1), {
         uri: include,
-        diagnostics: [diagnostic('[Module1.P, Include 1] Unused ExtVar', DiagnosticSeverity.Warning)]
+        diagnostics: [contextDiagnostic('Unused ExtVar', ['Module1.P, Include 1'], DiagnosticSeverity.Warning)]
     });
     publisher.selectContext(include, moduleA, scopedOccurrences[1]!.id);
     assert.deepEqual(sent.at(-1), { uri: include, diagnostics: [] });
@@ -354,7 +372,7 @@ test('selected and other unit reporting the same error produce one diagnostic', 
     assert.equal(publisher.selectContext(include, moduleB), true);
     assert.deepEqual(sent, [{
         uri: include,
-        diagnostics: [diagnostic(`[Module1.P, Module2.P] ${same.message}`)]
+        diagnostics: [contextDiagnostic(same.message, ['Module1.P', 'Module2.P'])]
     }]);
 });
 
@@ -370,7 +388,7 @@ test('identical errors in two executions of the same header are merged after sel
     assert.equal(publisher.selectContext(include, moduleA, scopedOccurrences[1]!.id), true);
     assert.deepEqual(sent, [{
         uri: include,
-        diagnostics: [diagnostic('[Module1.P, Include 1, Module1.P, Include 2] Duplicate declaration')]
+        diagnostics: [contextDiagnostic('Duplicate declaration', ['Module1.P, Include 1', 'Module1.P, Include 2'])]
     }]);
 });
 
@@ -394,7 +412,7 @@ test('global errors stay deduplicated without leaking warnings or inactive hints
     assert.deepEqual(sent.at(-1), {
         uri: include,
         diagnostics: [
-            diagnostic('[Module1.P, Include 1, Module1.P, Include 2] Duplicate declaration'),
+            contextDiagnostic('Duplicate declaration', ['Module1.P, Include 1', 'Module1.P, Include 2']),
             { ...diagnostic(hint.message, DiagnosticSeverity.Hint), tags: [DiagnosticTag.Unnecessary] }
         ]
     });
@@ -408,7 +426,46 @@ test('different errors at the same physical range must remain distinct', () => {
 
     publisher.selectContext(include, moduleA);
     assert.deepEqual(sent, [{ uri: include, diagnostics: [
-        diagnostic('[Module1.P] Error A'),
-        diagnostic('[Module2.P] Error B')
+        contextDiagnostic('Error A', ['Module1.P']),
+        contextDiagnostic('Error B', ['Module2.P'])
     ] }]);
+});
+
+// 0.3.x: the Problems view must remain readable for many include contexts.
+test('nineteen owning units keep the message first and attach one provenance detail', () => {
+    const { publisher, sent } = fixture();
+    const same = diagnostic('Undefined identifier EXTERNAL_VALUE');
+    for (let i = 19; i >= 1; i--) {
+        const unitUri = `file:///project/STRESS_${String(i).padStart(2, '0')}.P`;
+        publisher.publish(unitUri, new Map([[include, [same]]]), [include]);
+    }
+
+    const last = sent.filter(item => item.uri === include).at(-1);
+    assert.ok(last);
+    assert.equal(last.diagnostics.length, 1);
+    const actual = last.diagnostics[0]!;
+    assert.equal(actual.message, 'Undefined identifier EXTERNAL_VALUE (19 Kontexte)');
+    assert.equal(actual.relatedInformation?.length, 1);
+    assert.equal(actual.relatedInformation?.[0]?.location.uri, include);
+    assert.equal(actual.relatedInformation?.[0]?.location.range.start.line, 0);
+    assert.equal(actual.relatedInformation?.[0]?.message,
+        `Betroffene Kontexte: ${Array.from({length: 19}, (_, i) =>
+            `STRESS_${String(i + 1).padStart(2, '0')}.P`).join(', ')}`);
+});
+
+test('context presentation keeps pre-existing related diagnostic information', () => {
+    const { publisher, sent } = fixture();
+    const original = diagnostic('Problem with original related location');
+    const extra = {
+        location: { uri: moduleA, range: original.range },
+        message: 'Original cause'
+    };
+    publisher.publish(moduleA, new Map([[include, [{ ...original, relatedInformation: [extra] }]]]), [include]);
+    publisher.publish(moduleB, new Map([[include, [{ ...original, relatedInformation: [extra] }]]]), [include]);
+    const last = sent.filter(item => item.uri === include).at(-1);
+    assert.equal(last?.diagnostics.length, 1);
+    assert.equal(last?.diagnostics[0]?.message, 'Problem with original related location (2 Kontexte)');
+    assert.deepEqual(last?.diagnostics[0]?.relatedInformation?.[0], extra);
+    assert.equal(last?.diagnostics[0]?.relatedInformation?.[1]?.message,
+        'Betroffene Kontexte: Module1.P, Module2.P');
 });

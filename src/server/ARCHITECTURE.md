@@ -2410,6 +2410,17 @@ CodeLens-Auswahl aus dem gewählten Vorkommen. Verschiedene Fehler an
 derselben Quellposition bleiben voneinander unterscheidbar. Dies ist eine
 reine Darstellungsregel; die einzelnen Compileranalysen bleiben getrennt.
 
+**Lesbare Problems-Ansicht (0.3.x):** Bei gemeinsam eingebundenen
+Quelldateien beginnt die LSP-Diagnosemeldung immer mit dem eigentlichen
+Fehlertext. Die Anzahl der betroffenen Kontexte steht kompakt am Ende der
+Meldung; die vollstaendigen Herkunftsbezeichnungen stehen in genau einem
+`Diagnostic.relatedInformation`-Eintrag. Dieser verweist bewusst auf die
+physische Fehlerstelle und behauptet keine nicht rekonstruierte
+`#include`-Position. Die Herkunftsliste wird stabil sortiert. Dadurch
+wachsen die Problems-Zeilen nicht mit der Zahl der Uebersetzungseinheiten;
+die vorhandene Deduplizierung, kontextunabhaengige Fehleraggregation und
+kontextabhaengigen Warnungen bleiben unveraendert.
+
 **Technische Grenze:** LSP `textDocument/publishDiagnostics` liefert nur
 eine Liste je physischer Datei-URI. Deshalb kann VS Code ohne zusätzliche
 Client-Infrastruktur keine unabhängige projektweite Probleme-Ansicht **und**

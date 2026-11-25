@@ -164,11 +164,27 @@ export class DiagnosticPublicationManager {
             }
             group.origins.add(this.originLabel(sourceUri, contribution));
         }
-        return [...groups.values()].map(({ diagnostic, origins }) =>
-            multipleContexts
-                ? { ...diagnostic, message: `[${[...origins].join(', ')}] ${diagnostic.message}` }
-                : diagnostic
-        );
+        return [...groups.values()].map(({ diagnostic, origins }) => {
+            if (!multipleContexts) return diagnostic;
+
+            // Keep the actual problem readable in the Problems view. A large
+            // shared include may have dozens of origins, so do not prepend
+            // their names to every diagnostic or create one related entry per
+            // origin. The full provenance remains available on demand.
+            const orderedOrigins = [...origins].sort();
+            const count = orderedOrigins.length;
+            return {
+                ...diagnostic,
+                message: `${diagnostic.message} (${count} ${count === 1 ? 'Kontext' : 'Kontexte'})`,
+                relatedInformation: [
+                    ...(diagnostic.relatedInformation ?? []),
+                    {
+                        location: { uri: sourceUri, range: diagnostic.range },
+                        message: `Betroffene Kontexte: ${orderedOrigins.join(', ')}`
+                    }
+                ]
+            };
+        });
     }
 
     private contextCount(sourceUri: string): number {
