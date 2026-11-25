@@ -12,7 +12,7 @@ import type { AnalysisExecutionInput } from '../analysisExecutor';
 
 const settings: PearlSettings = {
     maxNumberOfProblems: 100, warnOnCharTruncation: true,
-    traceServer: 'off', workingDirMode: 'file', macros: {}
+    traceServer: 'off', macros: {}
 };
 const quiet = { info() {}, warn() {}, error() {} };
 

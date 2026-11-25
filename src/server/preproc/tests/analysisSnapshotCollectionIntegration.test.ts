@@ -25,7 +25,7 @@ import type { Logger } from '../../utility/logging/logger';
 
 const logger: Logger = { info() {}, warn() {}, error() {} };
 const settings: PearlSettings = {
-    traceServer: 'off', workingDirMode: 'file', maxNumberOfProblems: 100,
+    traceServer: 'off', maxNumberOfProblems: 100,
     warnOnCharTruncation: true, macros: { Outside: 'sub' }
 };
 function src(uri: string, text: string): AnalysisSourceSnapshot {

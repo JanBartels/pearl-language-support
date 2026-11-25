@@ -81,7 +81,7 @@ test('incomplete and internally inconsistent snapshots are rejected', () => {
 
 const settings: PearlSettings = {
     maxNumberOfProblems: 100, warnOnCharTruncation: true,
-    traceServer: 'off', workingDirMode: 'file', macros: {}
+    traceServer: 'off', macros: {}
 };
 
 test('local executor passes frozen include access only when a capture is supplied', async () => {

@@ -13,7 +13,7 @@ import type { PearlSettings } from '../../settings/pearlSettings';
 
 const settings: PearlSettings = {
     maxNumberOfProblems: 100, warnOnCharTruncation: true,
-    traceServer: 'off', workingDirMode: 'file', macros: {}
+    traceServer: 'off', macros: {}
 };
 const logger = { info() {}, warn() {}, error() {} };
 const includeUri = 'file:///in-flight-types/types.h';

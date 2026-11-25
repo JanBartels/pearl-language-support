@@ -10,7 +10,7 @@ import { OpenSourceSnapshotVersionBridge } from '../openSourceSnapshotVersionBri
 
 const settings: PearlSettings = {
     maxNumberOfProblems: 100, warnOnCharTruncation: true,
-    traceServer: 'off', workingDirMode: 'file', macros: {}
+    traceServer: 'off', macros: {}
 };
 const logger = { info() {}, warn() {}, error() {} };
 const rootUri = 'file:///project/Main.P';

@@ -1716,9 +1716,9 @@ ist getrennt:
   Versionen, aktive Include-Abhängigkeiten, Invalidierung und die Auswahl des
   semantischen Include-Kontexts.
 - **`FolderTranslationUnitIndex`** erkennt vollständige `.P`-Hauptdateien
-  direkt in den vom `WorkspaceManager` gelieferten Ordnern. Er untersucht
-  weder PEARL-Grammatik noch Include-Anweisungen und besitzt keine
-  Analyseergebnisse.
+  in den vom `WorkspaceManager` gelieferten Ordnern bis zur je Ordner
+  konfigurierten rekursiven Suchtiefe. Er untersucht weder PEARL-Grammatik
+  noch Include-Anweisungen und besitzt keine Analyseergebnisse.
 - **`DiagnosticPublicationManager`** verwaltet die an den Editor gemeldeten
   Diagnosen getrennt nach Übersetzungseinheit und physischer Quelldatei.
   Seine Aufgabe ist Veröffentlichung, nicht syntaktische oder semantische
@@ -2200,10 +2200,11 @@ Referenzimplementierungen:
 ## Open File und Open Folder
 
 „Open File“ behält die bisherige Analyse einer einzeln geöffneten PEARL-Datei
-bei. Im Modus „Open Folder“ werden `.P`-Dateien **unmittelbar im geöffneten
-Ordner** automatisch als Hauptdateien erkannt und analysiert, auch wenn sie
-nicht als Editor-Tab geöffnet sind. Ihre Analysen bleiben nach dem Schließen
-des Tabs erhalten, solange sie zum Ordner gehören.
+bei. Im Modus „Open Folder“ werden `.P`-Dateien im geöffneten Ordner bis
+zur konfigurierten Suchtiefe automatisch als Hauptdateien erkannt und
+analysiert, auch wenn sie nicht als Editor-Tab geöffnet sind. Ihre Analysen
+bleiben nach dem Schließen des Tabs erhalten, solange sie in der automatisch
+entdeckten Menge enthalten sind.
 
 Eine im Ordner geöffnete `.h`-Includedatei wird nicht allein deshalb zu
 einer eigenständigen Übersetzungseinheit. Ihre Sprachinformationen stammen
@@ -2211,10 +2212,32 @@ aus einer einbindenden Hauptdatei. Hinzukommende oder entfernte `.P`-Dateien
 werden über die Ordneraktualisierung berücksichtigt; Änderungen bekannter
 Quellen über Editor- oder Dateisystemereignisse.
 
-Die Ordnererkennung ist derzeit **nicht rekursiv**. Eine umfassende
-Projekt-/Workspace-Konfiguration mit mehreren Quellverzeichnissen ist noch
-keine implementierte Architekturentscheidung. Der `WorkspaceManager`
-kennt jedoch bereits vom LSP-Client gelieferte Workspace-Folder.
+Die Ordnererkennung wird in 0.3.4 durch die ressourcenbezogene Einstellung
+`pearl.translationUnits.discoveryDepth` begrenzt. `0` (Standard) sucht nur
+im Workspace-Ordner wie bisher; `1` schließt dessen direkte Unterordner ein,
+`2` zusätzlich die nächste Ebene usw. Je Workspace-Ordner kann ein anderer
+Wert gewählt werden. Verzeichnissymbollinks werden nicht verfolgt. Die
+Suchtiefe betrifft **nur automatische `.P`-Root-Entdeckung**: Explizit
+geöffnete `.P`-Dateien bleiben unabhängig von der Tiefe analysierbar;
+`#include`-Auflösung und verschachtelte Include-Dateien werden nicht begrenzt.
+
+`WorkspaceManager` stellt die Folder bereit, `SettingsManager` ermittelt
+asynchron die jeweils gültige ressourcenbezogene Einstellung, und nur der
+`FolderTranslationUnitIndex` durchsucht den Dateibaum. Die Ordnerzugehörigkeit
+wird bereits vor der asynchronen Settings-Abfrage registriert, damit eine in
+der Zwischenzeit geöffnete Includedatei nicht zum eigenen Root wird. Veraltete
+Settings-Antworten nach Folder- oder Konfigurationsänderungen dürfen einen
+neueren Discovery-Abgleich nicht überschreiben. Neue und entfernte Roots
+werden weiterhin ausschließlich über `server.ts` mit `DocumentRegistry`
+und `AnalysisScheduler` synchronisiert. Geöffnete `.P`-Dateien bleiben beim
+Verkleinern der Suchtiefe als explizite Analyseeinheiten erhalten.
+
+Die entfernte Alt-Einstellung `pearl.workingDirMode` hatte keinen aktiven
+Einfluss mehr auf die Analyse und wird nicht durch eine Compileroption
+ersetzt. `pearl.translationUnits.discoveryDepth` ist eine LSP-/Workspace-
+Einstellung, kein Feld der Compiler-`PearlSettings`. Eine umfassende
+Projektkonfiguration mit ausdrücklich benannten Quellverzeichnissen ist
+weiterhin keine implementierte Architekturentscheidung.
 
 Für korrektes LSP-Feedback muss VS Code eine bearbeitete Includedatei im
 Sprachmodus **PEARL** öffnen. Der VS-Code-Client weist diesen Modus beim
@@ -3135,3 +3158,34 @@ Referenzimplementierungen:
 - `/src/server/settings/analysisExecutionSettings.ts`
 - `/src/server/server.ts` (`initializeAnalysisExecution`)
 - `/src/server/settings/tests/analysisExecutionSettings.test.ts`
+
+
+---
+
+## 0.3.4: Tiefenbegrenzte Erkennung von PEARL-Übersetzungseinheiten
+
+Die automatische Discovery benutzt eine **begrenzte iterative Dateibaumsuche**
+je Workspace-Folder. Der Wert `0` bewahrt das bisherige nichtrekursive
+Verhalten; zusätzliche Unterverzeichnisebenen sind explizit zu aktivieren.
+Der Index dedupliziert Roots aus sich überschneidenden Workspace-Foldern und
+behandelt hinzukommende, entfernte und bei Suchtiefenwechsel ausgeschlossene
+`.P`-Dateien mit demselben `added`/`removed`-Abgleich.
+
+Die von VS Code angebotene Einstellung hat `scope: resource`; sie kann in
+`.vscode/settings.json` je Workspace-Folder gesetzt werden. Es werden keine
+Symlink-Verzeichnisse traversiert. Alle Dateien unterhalb der Grenze können
+weiterhin von der normalen Include-Auflösung verwendet werden; die
+Suchtiefe begrenzt niemals die Compilerverarbeitung.
+
+Auf `workspace/didChangeConfiguration` erfolgt neben der bisherigen
+Konfigurations-Invalidierung auch ein Discovery-Neuabgleich. Dies ändert
+keine Zuständigkeit von Scheduler, Registry, Executor oder Compiler.
+
+Referenzimplementierungen:
+- `/package.json` (`pearl.translationUnits.discoveryDepth`)
+- `/src/server/utility/folderTranslationUnitIndex.ts`
+- `/src/server/settings/translationUnitDiscoverySettings.ts`
+- `/src/server/settings/settingsManager.ts`
+- `/src/server/server.ts`
+- `/src/server/utility/tests/folderTranslationUnitIndex.test.ts`
+- `/src/server/settings/tests/translationUnitDiscoverySettings.test.ts`

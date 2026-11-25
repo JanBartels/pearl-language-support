@@ -43,7 +43,7 @@ import { randomUUID } from 'node:crypto';
 import { DocumentRegistry } from './utility/documentRegistry';
 import { filePathFromUri, uriFromFilePath } from './utility/uriUtils';
 import { WorkspaceManager } from './utility/workspace';
-import { FolderTranslationUnitIndex } from './utility/folderTranslationUnitIndex';
+import { FolderTranslationUnitIndex, type TranslationUnitDiscoveryFolder } from './utility/folderTranslationUnitIndex';
 import { PearlSettings, defaultSettings } from './settings/pearlSettings';
 import { SettingsManager } from './settings/settingsManager';
 import { resolveAnalysisExecutionSettings } from './settings/analysisExecutionSettings';
@@ -1058,24 +1058,59 @@ function retryStaleSnapshot(
  * A file already open as an independent document keeps that analysis when a
  * folder is removed; unopened roots are removed from the analysis registry.
  */
+// A settings request may finish after another workspace/configuration event.
+// Only the newest completed scan is allowed to change the active root set.
+let folderRefreshGeneration = 0;
+let folderDiscoveryStopped = false;
+
 function refreshFolderTranslationUnits(reason: string): void {
+  if (folderDiscoveryStopped) return;
+  const workspaceRoots = workspaceManager.getWorkspaceRoots();
+  const generation = ++folderRefreshGeneration;
+  // Folder membership must be established before async config retrieval:
+  // opening a header meanwhile must never create an independent root.
+  folderTranslationUnits.setFolders(workspaceRoots);
+  void reconcileFolderTranslationUnits(reason, workspaceRoots, generation);
+}
+
+async function reconcileFolderTranslationUnits(
+  reason: string, workspaceRoots: readonly string[], generation: number
+): Promise<void> {
+  const folders: TranslationUnitDiscoveryFolder[] = await Promise.all(
+    workspaceRoots.map(async folderPath => {
+      let depth = 0;
+      try {
+        depth = await settingsManager.getTranslationUnitDiscoveryDepth(uriFromFilePath(folderPath));
+      } catch (error) {
+        logger.warn(`Could not read PEARL discovery depth for ${folderPath}: ${String(error)}`);
+      }
+      return { path: folderPath, depth };
+    })
+  );
+  if (folderDiscoveryStopped || generation !== folderRefreshGeneration) return;
+
   const trigger = nextAnalysisTrigger(`folder:${reason}`, {
-    workspaceRoots: workspaceManager.getWorkspaceRoots()
+    workspaceRoots, discoveryDepths: folders.map(folder => ({ path: folder.path, depth: folder.depth }))
   });
-  const changes = folderTranslationUnits.refresh(workspaceManager.getWorkspaceRoots());
+  const changes = folderTranslationUnits.refresh(folders);
   analysisTrace.event('folder.reconcile', {
     trigger, added: changes.added.length, removed: changes.removed.length,
     addedUris: changes.added, removedUris: changes.removed,
     activeBefore: documentRegistry.getActiveTranslationUnits().length
   });
+  let closedRoot = false;
   for (const uri of changes.removed) {
+    // Open .P files remain independent roots regardless of discovery depth.
     if (!documents.get(uri)) {
       analysisScheduler.cancel(uri);
       documentRegistry.closeTranslationUnit(uri);
       diagnosticPublicationManager.removeUnit(uri);
       publishIncludeWatchSnapshot();
+      closedRoot = true;
     }
   }
+  if (closedRoot) refreshIncludeCodeLenses(`folderReconcile:${reason}`, true);
+
   const activeRoots = new Set(documentRegistry.getActiveTranslationUnits());
   for (const uri of changes.added) {
     if (activeRoots.has(uri)) continue;
@@ -1233,6 +1268,8 @@ connection.onDidChangeWatchedFiles((event) => {
 connection.onDidChangeConfiguration((event) => {
   const trigger = nextAnalysisTrigger('didChangeConfiguration');
   settingsManager.handleConfigurationChange(event.settings);
+  // The depth is resource-scoped; changing it must update the discovered set.
+  refreshFolderTranslationUnits('configurationChanged');
   validator.handleConfigurationChanged();
   const roots = documentRegistry.invalidateAllAnalyses();
   analysisTrace.event('configuration.invalidateAll', {
@@ -1246,6 +1283,8 @@ connection.onDidChangeConfiguration((event) => {
 });
 
 connection.onShutdown(() => {
+  folderDiscoveryStopped = true;
+  folderRefreshGeneration++;
   analysisScheduler?.dispose();
   analysisExecutor?.dispose?.();
   codeLensRefresh.dispose();

@@ -12,7 +12,6 @@ const settings: PearlSettings = {
     maxNumberOfProblems: 100,
     warnOnCharTruncation: true,
     traceServer: 'off',
-    workingDirMode: 'file',
     macros: { MODE: '42' }
 };
 

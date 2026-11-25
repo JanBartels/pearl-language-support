@@ -10,8 +10,7 @@ import type { PearlSettings } from '../../../settings/pearlSettings';
 import { Validator } from '../../../validation/validator';
 
 const settings: PearlSettings = {
-    traceServer: 'off', maxNumberOfProblems: 100, workingDirMode: 'file',
-    warnOnCharTruncation: true, macros: {}
+    traceServer: 'off', maxNumberOfProblems: 100, warnOnCharTruncation: true, macros: {}
 };
 
 test('an actual AnalysisResult loses essential class APIs under raw structuredClone', async () => {

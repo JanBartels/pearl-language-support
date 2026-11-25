@@ -23,8 +23,7 @@ import type { PearlSettings } from '../../../settings/pearlSettings';
 import { encodeAnalysisResult, decodeAnalysisResult, type AnalysisResultWire } from '../analysisResultTransport';
 
 const settings: PearlSettings = {
-    traceServer: 'off', maxNumberOfProblems: 100, workingDirMode: 'file',
-    warnOnCharTruncation: true, macros: { FROM_SETTINGS: '7' }
+    traceServer: 'off', maxNumberOfProblems: 100, warnOnCharTruncation: true, macros: { FROM_SETTINGS: '7' }
 };
 const logger = {info() {}, warn() {}, error() {}};
 function validator(include: Record<string,string> = {}) {

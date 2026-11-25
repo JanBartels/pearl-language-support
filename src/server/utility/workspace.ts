@@ -9,9 +9,6 @@ import {
 } from 'vscode-languageserver/node';
 
 import { filePathFromUri } from './uriUtils';
-import * as path from 'path';
-
-export type WorkingDirMode = 'file' | 'workspace';
 
 export class WorkspaceManager {
 
@@ -85,29 +82,6 @@ export class WorkspaceManager {
     }
 
     return best;
-  }
-
-  getWorkingDirectoryForDocument(
-    docUri: string | undefined,
-    mode: WorkingDirMode
-  ): string | undefined {
-
-    if (!docUri) return undefined;
-
-    if (mode === 'file') {
-      return path.dirname(filePathFromUri(docUri));
-    }
-
-    const folder = this.getWorkspaceFolderForUri(docUri);
-    if (folder) {
-      return filePathFromUri(folder.uri);
-    }
-
-    if (this.legacyRootUri) {
-      return filePathFromUri(this.legacyRootUri);
-    }
-
-    return path.dirname(filePathFromUri(docUri));
   }
 
   /** Filesystem folders supplied by the client; no implicit folder in Open File mode. */

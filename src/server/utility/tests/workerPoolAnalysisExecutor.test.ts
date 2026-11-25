@@ -15,8 +15,7 @@ function input(uri: string): AnalysisExecutionInput {
         source: { uri, languageId: 'pearl', version: 1,
             text: 'MODULE Test; PROBLEM; DCL A FIXED; MODEND;' },
         settings: {
-            maxNumberOfProblems: 100, traceServer: 'off', workingDirMode: 'file',
-            warnOnCharTruncation: true, macros: {}
+            maxNumberOfProblems: 100, traceServer: 'off', warnOnCharTruncation: true, macros: {}
         },
         includeSnapshots: { sources: [], resolutions: [] }
     };

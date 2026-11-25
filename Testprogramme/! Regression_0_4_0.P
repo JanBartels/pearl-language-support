@@ -1,0 +1,34 @@
+! Regression_0_4_0.P
+
+P=MPC604;
+SC=2000;
+
+MODULE TEST;
+
+SYSTEM;
+    A1;
+
+PROBLEM;
+
+SPC A1 DATION INOUT ALPHIC;
+
+DCL X FIXED;
+DCL R REF FIXED;
+
+TYPE MyStruct STRUCT [
+    E FIXED
+];
+DCL S MyStruct;
+
+P1: PROC;
+    R = X;  ! Symbol 'P' wird nicht verwendet.
+    CONT R = 0;
+END;
+
+P2: PROC;
+    S.E = 0;
+    PUT S.E,'foo' TO A1 BY A,SKIP;  ! Format A ist mit dem Datenobjekt S (Fixed) nicht verträglich.
+                                    ! Meldung an sich ist richtig, aber "Datenobjekt S (Fixed)" ist falsch. Muss S.E heißen.
+END;
+
+MODEND;

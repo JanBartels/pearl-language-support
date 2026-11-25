@@ -180,7 +180,7 @@ MODEND;`;
     const doc=TextDocument.create('file:///semantic-real.P','pearl',1,text);
     const validator=new Validator({} as never,{resolveInclude:()=>null} as never,
         {info() {},warn() {},error() {},debug() {}} as never);
-    const settings={traceServer:'off',maxNumberOfProblems:100,workingDirMode:'file',warnOnCharTruncation:true,macros:{}} as const;
+    const settings={traceServer:'off',maxNumberOfProblems:100,warnOnCharTruncation:true,macros:{}} as const;
     const result=await validator.analyze(doc,settings);
     const original=result.rootAnalysis;
     const semantic=original.semanticContext;

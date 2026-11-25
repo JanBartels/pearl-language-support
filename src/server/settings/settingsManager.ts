@@ -7,12 +7,15 @@ import {
 } from 'vscode-languageserver/node';
 import { Connection } from 'vscode-languageserver/node';
 import { PearlSettings, defaultSettings } from './pearlSettings';
+import { normalizeTranslationUnitDiscoveryDepth } from './translationUnitDiscoverySettings';
 
 export class SettingsManager {
 
   private hasConfigurationCapability = false;
   private globalSettings: PearlSettings = defaultSettings;
   private documentSettings: Map<string, Promise<PearlSettings>> = new Map();
+  private folderDiscoveryDepths = new Map<string, Promise<number>>();
+  private globalDiscoveryDepth = 0;
 
   constructor(private connection: Connection) {}
 
@@ -53,12 +56,39 @@ export class SettingsManager {
     return result;
   }
 
+  /** Resource-scoped LSP discovery setting, deliberately not part of PearlSettings. */
+  getTranslationUnitDiscoveryDepth(folderUri: string): Promise<number> {
+    if (!this.hasConfigurationCapability) return Promise.resolve(this.globalDiscoveryDepth);
+
+    let result = this.folderDiscoveryDepths.get(folderUri);
+    if (!result) {
+      result = (async () => {
+        try {
+          const value = await this.connection.workspace.getConfiguration({
+            scopeUri: folderUri,
+            section: 'pearl.translationUnits.discoveryDepth'
+          });
+          return normalizeTranslationUnitDiscoveryDepth(value);
+        } catch (error) {
+          this.folderDiscoveryDepths.delete(folderUri);
+          throw error;
+        }
+      })();
+      this.folderDiscoveryDepths.set(folderUri, result);
+    }
+    return result;
+  }
+
   handleConfigurationChange(settings: any): void {
     if (this.hasConfigurationCapability) {
       this.documentSettings.clear();
+      this.folderDiscoveryDepths.clear();
     } else {
       this.globalSettings =
-        (settings.pearl as PearlSettings) ?? defaultSettings;
+        (settings?.pearl as PearlSettings) ?? defaultSettings;
+      this.globalDiscoveryDepth = normalizeTranslationUnitDiscoveryDepth(
+        settings?.pearl?.translationUnits?.discoveryDepth
+      );
     }
   }
 
@@ -68,5 +98,6 @@ export class SettingsManager {
 
   clearAll(): void {
     this.documentSettings.clear();
+    this.folderDiscoveryDepths.clear();
   }
 }

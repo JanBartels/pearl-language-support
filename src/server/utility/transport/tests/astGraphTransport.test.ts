@@ -24,8 +24,7 @@ import { AstKind } from '../../../ast/astKind';
 import { AstGraphEncoder, decodeAstGraph, encodeAstGraph, type AstGraphWire } from '../astGraphTransport';
 
 const settings: PearlSettings = {
-    traceServer: 'off', maxNumberOfProblems: 100, workingDirMode: 'file',
-    warnOnCharTruncation: true, macros: {}
+    traceServer: 'off', maxNumberOfProblems: 100, warnOnCharTruncation: true, macros: {}
 };
 
 function preorder(n: AstNode): readonly string[] {
