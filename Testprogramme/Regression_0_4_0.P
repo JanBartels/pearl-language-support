@@ -16,20 +16,39 @@ PROBLEM;
 
 SPC A1 DATION INOUT ALPHIC;
 
-DCL X FIXED;
-DCL R REF FIXED;
+DCL X FIXED;    ! Variable 'X' wird gelesen, aber niemals beschrieben.
+TYPE SRX STRUCT [
+    R REF FIXED
+];
+
+DCL RX (2) SRX;
 
 TYPE MyStruct STRUCT [
     E FIXED
 ];
 DCL S MyStruct;
 
+TYPE Slot STRUCT [
+    R REF FIXED,
+    V FIXED
+];
+
+DCL Items(2) Slot;
+DCL Pointer REF FIXED;
+DCL Value FIXED;
+
 P1: PROC;
-    R = X;  ! Warnung: X wird gelesen, aber nirgends beschrieben.
-    CONT R = 0;
+    RX(1).R = X;
+    CONT RX(1).R = 0;
 END;
 
 P2: PROC;
+    Pointer = Items(1).R;
+    Pointer = Items(2).V;
+    CONT Items(1).R = Value;
+END;
+
+P3: PROC;
     S.E = 0;
     PUT S.E,'foo' TO A1 BY A,SKIP;  ! Format A ist mit dem Datenobjekt S (Fixed) nicht verträglich.
                                     ! Meldung an sich ist richtig, aber "Datenobjekt S (Fixed)" ist falsch. Muss S.E heißen.

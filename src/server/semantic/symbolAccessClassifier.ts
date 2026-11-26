@@ -87,7 +87,7 @@ export class SymbolAccessClassifier {
         }
 
         if (context instanceof AssignmentNode && context.expression === expression) {
-            return this.referenceTransfer(context.target, expression)
+            return !context.contOperator && this.referenceTransfer(context.target, expression)
                 ? SymbolAccessKind.Address : SymbolAccessKind.Read;
         }
 
@@ -199,11 +199,18 @@ export class SymbolAccessClassifier {
     }
 
     private referenceTransfer(target: NameExpressionNode, value: NameExpressionNode): boolean {
-        const targetSymbol = target.segments[0]
-            ? this.semantic.bindings.get(target.segments[0].identifier) : undefined;
-        const sourceSymbol = value.segments[0]
-            ? this.semantic.bindings.get(value.segments[0].identifier) : undefined;
-        return this.isReference(targetSymbol) && !this.isReference(sourceSymbol);
+        // The resolved expression type includes array indices and STRUCT
+        // selectors. The base symbol alone may have a different type.
+        const targetType = this.semantic.expressionTypes.get(target);
+        const sourceType = this.semantic.expressionTypes.get(value);
+        const resolvedTarget = targetType && this.underlying(targetType);
+        const resolvedSource = sourceType && this.underlying(sourceType);
+        if (!resolvedTarget) return false;
+        const targetIsReference = resolvedTarget.kind === SemanticTypeKind.Reference
+            || resolvedTarget.kind === SemanticTypeKind.VoidReference;
+        const sourceIsReference = resolvedSource?.kind === SemanticTypeKind.Reference
+            || resolvedSource?.kind === SemanticTypeKind.VoidReference;
+        return targetIsReference && !sourceIsReference;
     }
 
     private returnedReference(node: ReturnStatementNode, symbol: SemanticSymbol): boolean {

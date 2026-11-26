@@ -835,3 +835,45 @@ test('reference assignment and explicit dereference count as uses', () => {
     const x = result.result.usages.all.find(u => u.declaration.value === 'X')!;
     assert.deepEqual(x.accesses.map(a => a.kind), [SymbolAccessKind.Address]);
 });
+
+test('reference assignment through an indexed structure takes the address of the source', () => {
+    const result = analyze(`
+        DCL X FIXED;
+        TYPE SRX STRUCT [ R REF FIXED ];
+        DCL RX (2) SRX;
+        P1: PROC;
+            RX(1).R = X;
+            CONT RX(1).R = 0;
+        END;`);
+    assert.deepEqual(result.syntax, []);
+    const x = result.result.usages.all.find(u => u.declaration.value === 'X')!;
+    assert.deepEqual(x.accesses.map(a => a.kind), [SymbolAccessKind.Address]);
+    assert.equal(result.result.diagnostics.some(d =>
+        d.code === SemanticDiagnosticCode.ReadButNeverWritten), false);
+});
+
+test('assignments use the selected source and target types, not their base symbols', () => {
+    const result = analyze(`
+        TYPE Slot STRUCT [ R REF FIXED, V FIXED ];
+        DCL Items(2) Slot;
+        DCL Pointer REF FIXED;
+        DCL Value FIXED;
+        P1: PROC;
+            Pointer = Items(1).R;
+            Pointer = Items(2).V;
+            CONT Items(1).R = Value;
+        END;`);
+    assert.deepEqual(result.syntax, []);
+    assert.deepEqual(result.semantic.diagnostics, []);
+    const items = result.result.usages.all.find(u => u.declaration.value === 'Items')!;
+    assert.deepEqual(items.accesses.map(a => a.kind), [
+        SymbolAccessKind.Read, SymbolAccessKind.Address, SymbolAccessKind.Read
+    ]);
+    const value = result.result.usages.all.find(u => u.declaration.value === 'Value')!;
+    assert.equal(value.addressTaken, false);
+    assert.equal(value.read, true);
+    assert.deepEqual(result.result.diagnostics.filter(d =>
+        d.code === SemanticDiagnosticCode.ReadButNeverWritten).map(d => d.message), [
+        "Variable 'Value' wird gelesen, aber niemals beschrieben."
+    ]);
+});
